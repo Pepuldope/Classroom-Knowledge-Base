@@ -23,7 +23,7 @@ api/
   ai.js              AI call helper (from original)
   oauth-*.js         Google OAuth (from original)
   chat.js            per-assignment planner chat (from original)
-  kb-store.js        shared DB: Upstash KV (prod) with JSON-file fallback (local dev)
+  kb-store.js        shared DB: Upstash KV (Edge-compatible, via Web fetch) — no filesystem
   kb-retrieval.js    pure search/scoring over the notes array (mirrors archive.js)
   kb-search.js       GET /api/kb-search   public search
   kb-scrape.js       POST /api/kb-scrape  persist a Classroom bundle into the DB
@@ -55,8 +55,10 @@ npm i -g vercel
 vercel dev            # serves api/ as serverless functions, index.html as static
 ```
 
-Without `KV_REST_API_URL` / `KV_REST_API_TOKEN` set, `kb-store.js` falls back to a local
-`.kb.local.json` file so the whole flow works offline. To populate it locally:
+Without `KV_REST_API_URL` / `KV_REST_API_TOKEN` set, `kb-store.js` falls back to a
+process-memory store so the flow can be developed locally with `vercel dev`.
+That memory store is NOT durable across serverless invocations, so **production
+must set the KV env vars** (below) or the safekeep resets on each cold start.
 
 ```bash
 # from /opt/data/workspace
