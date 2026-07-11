@@ -39,6 +39,7 @@ const STATIC = {
   "/index.html": "../index.html",
   "/app.js": "../app.js",
   "/kb.js": "../kb.js",
+  "/kb-highlight.js": "../kb-highlight.js",
   "/styles.css": "../styles.css",
 };
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml" };

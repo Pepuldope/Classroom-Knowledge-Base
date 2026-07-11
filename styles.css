@@ -1010,6 +1010,16 @@ summary::-webkit-details-marker { color: var(--muted); }
 
 .archive-snippet { color: var(--muted); }
 
+/* Highlighted query matches inside KB search result snippets. */
+.archive-snippet mark,
+.assignment .summary mark {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: inherit;
+  border-radius: 3px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+
 .archive-year { margin-bottom: 0.75rem; }
 .archive-year > summary { font-weight: 600; }
 .archive-course {

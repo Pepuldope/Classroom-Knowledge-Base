@@ -15,8 +15,11 @@
 //   GET  /api/kb-search?q=  -> { meta, results:[{t,course,y,topic,p,_score,_snippet}] }
 //   POST /api/tutor        { messages:[...] }  (streaming SSE, uses DB context)
 
+import { highlightSnippet } from "./kb-highlight.js";
+
 const $ = (id) => document.getElementById(id);
 const KB_TOKEN_KEY = "cwa_kb_token";
+export { highlightSnippet };
 
 // ---------------------------------------------------------------------------
 // View switching
@@ -215,7 +218,7 @@ async function runKbSearch(query) {
       if (note._snippet) {
         const snip = document.createElement("div");
         snip.className = "summary archive-snippet";
-        snip.textContent = note._snippet;
+        snip.innerHTML = highlightSnippet(note._snippet, query);
         body.appendChild(snip);
       }
       row.appendChild(body);
