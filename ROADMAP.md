@@ -8,9 +8,9 @@ picks an item, implements it, marks it done, and appends new ideas. Keep
 items concrete and student-facing where possible.
 
 ## 🔥 Ready (high priority)
+- [x] KB: subject/course filter chips above the search results.
 - [ ] KB: add "related notes" panel on each search result (cross-link by topic/course).
 - [ ] Tutor: show clickable source chips under each answer that jump to the note.
-- [ ] KB: subject/course filter chips above the search results.
 - [ ] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [ ] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
@@ -34,3 +34,4 @@ items concrete and student-facing where possible.
 - [x] RAG AI tutor grounded only in the knowledge base (tutor.js).
 - [x] Knowledge Base view + AI Tutor modal in the UI (kb.js), 3-tab nav.
 - [x] Verified retrieval on the real school-backup vault (2,763 notes).
+- [x] KB course/year filter chips (faceted search).
