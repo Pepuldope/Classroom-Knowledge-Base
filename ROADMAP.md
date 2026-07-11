@@ -52,7 +52,9 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item
-HERE, posts to #kb-site-status with --mention --pin, and KEEPS WORKING on other
-features. Blocked items do not count toward the run's shipped-feature budget.
+HERE, posts to #kb-site-status with --mention --pin --blocker, and KEEPS WORKING on other
+features. The --blocker flag maintains an editable "OPEN BLOCKERS" log message
+(the bot updates it in place) so it's findable even if the channel lacks pin
+permission. Blocked items do not count toward the run's shipped-feature budget.
 Format each entry: `- [ ] <feature>: blocked because <reason>. Needs from Pepuldo: <exact ask>.`
 
