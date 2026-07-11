@@ -1020,6 +1020,22 @@ summary::-webkit-details-marker { color: var(--muted); }
   font-weight: 600;
 }
 
+/* Search result cards are clickable -> open the full note. */
+.kb-result-card { cursor: pointer; transition: border-color .12s ease, transform .12s ease; }
+.kb-result-card:hover,
+.kb-result-card:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+  transform: translateY(-1px);
+}
+.kb-note-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: -0.25rem 0 0.75rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border, #eee);
+}
+
 .archive-year { margin-bottom: 0.75rem; }
 .archive-year > summary { font-weight: 600; }
 .archive-course {

@@ -86,6 +86,10 @@ export function wireKbEvents() {
     b.addEventListener("click", () => { const p = b.dataset.prompt; if (p) sendTutor(p); })
   );
 
+  // Note-detail modal (opened by clicking a result card).
+  $("kbNoteClose")?.addEventListener("click", closeKbNote);
+  $("kbNoteCloseBtn")?.addEventListener("click", closeKbNote);
+
   const search = $("kbSearchInput");
   search?.addEventListener("input", debounce(() => runKbSearch(search.value), 200));
 }
@@ -204,7 +208,11 @@ async function runKbSearch(query) {
     }
     for (const note of d.results) {
       const row = document.createElement("div");
-      row.className = "assignment";
+      row.className = "assignment kb-result-card";
+      row.tabIndex = 0;
+      row.setAttribute("role", "button");
+      row.dataset.noteIndex = String(note.noteIndex ?? "");
+      row.setAttribute("aria-label", `Open note: ${note.t || "(untitled)"}`);
       const body = document.createElement("div");
       body.className = "assignment-body";
       const title = document.createElement("div");
@@ -222,6 +230,13 @@ async function runKbSearch(query) {
         body.appendChild(snip);
       }
       row.appendChild(body);
+      const open = () => {
+        if (row.dataset.noteIndex !== "" && row.dataset.noteIndex != null) openKbNote(Number(row.dataset.noteIndex));
+      };
+      row.addEventListener("click", open);
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
+      });
       results.appendChild(row);
     }
   } catch (e) {
@@ -347,6 +362,70 @@ async function sendTutor(text) {
   } catch (e) {
     if (assistantEl) assistantEl.textContent = `❌ ${e.message}`;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Note-detail modal — open a full note by its bundle index (see /api/kb-note)
+// ---------------------------------------------------------------------------
+async function openKbNote(index) {
+  const modal = $("kbNoteModal");
+  const titleEl = $("kbNoteTitle");
+  const metaEl = $("kbNoteMeta");
+  const bodyEl = $("kbNoteBody");
+  const linkEl = $("kbNoteObsidianLink");
+  if (!modal || !bodyEl) return;
+  bodyEl.innerHTML = `<div class="empty">Loading…</div>`;
+  if (metaEl) metaEl.textContent = "";
+  if (titleEl) titleEl.textContent = "Loading…";
+  if (linkEl) linkEl.hidden = true;
+  modal.hidden = false;
+  try {
+    const r = await fetch("/api/kb-note?id=" + encodeURIComponent(index));
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      bodyEl.innerHTML = `<div class="empty">Couldn't load this note (${err.error || r.status}).</div>`;
+      if (titleEl) titleEl.textContent = "Note";
+      return;
+    }
+    const note = await r.json();
+    if (titleEl) titleEl.textContent = note.t || "(untitled)";
+    if (metaEl) metaEl.textContent = [note.course, note.y, note.topic].filter(Boolean).join("  ·  ");
+    // Prefer the full body, fall back to summary. Escape to avoid injection.
+    const fullText = (note.x || note.s || "").trim();
+    if (fullText) {
+      bodyEl.textContent = fullText;
+    } else {
+      bodyEl.innerHTML = `<div class="empty">This note has no body text.</div>`;
+    }
+    if (linkEl) {
+      if (note.p) { linkEl.href = "obsidian://open?path=" + encodeURIComponent(note.p); linkEl.hidden = false; }
+      else linkEl.hidden = true;
+    }
+  } catch (e) {
+    bodyEl.innerHTML = `<div class="empty">Failed to load note: ${e.message}</div>`;
+  }
+}
+
+function closeKbNote() {
+  const modal = $("kbNoteModal");
+  if (modal) modal.hidden = true;
+}
+
+// Allow Esc / backdrop click to close both KB modals.
+if (typeof document !== "undefined") {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const nm = $("kbNoteModal");
+      const tm = $("kbTutorModal");
+      if (nm && !nm.hidden) nm.hidden = true;
+      if (tm && !tm.hidden) tm.hidden = true;
+    }
+  });
+  document.addEventListener("click", (e) => {
+    if (e.target && e.target.classList && e.target.classList.contains("modal")) {
+      e.target.hidden = true;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

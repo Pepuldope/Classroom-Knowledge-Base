@@ -11,6 +11,7 @@ then builds it. Keep items concrete and student-facing where possible.
 
 ## 🔥 Ready (high priority)
 - [x] KB: subject/course filter chips above the search results.
+- [x] KB: highlight matched query terms in each result snippet.
 - [ ] KB: add "related notes" panel on each search result (cross-link by topic/course).
 - [ ] Tutor: show clickable source chips under each answer that jump to the note.
 - [ ] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.

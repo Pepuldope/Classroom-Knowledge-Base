@@ -108,6 +108,7 @@ export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = f
       y: n.y || "",
       topic: n.topic || null,
       p: n.p || "",
+      noteIndex: index,
       _score: score,
       _snippet: snippet,
     });
