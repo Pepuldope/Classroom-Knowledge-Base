@@ -49,3 +49,10 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Tutor: show which provider/model answered (already in response headers — surface it in the UI).
 - [ ] Search: "did you mean" suggestion when a query returns <3 results.
 
+## 🚧 Blocked (pinged — needs Pepuldo)
+When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
+OAuth authorized-domain, or a product decision from Pepuldo), it moves the item
+HERE, posts to #kb-site-status with --mention --pin, and KEEPS WORKING on other
+features. Blocked items do not count toward the run's shipped-feature budget.
+Format each entry: `- [ ] <feature>: blocked because <reason>. Needs from Pepuldo: <exact ask>.`
+
