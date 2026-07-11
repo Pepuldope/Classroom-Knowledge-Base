@@ -8,3 +8,5 @@ node_modules
 CLAUDE.md
 HANDOFF.md
 .kb.local.json
+__pycache__/
+*.pyc

@@ -22,6 +22,7 @@ const KB_TOKEN_KEY = "cwa_kb_token";
 // View switching
 // ---------------------------------------------------------------------------
 export function showKbView() {
+  wireKbEvents(); // ensure search/tutor listeners are attached (idempotent)
   const v = $("kbView");
   if (!v) return;
   v.hidden = false;
@@ -59,7 +60,10 @@ function renderKbMeta(meta) {
 // ---------------------------------------------------------------------------
 // Build / scrape into the shared DB
 // ---------------------------------------------------------------------------
+let _kbWired = false;
 export function wireKbEvents() {
+  if (_kbWired) return; // idempotent — safe to call multiple times
+  _kbWired = true;
   const buildBtn = $("kbBuildBtn");
   const fileLink = $("kbLoadFileLink");
   const fileInput = $("kbFileInput");
@@ -351,4 +355,15 @@ function loadKbToken() {
 }
 function storeKbToken(token, expiresInSec) {
   try { localStorage.setItem(KB_TOKEN_KEY, JSON.stringify({ token, expiresAt: Date.now() + (expiresInSec - 30) * 1000 })); } catch {}
+}
+
+// Auto-wire once the DOM is ready, independent of Google Identity Services.
+// (app.js also calls wireKbEvents() after GIS loads; the idempotent guard
+//  prevents double-binding. This makes the KB usable even if GIS is blocked.)
+if (typeof document !== "undefined") {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => wireKbEvents());
+  } else {
+    wireKbEvents();
+  }
 }
