@@ -70,6 +70,7 @@ export async function saveBundle(bundle) {
     noteCount: Array.isArray(bundle.notes) ? bundle.notes.length : 0,
     years: Array.isArray(bundle.years) ? bundle.years : [],
     courses: Array.isArray(bundle.courses) ? bundle.courses.length : 0,
+    courseList: Array.isArray(bundle.courses) ? bundle.courses : [],
     generatedAt: bundle.generatedAt || null,
     updatedAt: new Date().toISOString(),
   };
@@ -94,6 +95,7 @@ export async function getMeta() {
     noteCount: Array.isArray(b.notes) ? b.notes.length : 0,
     years: Array.isArray(b.years) ? b.years : [],
     courses: Array.isArray(b.courses) ? b.courses.length : 0,
+    courseList: Array.isArray(b.courses) ? b.courses : [],
     generatedAt: b.generatedAt || null,
     updatedAt: b.generatedAt || null,
   };

@@ -166,18 +166,31 @@ async function handleKbFile(e) {
 }
 
 // ---------------------------------------------------------------------------
-// Public search
+// Public search (with course/year filter chips)
 // ---------------------------------------------------------------------------
+let kbActiveCourse = "";
+let kbActiveYear = "";
+
 async function runKbSearch(query) {
   const results = $("kbResults");
   if (!results) return;
   query = (query || "").trim();
-  if (!query) { results.hidden = true; results.innerHTML = ""; return; }
+  if (!query) {
+    results.hidden = true;
+    results.innerHTML = "";
+    const chips = $("kbFilterChips");
+    if (chips) chips.hidden = true;
+    return;
+  }
   try {
-    const r = await fetch("/api/kb-search?q=" + encodeURIComponent(query) + "&limit=8");
+    const params = new URLSearchParams({ q: query, limit: "8" });
+    if (kbActiveCourse) params.set("course", kbActiveCourse);
+    if (kbActiveYear) params.set("year", kbActiveYear);
+    const r = await fetch("/api/kb-search?" + params.toString());
     const d = await r.json();
     results.hidden = false;
     results.innerHTML = "";
+    renderFilterChips(d.filters);
     if (!d.results || d.results.length === 0) {
       results.innerHTML = `<div class="empty">No matches in the knowledge base.</div>`;
       return;
@@ -207,6 +220,46 @@ async function runKbSearch(query) {
   } catch (e) {
     results.hidden = false;
     results.innerHTML = `<div class="empty">Search failed: ${e.message}</div>`;
+  }
+}
+
+function renderFilterChips(filters) {
+  const chips = $("kbFilterChips");
+  if (!chips) return;
+  const courses = (filters && filters.courses) || [];
+  const years = (filters && filters.years) || [];
+  if (courses.length === 0 && years.length === 0) { chips.hidden = true; chips.innerHTML = ""; return; }
+  chips.hidden = false;
+  chips.innerHTML = "";
+
+  const makeChip = (label, kind, value, active) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "kb-chip" + (active ? " active" : "");
+    b.textContent = label;
+    b.addEventListener("click", () => {
+      if (kind === "course") kbActiveCourse = active ? "" : value;
+      else kbActiveYear = active ? "" : value;
+      const input = $("kbSearchInput");
+      runKbSearch(input ? input.value : "");
+    });
+    return b;
+  };
+
+  if (years.length) {
+    const lbl = document.createElement("span");
+    lbl.className = "kb-chip-group-label";
+    lbl.textContent = "Year:";
+    chips.appendChild(lbl);
+    years.forEach((y) => chips.appendChild(makeChip(y, "year", y, kbActiveYear === y)));
+  }
+  if (courses.length) {
+    const lbl = document.createElement("span");
+    lbl.className = "kb-chip-group-label";
+    lbl.textContent = "Course:";
+    chips.appendChild(lbl);
+    // Cap to keep the UI tidy; most KBs have a manageable number.
+    courses.slice(0, 24).forEach((c) => chips.appendChild(makeChip(c, "course", c, kbActiveCourse === c)));
   }
 }
 

@@ -1272,3 +1272,14 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-msg-user { background: var(--accent); color: #fff; margin-left: auto; }
 .ai-msg-assistant { background: var(--card); border: 1px solid var(--border); }
 .ai-messages { flex: 1; overflow-y: auto; padding: 0.5rem; }
+
+.kb-filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; }
+.kb-chip-group-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.1rem; }
+.kb-chip {
+  font: inherit; font-size: 0.82rem; cursor: pointer;
+  padding: 0.28rem 0.7rem; border-radius: 999px;
+  border: 1px solid var(--border); background: var(--surface, #fff);
+  color: var(--fg); transition: background 0.12s, border-color 0.12s, color 0.12s;
+}
+.kb-chip:hover { border-color: var(--accent); color: var(--accent); }
+.kb-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
