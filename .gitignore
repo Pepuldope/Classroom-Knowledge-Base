@@ -1,0 +1,13 @@
+.env
+.env.local
+.vercel
+node_modules
+.DS_Store
+
+# Proton Drive name-clash artifacts
+*Name clash*
+
+# Claude context — local only, do not publish
+CLAUDE.md
+HANDOFF.md
+.kb.local.json
