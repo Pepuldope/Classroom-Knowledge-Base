@@ -4,8 +4,10 @@ Long-term goal (Pepuldo, 2026-07-11): the AI fleet continuously upgrades this
 site so it's increasingly user-friendly and feature-rich for students.
 
 This file is the living backlog. The long-term-site-dev cron job reads it,
-picks an item, implements it, marks it done, and appends new ideas. Keep
-items concrete and student-facing where possible.
+picks an item, implements it, marks it done, and APPENDS NEW IDEAS OF ITS OWN.
+The loop is fully autonomous: when the static lists below are empty, it INVENTS
+the next valuable feature and writes it under "## 🤖 Agent-Proposed Backlog",
+then builds it. Keep items concrete and student-facing where possible.
 
 ## 🔥 Ready (high priority)
 - [x] KB: subject/course filter chips above the search results.
@@ -35,3 +37,15 @@ items concrete and student-facing where possible.
 - [x] Knowledge Base view + AI Tutor modal in the UI (kb.js), 3-tab nav.
 - [x] Verified retrieval on the real school-backup vault (2,763 notes).
 - [x] KB course/year filter chips (faceted search).
+
+## 🤖 Agent-Proposed Backlog
+The autonomous loop writes its own feature ideas here when the lists above are
+drained, then implements them. This section is machine-owned — the loop adds,
+ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
+- [ ] Tutor: "summarise this note" quick action on each search result card.
+- [ ] KB: sort results by relevance / recency / course (sort toggle chips).
+- [ ] Tutor: copy-to-clipboard button on each answer + "save note" to a personal study list.
+- [ ] KB: keyboard shortcut (press "/" to focus search, Esc to clear).
+- [ ] Tutor: show which provider/model answered (already in response headers — surface it in the UI).
+- [ ] Search: "did you mean" suggestion when a query returns <3 results.
+
