@@ -119,70 +119,113 @@ function enabledProviders() {
 }
 
 // ---------------------------------------------------------------------------
-// Circuit breaker / health (check #1)
-// A provider is "unhealthy" if:
-//   - it has hit `failureThreshold` consecutive failures (trips the breaker ->
-//     cooled down for `cooldownMs`), OR
-//   - its recent success ratio over the rolling window is below `healthyRate`.
+// Circuit breaker / health (check #1) — with CONTROLLED half-open recovery
+// State machine per provider:
+//   closed    : normal. On `failureThreshold` consecutive OR cumulative
+//               failures in the rolling window -> OPEN (cooldown).
+//   open      : not selected for `cooldownMs`. After cooldown, transitions to
+//               half-open (one chance to probe).
+//   half-open : a LIMITED number of probe requests are allowed through
+//               (halfOpenProbes). A probe success (halfOpenSuccessThreshold
+//               successes) -> CLOSED (recovered, fully back in rotation).
+//               A probe failure -> back to OPEN (re-cooldown). This prevents a
+//               recovered provider from immediately flapping back into failure.
 // Unhealthy providers are excluded from selection so we stop hammering them.
 // If EVERY provider is unhealthy we fail open (use all) so we still attempt.
+// Drill overrides (live failover proof, check #3): in-memory `forceProviderDown`
+// (unit tests) or the KV-backed `_activeDrill` set (set via /api/router-drill)
+// make a provider look down without touching its real health.
 // ---------------------------------------------------------------------------
 const BREAKER = {
-  cooldownMs: 60_000, // 1 minute cooldown after tripping
-  failureThreshold: 3, // consecutive failures to open the breaker
-  healthyRate: 0.5, // success ratio floor over the recent window
+  cooldownMs: 60_000, // how long a tripped breaker stays OPEN
+  failureThreshold: 3, // consecutive failures to OPEN the breaker
+  healthyRate: 0.5, // success-ratio floor over the recent window
   recentMax: 20, // size of the rolling outcome window
+  halfOpenProbes: 2, // max simultaneous probe attempts while HALF-OPEN
+  halfOpenSuccessThreshold: 1, // probe successes needed to fully CLOSE
 };
-const _health = new Map(); // name -> { consecutiveFailures, cooldownUntil, outcomes:[] }
+const _health = new Map(); // name -> { state, consecutiveFailures, cooldownUntil, halfOpenInflight, halfOpenSuccesses, outcomes:[] }
 function getHealth(name) {
   let h = _health.get(name);
   if (!h) {
-    h = { consecutiveFailures: 0, cooldownUntil: 0, outcomes: [] };
+    h = { state: "closed", consecutiveFailures: 0, cooldownUntil: 0, halfOpenInflight: 0, halfOpenSuccesses: 0, outcomes: [] };
     _health.set(name, h);
   }
   return h;
 }
-function isUnhealthy(p) {
-  if (p._forcedDown) return true; // live drill / admin kill-switch
-  const h = getHealth(p.name);
-  if (h.cooldownUntil > Date.now()) return true; // breaker open
-  const recent = h.outcomes.slice(-BREAKER.recentMax);
-  if (recent.length >= 5) {
-    const ok = recent.filter(Boolean).length;
-    if (ok / recent.length < BREAKER.healthyRate) return true;
-  }
-  return false;
-}
-function recordOutcome(p, ok) {
-  const h = getHealth(p.name);
-  h.outcomes.push(ok);
-  if (h.outcomes.length > BREAKER.recentMax) h.outcomes.shift();
-  if (ok) {
-    h.consecutiveFailures = 0;
-    h.cooldownUntil = 0;
-  } else {
-    h.consecutiveFailures++;
-    const recent = h.outcomes.slice(-BREAKER.recentMax);
-    const recentFailures = recent.filter((x) => x === false).length;
-    // Trip the breaker on EITHER 3 consecutive failures OR 3 cumulative
-    // failures in the recent window (rate-limit storms trip fast even under
-    // rotation, which spreads attempts so consecutive rarely reaches 3).
-    if (h.consecutiveFailures >= BREAKER.failureThreshold || recentFailures >= BREAKER.failureThreshold) {
-      h.cooldownUntil = Date.now() + BREAKER.cooldownMs;
-    }
-  }
-}
-function selectable(p) {
-  if (!p.apiKey || !p.baseURL) return false;
-  if (p._forcedDown) return false;
-  if (isUnhealthy(p)) return false;
-  return true;
-}
 
-// Forced-failure set (used by the failover drill + tests). When a provider is
-// in this set, any attempt to call it throws a synthetic 429 so we can prove
-// traffic moves to the next provider exactly as intended.
+// ---- Drill / forced-down state (live failover proof, check #3) ----
+// Two sources: (a) in-memory `forceProviderDown` used by unit tests + the
+// `forceProviderFail` synthetic-429 set; (b) KV-backed `_activeDrill`, read
+// (cached 10s) so a drill triggered via /api/router-drill survives across
+// serverless instances. `routeChat` refreshes `_activeDrill` per call.
 const _forcedFail = new Set();
+const _drillCache = { set: new Set(), at: 0 };
+let _activeDrill = new Set(); // set per-request at the top of routeChat
+async function loadDrillDown() {
+  const now = Date.now();
+  if (now - _drillCache.at < 10_000) return _drillCache.set;
+  const next = new Set();
+  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  if (url && tok) {
+    try {
+      const r = await fetch(`${url}/get/${encodeURIComponent("router:forcedDown")}`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      });
+      if (r.ok) {
+        const d = await r.json();
+        let arr = d.result;
+        if (typeof arr === "string") {
+          try { arr = JSON.parse(arr); } catch { arr = null; }
+        }
+        if (Array.isArray(arr)) for (const n of arr) next.add(n);
+      }
+    } catch {}
+  }
+  _drillCache.set = next;
+  _drillCache.at = now;
+  return next;
+}
+export async function setDrillDown(provider, down) {
+  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  if (!url || !tok) return { ok: false, error: "KV not configured" };
+  const cur = await loadDrillDown();
+  if (down) cur.add(provider); else cur.delete(provider);
+  const arr = [...cur];
+  try {
+    await fetch(`${url}/set/${encodeURIComponent("router:forcedDown")}/${encodeURIComponent(JSON.stringify(arr))}`, {
+      headers: { Authorization: `Bearer ${tok}` },
+    });
+    const entry = JSON.stringify({ ts: new Date().toISOString(), provider, down });
+    await fetch(`${url}/rpush/${encodeURIComponent("router:drillLog")}/${encodeURIComponent(entry)}`, {
+      headers: { Authorization: `Bearer ${tok}` },
+    });
+    await fetch(`${url}/expire/${encodeURIComponent("router:drillLog")}/86400`, {
+      headers: { Authorization: `Bearer ${tok}` },
+    });
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) };
+  }
+  _drillCache.at = 0; // force refresh on next read
+  return { ok: true, forcedDown: arr };
+}
+export async function getDrillState() {
+  const set = await loadDrillDown();
+  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  let log = [];
+  if (url && tok) {
+    try {
+      const r = await fetch(`${url}/lrange/${encodeURIComponent("router:drillLog")}/0/50`, {
+        headers: { Authorization: `Bearer ${tok}` },
+      });
+      if (r.ok) {
+        const d = await r.json();
+        log = Array.isArray(d.result) ? d.result : [];
+      }
+    } catch {}
+  }
+  return { forcedDown: [...set], log };
+}
 export function forceProviderFail(name, on = true) {
   if (on) _forcedFail.add(name);
   else _forcedFail.delete(name);
@@ -194,7 +237,89 @@ export function forceProviderDown(name, down = true) {
 export function resetRouterHealth() {
   _health.clear();
   _forcedFail.clear();
+  _drillCache.set = new Set();
+  _drillCache.at = 0;
+  _activeDrill = new Set();
   for (const p of PROVIDERS) p._forcedDown = false;
+}
+// Test-only: force a provider's breaker into a specific state.
+export function __debugSetHealth(name, patch) {
+  Object.assign(getHealth(name), patch);
+}
+
+function isForcedDown(p) {
+  // Only true pre-exclusion (don't even attempt this provider): a hard admin
+  // kill-switch (unit tests) or a live KV-backed drill (check #3).
+  // NOTE: `forceProviderFail` is intentionally NOT here — that one lets the
+  // provider be *attempted* and throws a synthetic 429 inside callProviderOnce,
+  // so the breaker can observe the failure and trip (and traffic fails over).
+  return p._forcedDown === true || _activeDrill.has(p.name);
+}
+// Pure eligibility by breaker state (forced/drill checks done by caller).
+function breakerAllowed(p) {
+  const h = getHealth(p.name);
+  if (h.state === "open") {
+    if (Date.now() >= h.cooldownUntil) {
+      h.state = "half_open"; // cooldown elapsed -> allow a probe
+      h.halfOpenInflight = 0;
+      h.halfOpenSuccesses = 0;
+    } else return false; // still cooling down
+  }
+  return true; // closed or half_open both eligible for the pool
+}
+function beginProbe(p) {
+  const h = getHealth(p.name);
+  if (h.state === "half_open") h.halfOpenInflight++;
+}
+function recordOutcome(p, ok) {
+  const h = getHealth(p.name);
+  h.outcomes.push(ok);
+  if (h.outcomes.length > BREAKER.recentMax) h.outcomes.shift();
+  if (ok) {
+    if (h.state === "half_open") {
+      // A successful probe: count it; close only after enough successes.
+      h.halfOpenInflight = Math.max(0, h.halfOpenInflight - 1);
+      h.halfOpenSuccesses++;
+      if (h.halfOpenSuccesses >= BREAKER.halfOpenSuccessThreshold) {
+        h.state = "closed";
+        h.consecutiveFailures = 0;
+        h.cooldownUntil = 0;
+        h.halfOpenInflight = 0;
+        h.halfOpenSuccesses = 0;
+      }
+    } else {
+      h.state = "closed"; // a normal success keeps it healthy
+      h.consecutiveFailures = 0;
+      h.cooldownUntil = 0;
+    }
+  } else {
+    h.consecutiveFailures++;
+    const recent = h.outcomes.slice(-BREAKER.recentMax);
+    const recentFailures = recent.filter((x) => x === false).length;
+    if (h.state === "half_open") {
+      // The recovery probe failed -> the provider is NOT actually healthy.
+      // Re-open (re-cooldown) instead of letting it back into rotation.
+      h.halfOpenInflight = Math.max(0, h.halfOpenInflight - 1);
+      h.state = "open";
+      h.cooldownUntil = Date.now() + BREAKER.cooldownMs;
+    } else if (h.consecutiveFailures >= BREAKER.failureThreshold || recentFailures >= BREAKER.failureThreshold) {
+      h.state = "open";
+      h.cooldownUntil = Date.now() + BREAKER.cooldownMs;
+    }
+  }
+}
+function selectable(p) {
+  if (!p.apiKey || !p.baseURL) return false;
+  if (isForcedDown(p)) return false; // drill / admin kill-switch
+  return breakerAllowed(p);
+}
+function isUnhealthy(p) {
+  if (isForcedDown(p)) return true;
+  const h = getHealth(p.name);
+  if (h.state === "open") return true;
+  const recent = h.outcomes.slice(-BREAKER.recentMax);
+  if (recent.length >= 5 && recent.filter(Boolean).length / recent.length < BREAKER.healthyRate) return true;
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -206,6 +331,7 @@ export function resetRouterHealth() {
 const _metrics = {
   selections: 0,
   fallbacks: 0,
+  probes: 0,
   errors: 0,
   byProvider: {},
   byTier: {},
@@ -247,9 +373,12 @@ export function recentRoutes() {
 export function getRouterMetrics() {
   const health = [..._health.entries()].map(([n, h]) => ({
     provider: n,
+    state: h.state, // closed | open | half_open
     unhealthy: isUnhealthy({ name: n }),
     consecutiveFailures: h.consecutiveFailures,
     cooldownUntil: h.cooldownUntil,
+    halfOpenInflight: h.halfOpenInflight,
+    halfOpenSuccesses: h.halfOpenSuccesses,
     successRatio: h.outcomes.length ? h.outcomes.filter(Boolean).length / h.outcomes.length : 1,
   }));
   const unhealthy = health.filter((h) => h.unhealthy).map((h) => h.provider);
@@ -401,6 +530,10 @@ export async function routeChat(messages, opts = {}) {
   const MT = max_tokens ?? profile.max_tokens;
   const TEMP = temperature ?? profile.temperature;
 
+  // Refresh live drill state (KV-backed) so a drill triggered via
+  // /api/router-drill affects this request. Cached 10s inside.
+  _activeDrill = await loadDrillDown();
+
   // Main band = selectable providers exactly at the task's tier (cheapest
   // adequate). Fallback = one tier higher (escalation), appended so it's only
   // used when the main band is exhausted (rate-limited / down / 429 / unhealthy).
@@ -456,13 +589,16 @@ export async function routeChat(messages, opts = {}) {
       continue;
     }
     const pt0 = Date.now();
+    const isProbe = getHealth(p.name).state === "half_open";
+    if (isProbe) beginProbe(p); // count this as a limited recovery probe
     try {
       const r = await callProviderOnce(p, { messages, max_tokens: MT, temperature: TEMP, stream });
       const latency = Date.now() - pt0;
       recordOutcome(p, true);
       bump(_metrics.byProvider, p.name);
-      const reason = tried.length ? `fallback_after:${tried.join(",")}` : "ok";
+      const reason = tried.length ? `fallback_after:${tried.join(",")}` : (isProbe ? "half_open_probe_ok" : "ok");
       if (tried.length) bump(_metrics, "fallbacks");
+      if (isProbe) bump(_metrics, "probes");
       logRoute({ tier, task, provider: p.name, model: p.model, reason, latencyMs: latency });
       // Attach the full routing decision so callers can surface fallback
       // lineage (check #2) without re-deriving it.

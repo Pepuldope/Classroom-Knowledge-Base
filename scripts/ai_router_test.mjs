@@ -24,6 +24,9 @@ import {
   resetRouterHealth,
   getRouterMetrics,
   recentRoutes,
+  __debugSetHealth,
+  setDrillDown,
+  getDrillState,
 } from "../api/ai-router.js";
 
 // Enable all bundled providers (module read process.env at load; stub keys).
@@ -111,20 +114,18 @@ test("classify-first routes a hard request to strong models", async () => {
 
 // CHECK #1 — circuit breaker
 test("circuit breaker cools down a provider after repeated failures", async () => {
-  // Make google the ONLY reachable mid provider so it is repeatedly attempted
-  // and fails; the breaker should trip and cool it down.
+  // Isolate google as the only reachable mid provider so it is attempted
+  // repeatedly and fails; the breaker should trip -> OPEN (cooldown).
   for (const n of ["groq", "mistral", "github", "qwen", "freellmapi"]) forceProviderDown(n, true);
-  forceProviderFail("google", true);
+  forceProviderFail("google", true); // attempted but throws 429 -> breaker observes it
   installFetch();
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 5; i++) {
     try { await routeChat([{ role: "user", content: "hi" }], { task: "default" }); } catch {}
   }
   const h = getRouterMetrics().health.find((x) => x.provider === "google");
-  assert.ok(h, "google present in health");
-  assert.ok(
-    h.consecutiveFailures >= 3 || h.unhealthy || h.cooldownUntil > Date.now(),
-    "google breaker tripped / marked unhealthy / cooldown set"
-  );
+  assert.ok(h, "google present in health (it was attempted + failed)");
+  assert.ok(h.state === "open" || h.cooldownUntil > Date.now(), "google breaker tripped to OPEN / cooldown set");
+  assert.ok(h.consecutiveFailures >= 3, "google accumulated >=3 consecutive failures");
 });
 
 // CHECK #2 — structured log record
@@ -145,15 +146,20 @@ test("structured log record carries provider/model/tier/reason/latency/errorType
 });
 
 // CHECK #3 — forced-fail drill
-test("forced-fail drill: traffic moves to the next provider exactly", async () => {
+test("forced-fail drill: a failing provider is attempted then traffic fails over", async () => {
+  // forceProviderFail => google is attempted but throws 429; the router must
+  // record it as tried and fall back to the next provider.
   forceProviderFail("google", true); // simulate google 429ing
   installFetch();
-  let everUsedGoogle = false;
+  let googleWasTried = false;
+  let sawFallback = false;
   for (let i = 0; i < 8; i++) {
     const r = await routeChat([{ role: "user", content: "hi" }], { task: "default" });
-    if (r.provider === "google") everUsedGoogle = true;
+    if (r.meta.tried.includes("google")) googleWasTried = true;
+    if (r.meta.attempts > 1) sawFallback = true;
   }
-  assert.ok(!everUsedGoogle, "google was forced-fail; must never be selected (traffic moved on)");
+  assert.ok(googleWasTried, "google was attempted (429) and NOT silently skipped");
+  assert.ok(sawFallback, "traffic fell back to the next provider after google failed");
 });
 
 // CHECK #4 — capability guard
@@ -180,4 +186,106 @@ test("metrics track selections, fallbacks, and per-provider counts", async () =>
   assert.ok(after.fallbacks >= 1, "fallback recorded when google was forced-fail");
   assert.ok(Object.values(after.byProvider).some((v) => v > 0), "byProvider counters populated");
   assert.ok("fallbackRate" in after, "fallbackRate computed");
+});
+
+// CHECK #1 (extended) — CONTROLLED half-open recovery
+// A tripped breaker must NOT flap straight back into rotation on one success:
+// it goes open -> half_open (probe) -> closed only after a successful probe,
+// and a failed probe while half_open re-opens it instead of closing.
+test("half-open recovery: probe must succeed before closing", async () => {
+  // Make google the only mid provider; force it to fail 3x to trip -> OPEN.
+  for (const n of ["groq", "mistral", "github", "qwen", "freellmapi"]) forceProviderDown(n, true);
+  forceProviderFail("google", true);
+  installFetch();
+  for (let i = 0; i < 5; i++) {
+    try { await routeChat([{ role: "user", content: "hi" }], { task: "default" }); } catch {}
+  }
+  let h = getRouterMetrics().health.find((x) => x.provider === "google");
+  assert.equal(h.state, "open", "breaker should be OPEN after triple failure");
+
+  // Cooldown elapses -> next call moves it to half_open (probe allowed).
+  __debugSetHealth("google", { cooldownUntil: Date.now() - 1, state: "open" });
+  forceProviderFail("google", false); // probe will now SUCCEED
+  await routeChat([{ role: "user", content: "hi" }], { task: "default" });
+  h = getRouterMetrics().health.find((x) => x.provider === "google");
+  assert.equal(h.state, "closed", "successful probe CLOSES the breaker (threshold=1)");
+
+  // Re-trip, then prove a FAILED probe while half_open re-opens instead of closing.
+  for (const n of ["groq", "mistral", "github", "qwen", "freellmapi"]) forceProviderDown(n, true);
+  forceProviderFail("google", true);
+  for (let i = 0; i < 4; i++) {
+    try { await routeChat([{ role: "user", content: "hi" }], { task: "default" }); } catch {}
+  }
+  __debugSetHealth("google", { cooldownUntil: Date.now() - 1, state: "open" });
+  forceProviderFail("google", true); // probe will FAIL again
+  try { await routeChat([{ role: "user", content: "hi" }], { task: "default" }); } catch {}
+  h = getRouterMetrics().health.find((x) => x.provider === "google");
+  assert.equal(h.state, "open", "failed probe while half_open RE-OPENS the breaker");
+});
+
+// CHECK #3 (extended) — KV-backed drill state + drill log
+// Mirrors the real /api/router-drill flow without network: setDrillDown writes
+// to a fake KV (restored into process.env), loadDrillDown reads it back, and
+// getDrillState surfaces the append-only drill log.
+test("KV-backed drill: setDrillDown marks a provider down and logs it", async () => {
+  const store = new Map();
+  const fakeKV = {
+    url: "http://fakekv",
+    token: "tk",
+    fetchImpl: async (url, opts) => {
+      // parse /set/key/val and /rpush/key/val
+      const u = String(url);
+      if (u.includes("/set/")) {
+        const m = u.match(/set\/([^/]+)\/(.*)$/);
+        store.set(decodeURIComponent(m[1]), decodeURIComponent(m[2]));
+        return { ok: true, json: async () => ({ result: "OK" }) };
+      }
+      if (u.includes("/rpush/")) {
+        const m = u.match(/rpush\/([^/]+)\/(.*)$/);
+        const k = decodeURIComponent(m[1]);
+        const arr = store.get(k) ? JSON.parse(store.get(k)) : [];
+        arr.push(decodeURIComponent(m[2]));
+        store.set(k, JSON.stringify(arr));
+        return { ok: true, json: async () => ({ result: "OK" }) };
+      }
+      if (u.includes("/lrange/")) {
+        const m = u.match(/lrange\/([^/]+)\//);
+        const raw = store.get(decodeURIComponent(m[1])) || "[]";
+        let arr = raw;
+        if (typeof arr === "string") { try { arr = JSON.parse(arr); } catch { arr = []; } }
+        return { ok: true, json: async () => ({ result: arr }) };
+      }
+      if (u.includes("/get/")) {
+        const m = u.match(/get\/([^/]+)/);
+        const v = store.get(decodeURIComponent(m[1]));
+        return { ok: true, json: async () => ({ result: v ?? null }) };
+      }
+      return { ok: false, json: async () => ({}) };
+    },
+  };
+  const REAL = { url: process.env.KV_REST_API_URL, tok: process.env.KV_REST_API_TOKEN };
+  // Point the router's drill KV at our fake by monkeypatching global.fetch
+  // for the KV calls (ai-router uses global.fetch with the KV url/token).
+  const realFetch = global.fetch;
+  global.fetch = (async (url, opts) => {
+    const u = String(url);
+    if (u.startsWith(fakeKV.url)) return fakeKV.fetchImpl(url, opts);
+    return realFetch(url, opts);
+  });
+  process.env.KV_REST_API_URL = fakeKV.url;
+  process.env.KV_REST_API_TOKEN = fakeKV.token;
+  try {
+    const r1 = await setDrillDown("groq", true);
+    assert.ok(r1.ok, "setDrillDown ok");
+    assert.ok(r1.forcedDown.includes("groq"), "groq in forcedDown list");
+    const st = await getDrillState();
+    assert.ok(st.forcedDown.includes("groq"), "drill state reports groq down");
+    assert.ok(st.log.length >= 1, "drill log appended an entry");
+    const r2 = await setDrillDown("groq", false);
+    assert.ok(!r2.forcedDown.includes("groq"), "groq removed when brought back up");
+  } finally {
+    global.fetch = realFetch;
+    process.env.KV_REST_API_URL = REAL.url;
+    process.env.KV_REST_API_TOKEN = REAL.tok;
+  }
 });
