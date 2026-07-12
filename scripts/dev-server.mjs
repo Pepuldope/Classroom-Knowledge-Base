@@ -44,6 +44,7 @@ const STATIC = {
   "/kb-test-harness.html": "../kb-test-harness.html",
   "/app.js": "../app.js",
   "/kb.js": "../kb.js",
+  "/archive.js": "../archive.js",
   "/kb-highlight.js": "../kb-highlight.js",
   "/styles.css": "../styles.css",
 };

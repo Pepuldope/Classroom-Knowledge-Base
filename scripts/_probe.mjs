@@ -1,0 +1,15 @@
+import { chromium } from "playwright";
+const BASE = "http://localhost:4321";
+const b = await chromium.launch();
+const p = await b.newPage();
+const errs = [];
+p.on("pageerror", e => errs.push("PAGEERR: " + e.message));
+p.on("console", m => { if (m.type() === "error") errs.push("CONSOLE: " + m.text()); });
+await p.goto(BASE + "/kb-test-harness.html", { waitUntil: "networkidle", timeout: 30000 });
+await p.waitForTimeout(1500);
+const mainHidden = await p.getAttribute("#kbMain", "hidden");
+const mainDisplay = await p.evaluate(() => getComputedStyle(document.getElementById("kbMain")).display);
+console.log("kbMain hidden attr:", mainHidden, "| display:", mainDisplay);
+console.log("--- page errors/console ---");
+console.log(errs.join("\n") || "(none)");
+await b.close();
