@@ -45,7 +45,10 @@ export default async function handler(req) {
     );
   }
   const results = searchNotes(notes, q, { limit });
-  const response = { meta: await getMeta(), results, filters: facets };
+  // filteredCount = how many notes the current result set was drawn from
+  // (post-facet-filter, pre-limit). The UI shows "Showing N of M notes" where
+  // M is filteredCount — so a course/year filter visibly narrows M too.
+  const response = { meta: await getMeta(), results, filteredCount: notes.length, filters: facets };
   // "Did you mean" — when a search returns nothing but a confident spelling
   // correction exists in the corpus, surface it so the student can one-click
   // retry. Only attached when results are empty (never nags a good query).

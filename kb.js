@@ -83,6 +83,20 @@ function renderKbMeta(meta) {
 }
 
 // ---------------------------------------------------------------------------
+// Result-count summary (ROADMAP #55): build the human "Showing N of M notes"
+// line the UI shows above the results, plus the active-filter annotation that
+// makes the "clear filters" control meaningful. Pure + exported for unit tests.
+// ---------------------------------------------------------------------------
+export function buildResultSummary({ shown, total, course = "", year = "" }) {
+  const unit = total === 1 ? "note" : "notes";
+  const filters = [];
+  if (course) filters.push(`course: ${course}`);
+  if (year) filters.push(`year: ${year}`);
+  const base = `Showing ${shown} of ${total} ${unit}`;
+  return filters.length ? `${base} (filtered by ${filters.join(", ")})` : base;
+}
+
+// ---------------------------------------------------------------------------
 // Export (public — the shared DB is readable by anyone, no login required)
 // ---------------------------------------------------------------------------
 function downloadFile(filename, text, mime) {
@@ -408,6 +422,8 @@ async function runKbSearch(query) {
   if (!query) {
     results.hidden = true;
     results.innerHTML = "";
+    const count = $("kbResultCount");
+    if (count) { count.hidden = true; count.innerHTML = ""; }
     const chips = $("kbFilterChips");
     if (chips) chips.hidden = true;
     // No query → reveal the "discover by course" browse panel + example searches.
@@ -425,6 +441,7 @@ async function runKbSearch(query) {
     results.hidden = false;
     results.innerHTML = "";
     renderFilterChips(d.filters);
+    renderResultCount(d, { course: kbActiveCourse, year: kbActiveYear });
     if (!d.results || d.results.length === 0) {
       // "Did you mean" — when a typo returned nothing but a confident
       // correction exists in the corpus, offer a one-click retry.
@@ -705,6 +722,37 @@ function renderFilterChips(filters) {
     // Cap to keep the UI tidy; most KBs have a manageable number.
     courses.slice(0, 24).forEach((c) => chips.appendChild(makeChip(c, "course", c, kbActiveCourse === c)));
   }
+
+  // ROADMAP #55: a "Clear filters" control appears only when a facet is active,
+  // so the student can reset the course/year selection without retyping.
+  if (kbActiveCourse || kbActiveYear) {
+    const clear = document.createElement("button");
+    clear.type = "button";
+    clear.className = "kb-chip kb-clear-filters";
+    clear.textContent = "✕ Clear filters";
+    clear.title = "Remove the active course/year filter";
+    clear.addEventListener("click", () => {
+      kbActiveCourse = "";
+      kbActiveYear = "";
+      const input = $("kbSearchInput");
+      runKbSearch(input ? input.value : "");
+    });
+    chips.appendChild(clear);
+  }
+}
+
+// ROADMAP #55: show "Showing N of M notes" above the results, narrowing M when
+// a course/year filter is active, plus a "Clear filters" control that resets
+// the active facet(s) and re-runs the search.
+function renderResultCount(data, { course, year }) {
+  const el = $("kbResultCount");
+  if (!el) return;
+  const hidden = !data || !Array.isArray(data.results) || data.results.length === 0;
+  if (hidden) { el.hidden = true; el.innerHTML = ""; return; }
+  el.hidden = false;
+  const shown = data.results.length;
+  const total = typeof data.filteredCount === "number" ? data.filteredCount : (data.meta?.noteCount ?? shown);
+  el.textContent = buildResultSummary({ shown, total, course, year });
 }
 
 // ---------------------------------------------------------------------------

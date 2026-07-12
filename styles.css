@@ -1379,6 +1379,9 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .kb-chip:hover { border-color: var(--accent); color: var(--accent); }
 .kb-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.kb-chip.kb-clear-filters { margin-left: auto; border-style: dashed; color: var(--muted); }
+.kb-chip.kb-clear-filters:hover { border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
+.kb-result-count { font-size: 0.82rem; color: var(--muted); margin: 0.25rem 0 0.5rem; }
 
 /* Browse-by-course discovery panel + example search chips. */
 .kb-examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; }
