@@ -433,7 +433,11 @@ function updateArchiveHeaderToggle() {
   const arc = getArchive();
   const toggle = $("viewToggle");
   if (!toggle) return;
-  toggle.hidden = !arc && !accessToken;
+  // The Knowledge Base is a SHARED/public resource — its tab must always be
+  // reachable (anyone can search + ask the tutor, no login required). Only the
+  // personal Archive view is gated behind login/archive. So we always show the
+  // toggle; the Archive tab's own content enforces its login requirement.
+  toggle.hidden = false;
   if (!arc && !accessToken && currentView === "archive") setView("planner");
 }
 
