@@ -13,12 +13,12 @@
 // easy ones. We no longer lead with a weak free model — the router prefers
 // capable models first and fails over, so quality is high by default.
 export const PROVIDERS = [
-  // 1. NVIDIA — DeepSeek v4 (strong, reasoning-grade)
+  // 1. NVIDIA — DeepSeek v4 Flash (strong, fast, reliable free tier; default workhorse)
   {
     name: "nvidia",
     baseURL: "https://integrate.api.nvidia.com/v1/chat/completions",
     apiKey: process.env.NVIDIA_API_KEY,
-    model: "deepseek-ai/deepseek-v4-pro",
+    model: "deepseek-ai/deepseek-v4-flash",
     effort: 3,
   },
   // 2. Google Gemini 2.5 Flash (OpenAI-compatible mode, fast + capable)
@@ -78,14 +78,14 @@ export const PROVIDERS = [
     model: "auto",
     effort: 2,
   },
-  // 9. OpenRouter — broadest model choice; used as a failover reservoir,
+  // 9. OpenRouter — DeepSeek v4 Pro for very-high-intelligence tasks (NVIDIA hosted pro throttles/hangs on free tier, so route via OpenRouter);
   //    not the default (so we don't lean on a single provider / weak model).
   {
     name: "openrouter",
     baseURL: "https://openrouter.ai/api/v1/chat/completions",
     apiKey: process.env.OPENROUTER_API_KEY,
-    model: "nvidia/nemotron-3-nano-30b-a3b:free",
-    effort: 1,
+    model: "deepseek/deepseek-v4-pro",
+    effort: 3,
     headers: { "HTTP-Referer": "https://classroom-knowledge-base.vercel.app", "X-Title": "Classroom KB" },
   },
 ];
