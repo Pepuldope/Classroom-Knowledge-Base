@@ -180,6 +180,50 @@ try {
     await page.click("#kbTutorClose");
   });
 
+  // --- Tutor source attribution (backlog: "show which notes it used") ---
+  // The tutor is auth-gated in the dev harness, so we stub fetch for the
+  // /api/tutor route with a fake SSE stream: a `sources` control event
+  // listing two notes, then a short answer delta. The REAL kb.js parser must
+  // render clickable source chips, and clicking one must open that note.
+  await check("tutor shows clickable source chips that open the note", async () => {
+    await page.evaluate(() => {
+      const realFetch = window.fetch.bind(window);
+      window.fetch = async (url, opts) => {
+        if (String(url).includes("/api/tutor")) {
+          const body =
+            `data: ${JSON.stringify({ type: "sources", notes: [
+              { t: "STAR Method", course: "BEng Y1", y: "2024-25", noteIndex: 0 },
+              { t: "Cover Letter Guide", course: "ELA 1 Gama", y: "2024-25", noteIndex: 1 },
+            ] })}\n\n` +
+            `data: ${JSON.stringify({ choices: [{ delta: { content: "Use the STAR method for interviews." } }] })}\n\n` +
+            `data: [DONE]\n\n`;
+          return new Response(body, {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream", "X-KB-Notes": "2" },
+          });
+        }
+        return realFetch(url, opts);
+      };
+    });
+    await page.click("#kbTutorOpen");
+    await page.waitForSelector("#kbTutorModal:not([hidden])", { timeout: 8000 });
+    await page.fill("#kbTutorInput", "how do I do interviews?");
+    await page.click("#kbTutorForm button[type=submit]");
+    // Chips must appear.
+    await page.waitForSelector("#kbTutorSources .kb-source-chip", { timeout: 8000 });
+    const chipCount = await page.locator("#kbTutorSources .kb-source-chip").count();
+    assert.ok(chipCount === 2, `expected 2 source chips, got ${chipCount}`);
+    const firstTitle = await page.locator("#kbTutorSources .kb-source-chip .kb-chip-title").first().textContent();
+    assert.ok(firstTitle && firstTitle.includes("STAR"), `chip title wrong: ${firstTitle}`);
+    // Clicking a chip must open the note detail modal.
+    await page.locator("#kbTutorSources .kb-source-chip").first().click();
+    await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
+    const noteTitle = await page.locator("#kbNoteTitle").textContent();
+    assert.ok(noteTitle && noteTitle.length > 0, "clicking a source chip should open the note");
+    await page.click("#kbNoteClose");
+    await page.click("#kbTutorClose");
+  });
+
   // --- Empty state ---
   // NOTE: the query must be GENUINE gibberish (tokens that appear nowhere in
   // the vault). A string like "zzqqxx_nothing_here" is NOT gibberish — its

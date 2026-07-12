@@ -24,7 +24,7 @@ import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
-import { highlightSnippet } from "../kb.js";
+import { highlightSnippet, tutorSourceList } from "../kb.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -315,7 +315,6 @@ test("relatedNotes is fast and scores related notes sanely (regression guard)", 
   // corpus should never produce scores in the thousands.
   const maxScore = Math.max(0, ...rel.map((r) => r._score));
   assert.ok(maxScore < 200, "related scores must be sane (<200), got max " + maxScore);
-  // Every returned note must be genuinely related (shared course/topic/token).
   for (const r of rel) {
     assert.ok(
       (r.course && r.course === target.course) ||
@@ -324,4 +323,37 @@ test("relatedNotes is fast and scores related notes sanely (regression guard)", 
       "each related note must have a real relation"
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// Tutor source attribution: the tutor must SHOW WHICH NOTES it used, as
+// clickable chips that jump to the note. The pure transform tutorSourceList()
+// turns a raw list of retrieved notes into the chip descriptors the UI renders.
+// ---------------------------------------------------------------------------
+test("tutorSourceList builds clickable chip descriptors from retrieved notes", () => {
+  const retrieved = [
+    { t: "STAR Method", course: "BEng Y1", y: "2024-25", topic: "Interviews", noteIndex: 3 },
+    { t: "Cover Letter Guide", course: "ELA 1 Gama", y: "2024-25", topic: "Writing", noteIndex: 7 },
+  ];
+  const list = tutorSourceList(retrieved);
+  assert.ok(Array.isArray(list), "must return an array");
+  assert.equal(list.length, 2, "one chip per retrieved note");
+  // Each chip carries the data the UI needs to render + jump to the note.
+  const first = list[0];
+  assert.equal(first.noteIndex, 3, "chip keeps the note index for click-to-open");
+  assert.ok(first.title && first.title.includes("STAR"), "chip shows the note title");
+  assert.ok(first.subtitle && first.subtitle.includes("BEng Y1"), "chip shows course/year");
+});
+
+test("tutorSourceList de-duplicates notes by index and skips invalid entries", () => {
+  const retrieved = [
+    { t: "A", course: "C1", y: "2024", noteIndex: 5 },
+    { t: "B", course: "C2", y: "2024", noteIndex: 5 }, // duplicate index -> dropped
+    { t: "C", course: "C3", y: "2024", noteIndex: 9 },
+    null,
+    { t: "D" }, // no noteIndex -> dropped
+  ];
+  const list = tutorSourceList(retrieved);
+  const indexes = list.map((c) => c.noteIndex).sort();
+  assert.deepEqual(indexes, [5, 9], "only valid, unique indexes kept");
 });

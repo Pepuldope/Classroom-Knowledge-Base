@@ -1339,3 +1339,10 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .kb-chip:hover { border-color: var(--accent); color: var(--accent); }
 .kb-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* Tutor "sources used" chips — clickable, jump to the grounded note. */
+.kb-source-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.45rem; }
+.kb-source-chips-label { font-size: 0.78rem; color: var(--muted); margin-right: 0.15rem; }
+.kb-source-chip { display: inline-flex; flex-direction: column; align-items: flex-start; text-align: left; line-height: 1.15; gap: 0.05rem; max-width: 220px; }
+.kb-chip-title { font-weight: 600; font-size: 0.82rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+.kb-chip-sub { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }

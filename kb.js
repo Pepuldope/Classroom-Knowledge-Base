@@ -159,8 +159,26 @@ async function exportKb(format) {
 
 
 // ---------------------------------------------------------------------------
-// Build / scrape into the shared DB
+// Tutor source attribution — turn the notes the RAG tutor actually used into
+// clickable chip descriptors the UI renders. Each chip keeps the note index so
+// a click can open the full note in the detail modal (openKbNote).
 // ---------------------------------------------------------------------------
+export function tutorSourceList(notes) {
+  if (!Array.isArray(notes)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const n of notes) {
+    if (!n || n.noteIndex === undefined || n.noteIndex === null) continue;
+    if (seen.has(n.noteIndex)) continue; // de-dupe by index
+    seen.add(n.noteIndex);
+    out.push({
+      noteIndex: n.noteIndex,
+      title: n.t || "(untitled)",
+      subtitle: [n.course, n.y].filter(Boolean).join(" · "),
+    });
+  }
+  return out;
+}
 let _kbWired = false;
 export function wireKbEvents() {
   if (_kbWired) return; // idempotent — safe to call multiple times
@@ -470,6 +488,10 @@ async function sendTutor(text) {
       return;
     }
     const notesUsed = Number(r.headers.get("X-KB-Notes") || "0");
+    // Feature: expose WHICH notes the tutor grounded on, as clickable chips
+    // that jump to the full note (openKbNote). The server returns them as a
+    // JSON line on a dedicated stream event so the UI can render them once.
+    let sources = [];
     if (sourcesEl) {
       sourcesEl.innerHTML = notesUsed > 0
         ? `<span class="ai-context-note">📚 Grounded in ${notesUsed} note${notesUsed === 1 ? "" : "s"} from the knowledge base</span>`
@@ -489,15 +511,44 @@ async function sendTutor(text) {
         if (payload === "[DONE]") continue;
         try {
           const j = JSON.parse(payload);
+          // A control event from the tutor route: sources used for grounding.
+          if (j && j.type === "sources") { sources = Array.isArray(j.notes) ? j.notes : []; continue; }
           const delta = j.choices?.[0]?.delta?.content;
           if (delta) { acc += delta; if (assistantEl) assistantEl.textContent = acc; }
         } catch {}
       }
     }
+    // After streaming, render the source chips (clickable -> open the note).
+    renderTutorSources(sourcesEl, sources);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {
     if (assistantEl) assistantEl.textContent = `❌ ${e.message}`;
   }
+}
+
+function renderTutorSources(container, notes) {
+  if (!container) return;
+  const chips = tutorSourceList(notes);
+  if (!chips.length) return; // nothing to attribute
+  // Keep the "grounded in N notes" note, then append clickable chips.
+  const wrap = document.createElement("div");
+  wrap.className = "kb-source-chips";
+  const lbl = document.createElement("span");
+  lbl.className = "kb-source-chips-label";
+  lbl.textContent = "Sources used:";
+  wrap.appendChild(lbl);
+  for (const c of chips) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "kb-chip kb-source-chip";
+    b.title = "Open this note";
+    b.innerHTML = `<span class="kb-chip-title"></span><span class="kb-chip-sub"></span>`;
+    b.querySelector(".kb-chip-title").textContent = c.title;
+    if (c.subtitle) b.querySelector(".kb-chip-sub").textContent = c.subtitle;
+    b.addEventListener("click", () => openKbNote(c.noteIndex));
+    wrap.appendChild(b);
+  }
+  container.appendChild(wrap);
 }
 
 // ---------------------------------------------------------------------------

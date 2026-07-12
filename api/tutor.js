@@ -58,6 +58,13 @@ export default async function handler(req) {
   const systemPrompt = buildSystemPrompt(notes);
   const messages = [{ role: "system", content: systemPrompt }, ...body.messages];
 
+  // Build the source descriptors we'll surface as clickable chips (noteIndex
+  // so the UI can open the full note). Emitted early as a control SSE event.
+  const sourceNotes = notes.map((n) => ({
+    t: n.t, course: n.course, y: n.y, noteIndex: n.noteIndex,
+  }));
+  const sourcesEvent = `data: ${JSON.stringify({ type: "sources", notes: sourceNotes })}\n\n`;
+
   // ---- Route through all providers with failover ----
   let routed;
   try {
@@ -66,7 +73,24 @@ export default async function handler(req) {
     return jsonResponse({ error: "AI request failed", details: e.message }, 502);
   }
 
-  return new Response(routed.stream, {
+  // Compose the stream: lead with the sources control event, then the model's
+  // SSE payload verbatim, then the [DONE] terminator.
+  const stream = new ReadableStream({
+    start(controller) {
+      const enc = new TextEncoder();
+      controller.enqueue(enc.encode(sourcesEvent));
+      const reader = routed.stream.getReader();
+      const pump = () =>
+        reader.read().then(({ done, value }) => {
+          if (done) { controller.enqueue(enc.encode("\ndata: [DONE]\n\n")); controller.close(); return; }
+          controller.enqueue(value);
+          return pump();
+        });
+      pump().catch((e) => { try { controller.error(e); } catch {} });
+    },
+  });
+
+  return new Response(stream, {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
