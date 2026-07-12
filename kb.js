@@ -537,13 +537,10 @@ async function renderRelatedNotes(index) {
   list.innerHTML = "";
   try {
     const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=5");
-    console.log("[DBG-rel] status", r.status, "ok", r.ok);
     if (!r.ok) return;
     const d = await r.json();
-    console.log("[DBG-rel] got related len", (d.related||[]).length);
     const related = d.related || [];
     if (!related.length) return;
-    console.log("[DBG-rel] about to render", related.length, "items");
     for (const rel of related) {
       const item = document.createElement("button");
       item.type = "button";
@@ -560,7 +557,7 @@ async function renderRelatedNotes(index) {
       list.appendChild(item);
     }
     wrap.hidden = false;
-  } catch { /* related panel is non-critical; ignore */ }
+  } catch (e) { /* related panel is non-critical; ignore */ }
 }
 
 function closeKbNote() {

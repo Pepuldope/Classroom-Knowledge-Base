@@ -133,8 +133,12 @@ try {
   });
 
   // --- Empty state ---
-  await check("a nonsense query shows the empty state", async () => {
-    await page.fill("#kbSearchInput", "zzqqxx_nothing_here");
+  // NOTE: the query must be GENUINE gibberish (tokens that appear nowhere in
+  // the vault). A string like "zzqqxx_nothing_here" is NOT gibberish — its
+  // tokens "nothing"/"here" are real words and legitimately match notes, so it
+  // would never trigger the empty state. Use tokens with no real vocabulary.
+  await check("a gibberish query shows the empty state", async () => {
+    await page.fill("#kbSearchInput", "zzqqxxqwqy zxvbnm asdfgh");
     await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .empty", { timeout: 8000 });
   });

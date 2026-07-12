@@ -284,3 +284,44 @@ test("/api/kb-related with no id returns 400", async () => {
   const rr = await kbRelated(makeReq("/api/kb-related"));
   assert.equal(rr.status, 400, "missing id must 400");
 });
+
+// Regression guard: relatedNotes must stay FAST and produce SANE scores.
+// A 2026-07-12 incident made /api/kb-related take ~6s on a 400-note corpus
+// (loose fuzzy matcher scored every note in the thousands), which the cron
+// loop's 5s curl timeout read as a hang (HTTP:000). This test fails loudly
+// if the matcher regresses back to that behavior.
+test("relatedNotes is fast and scores related notes sanely (regression guard)", () => {
+  // Build a 400-note synthetic corpus with a clear same-course cluster so we
+  // exercise realistic volume + real cross-links without a live vault.
+  const notes = [];
+  for (let i = 0; i < 400; i++) {
+    notes.push({
+      t: "Note " + i,
+      s: "summary text " + (i % 5),
+      x: "body content for note number " + i,
+      course: "Course " + (i % 4),
+      y: "2024-25",
+      topic: "Topic " + (i % 3),
+      p: "",
+    });
+  }
+  const target = notes[60]; // shares Course 0 / Topic 0 with a cluster
+  const t0 = Date.now();
+  const rel = relatedNotes(notes, target, { limit: 5 });
+  const dt = Date.now() - t0;
+  assert.ok(dt < 2000, "relatedNotes(400 notes) must run well under the 5s loop timeout, took " + dt + "ms");
+  assert.ok(rel.length >= 1, "should find at least one same-course/topic cross-link");
+  // Sane scores: with exact-token overlap + course/topic bonuses, a 400-note
+  // corpus should never produce scores in the thousands.
+  const maxScore = Math.max(0, ...rel.map((r) => r._score));
+  assert.ok(maxScore < 200, "related scores must be sane (<200), got max " + maxScore);
+  // Every returned note must be genuinely related (shared course/topic/token).
+  for (const r of rel) {
+    assert.ok(
+      (r.course && r.course === target.course) ||
+        (r.topic && r.topic === target.topic) ||
+        r._score > 0,
+      "each related note must have a real relation"
+    );
+  }
+});

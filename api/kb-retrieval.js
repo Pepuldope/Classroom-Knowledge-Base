@@ -132,35 +132,37 @@ function tokenFuzzyAny(text, qTokens) {
  */
 export function relatedNotes(notes, target, { limit = 5 } = {}) {
   if (!Array.isArray(notes) || notes.length === 0 || !target) return [];
+  // Exact-token set of the target's own text. We use EXACT overlap (not the
+  // loose stem fuzzy match) so unrelated notes don't falsely "relate" — the
+  // loose matcher made every note score thousands of points and turned the
+  // route into a multi-second hang on a 400-note corpus.
   const targetTokens = tokenize([target.t, target.s, target.x].filter(Boolean).join(" "));
   const targetCourse = target.course || "";
   const targetTopic = target.topic || "";
 
   const scored = [];
-  notes.forEach((n, i) => {
-    if (n === target) return;
-    // Identity by reference is weak; also guard on equal title+index when the
-    // caller passes a copy. We rely on reference identity plus a course/topic
-    // sanity check below.
+  for (let i = 0; i < notes.length; i++) {
+    const n = notes[i];
+    if (n === target) continue; // never relate a note to itself (reference)
     let score = 0;
     if (targetCourse && n.course === targetCourse) score += 3;
     if (targetTopic && n.topic && n.topic === targetTopic) score += 3;
-    // Token overlap with the target's own text.
+    // Exact token overlap with the target's own text (fast + precise).
     if (targetTokens.length) {
       const nTokens = tokenize([n.t, n.s, n.x].filter(Boolean).join(" "));
-      const overlap = nTokens.filter((t) => targetTokens.some((qt) => tokenFuzzyMatch(t, qt))).length;
+      let overlap = 0;
+      for (const t of nTokens) if (targetTokens.includes(t)) overlap++;
       score += overlap;
     }
-    if (score <= 0) return; // unrelated — skip
+    if (score <= 0) continue; // unrelated — skip
     scored.push({ index: i, score, note: n });
-  });
+  }
 
-  scored.sort((a, b) => b.score - a.score);
+  // Rank by score, then by stable index for deterministic output.
+  scored.sort((a, b) => b.score - a.score || a.index - b.index);
   const out = [];
+  const snippetTokens = targetTokens.length ? targetTokens : [];
   for (const { index, score, note } of scored) {
-    const qTokens = tokenFuzzyAny(note.t, targetTokens) || (note.s && tokenFuzzyAny(note.s, targetTokens))
-      ? targetTokens
-      : tokenize([note.t, note.s].filter(Boolean).join(" "));
     out.push({
       t: note.t || "",
       course: note.course || "",
@@ -169,7 +171,7 @@ export function relatedNotes(notes, target, { limit = 5 } = {}) {
       p: note.p || "",
       noteIndex: index,
       _score: score,
-      _snippet: buildSnippet(note, targetTokens.length ? targetTokens : qTokens),
+      _snippet: buildSnippet(note, snippetTokens),
     });
     if (out.length >= limit) break;
   }
