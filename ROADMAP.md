@@ -14,7 +14,7 @@ then builds it. Keep items concrete and student-facing where possible.
 - [x] KB: highlight matched query terms in each result snippet.
 - [x] KB: add "related notes" panel on each search result (cross-link by topic/course).
 - [x] Tutor: show clickable source chips under each answer that jump to the note.
-- [ ] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
+- [x] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
 ## 🧠 Soon
@@ -51,7 +51,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Search: "did you mean" suggestion when a query returns <3 results.
 - [x] KB: related-notes preview chips directly under each search result card (no need to open the note first).
 - [x] KB: Planner→KB bridge — a "🔍 KB" button on every assignment card that searches the knowledge base for that topic.
-- [ ] KB: richer empty state with example searches and a "browse by course" entry point.
+- [x] KB: richer empty state with example searches and a "browse by course" entry point.
+- [ ] KB: search result count + "showing N of M notes" and a "clear filters" control when course/year chips are active.
+- [ ] KB: persist last-used sort (relevance/recency/course) across searches via localStorage.
+- [ ] Tutor: "copy answer" button on each tutor message + "save to my study list" (personal, localStorage).
+- [ ] Tutor: surface which provider/model answered (already in X- headers) as a small line under the answer.
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

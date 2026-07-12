@@ -33,6 +33,8 @@ const kbSearch = (await import("../api/kb-search.js")).default;
 const kbScrape = (await import("../api/kb-scrape.js")).default;
 const kbNote = (await import("../api/kb-note.js")).default;
 const kbRelated = (await import("../api/kb-related.js")).default;
+const kbBrowse = (await import("../api/kb-browse.js")).default;
+const kbStore = (await import("../api/kb-store.js")).default;
 const oauthConfig = (await import("../api/oauth-config.js")).default;
 const tutor = (await import("../api/tutor.js")).default;
 
@@ -56,6 +58,8 @@ const server = http.createServer(async (req, res) => {
   if (p === "/api/kb-scrape") return await runHandler(kbScrape, req, res, url);
   if (p === "/api/kb-note") return await runHandler(kbNote, req, res, url);
   if (p === "/api/kb-related") return await runHandler(kbRelated, req, res, url);
+  if (p === "/api/kb-browse") return await runHandler(kbBrowse, req, res, url);
+  if (p === "/api/kb-store") return await runHandler(kbStore, req, res, url);
   if (p === "/api/oauth-config") return await runHandler(oauthConfig, req, res, url);
   if (p === "/api/tutor") return await runHandler(tutor, req, res, url);
   if (p.startsWith("/api/")) {

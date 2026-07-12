@@ -24,10 +24,28 @@
       </div>
       <div id="kbMain" hidden>
         <div id="kbMetaBar" class="stat-bar"></div>
+        <div class="kb-export-bar">
+          <span class="kb-export-label">Export:</span>
+          <button id="kbExportJson" class="ghost-btn" type="button">JSON</button>
+          <button id="kbExportMd" class="ghost-btn" type="button">Markdown</button>
+          <button id="kbExportCsv" class="ghost-btn" type="button">CSV</button>
+          <span id="kbExportStatus" class="kb-export-status" hidden></span>
+        </div>
         <div class="kb-search-bar">
           <input id="kbSearchInput" type="text" placeholder="Search the knowledge base…" autocomplete="off" />
         </div>
+        <div id="kbExamples" class="kb-examples" hidden>
+          <span class="kb-examples-label">Try:</span>
+        </div>
         <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
+        <div id="kbBrowse" class="kb-browse" hidden>
+          <div class="kb-browse-head">
+            <h3>Browse by course</h3>
+            <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+          </div>
+          <div id="kbBrowseCourses" class="kb-browse-courses"></div>
+          <div id="kbBrowseNotes" class="list compact" hidden></div>
+        </div>
         <div id="kbResults" class="list compact" hidden></div>
         <div class="kb-tutor-wrap">
           <button id="kbTutorOpen" class="primary" type="button">💬 Ask the AI tutor</button>
@@ -49,6 +67,8 @@
         <button data-prompt="Explain from scratch">Explain from scratch</button>
         <button data-prompt="Quiz me">Quiz me</button>
         <button data-prompt="Key points">Key points</button>
+        <button data-prompt="Explain like I'm 12">Explain like I'm 12</button>
+        <button data-prompt="Practice problem">Practice problem</button>
       </div>
     </div>
   </div>

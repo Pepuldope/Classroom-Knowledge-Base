@@ -164,7 +164,18 @@
       <div class="kb-search-bar">
         <input id="kbSearchInput" type="text" placeholder="Search the knowledge base… (e.g. STAR method, cover letter, soft skills)" autocomplete="off" />
       </div>
+      <div id="kbExamples" class="kb-examples" hidden>
+        <span class="kb-examples-label">Try:</span>
+      </div>
       <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
+      <div id="kbBrowse" class="kb-browse" hidden>
+        <div class="kb-browse-head">
+          <h3>Browse by course</h3>
+          <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+        </div>
+        <div id="kbBrowseCourses" class="kb-browse-courses"></div>
+        <div id="kbBrowseNotes" class="list compact" hidden></div>
+      </div>
       <div id="kbResults" class="list compact" hidden></div>
 
       <div class="kb-tutor-wrap">
@@ -190,6 +201,8 @@
       <button data-prompt="Explain this topic to me like I'm starting from zero, using only what's in the knowledge base.">Explain from scratch</button>
       <button data-prompt="Quiz me on this topic. Ask one question at a time and give feedback, using the knowledge base.">Quiz me</button>
       <button data-prompt="Summarize the key points on this topic from the knowledge base, as bullet points.">Key points</button>
+      <button data-prompt="Explain this like I'm 12 years old — simple words, a relatable everyday analogy, no jargon, using only the knowledge base.">Explain like I'm 12</button>
+      <button data-prompt="Give me a practice problem on this topic from the knowledge base, then wait for my answer and give feedback.">Practice problem</button>
     </div>
   </div>
 </div>

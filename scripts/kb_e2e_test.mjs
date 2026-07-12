@@ -23,6 +23,7 @@ import { searchNotes, relatedNotes, suggestCorrection, relatedNotesPreview } fro
 import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
+import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { highlightSnippet, tutorSourceList } from "../kb.js";
 
@@ -430,4 +431,58 @@ test("relatedNotesPreview is a wrapper that honours the same limit as relatedNot
   const idx = 0;
   const preview = relatedNotesPreview(notes, idx, { limit: 1 });
   assert.ok(preview.length <= 1, "preview count must not exceed limit");
+});
+
+// ---------------------------------------------------------------------------
+// Feature: "Browse by course" — a no-query entry point so students can
+// discover notes without already knowing a search term. GET /api/kb-browse
+// returns the distinct courses (with note counts) and, when a `course` is
+// given, the notes in that course. Mirrors the facet shape / result shape the
+// rest of the KB uses so the UI can reuse its rendering.
+// ---------------------------------------------------------------------------
+test("/api/kb-browse with no course lists distinct courses with note counts", async () => {
+  await seed(sampleBundle());
+  const r = await kbBrowse(makeReq("/api/kb-browse"));
+  assert.equal(r.status, 200, "browse should be 200");
+  const d = await r.json();
+  assert.ok(Array.isArray(d.courses), "courses must be an array");
+  // Two distinct courses in the sample bundle.
+  assert.equal(d.courses.length, 2, "should list both courses");
+  // Each course carries its note count + year facets.
+  const ela = d.courses.find((c) => c.course === "ELA 1 Gama");
+  assert.ok(ela, "ELA 1 Gama present");
+  assert.equal(ela.count, 1, "ELA 1 Gama has 1 note");
+  assert.deepEqual(ela.years, ["2023-24"], "ELA 1 Gama year facet");
+  assert.equal(d.notes, undefined, "no notes list when no course selected");
+});
+
+test("/api/kb-browse?course=<name> returns that course's notes sorted by recency", async () => {
+  await seed(sampleBundle());
+  const r = await kbBrowse(makeReq("/api/kb-browse?course=" + encodeURIComponent("BEng Y1")));
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  // BEng Y1 has two notes (Random Biology Note, STAR Method).
+  assert.ok(Array.isArray(d.notes) && d.notes.length === 2, "both BEng Y1 notes returned");
+  assert.ok(d.notes.every((n) => n.course === "BEng Y1"), "every note is the requested course");
+  // Result shape must match searchNotes so the UI reuses rendering.
+  assert.ok("noteIndex" in d.notes[0] && "t" in d.notes[0], "result shape matches search");
+  // Recency: 2023-24 note should rank above the 2022-23 note.
+  const order = d.notes.map((n) => n.y);
+  assert.ok(order.indexOf("2023-24") < order.indexOf("2022-23"), "newer notes first");
+});
+
+test("/api/kb-browse?course=<unknown> returns an empty notes list", async () => {
+  await seed(sampleBundle());
+  const r = await kbBrowse(makeReq("/api/kb-browse?course=" + encodeURIComponent("Nonexistent")));
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.ok(Array.isArray(d.notes) && d.notes.length === 0, "unknown course -> no notes");
+});
+
+test("/api/kb-browse on a missing DB returns an empty courses list", async () => {
+  await saveBundle({ version: 1, notes: [], years: [], courses: [] });
+  const r = await kbBrowse(makeReq("/api/kb-browse"));
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.ok(Array.isArray(d.courses) && d.courses.length === 0, "no courses when DB empty");
 });

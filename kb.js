@@ -61,7 +61,13 @@ async function refreshKb() {
   // If a DB exists, show the main search/tutor surface; else show onboarding.
   if (main) main.hidden = !hasDb;
   if (onboarding) onboarding.hidden = hasDb;
-  if (hasDb) renderKbMeta(meta);
+  if (hasDb) {
+    renderKbMeta(meta);
+    // Fresh load (no active query yet) → surface the discovery panel so the
+    // KB isn't blank below the search box. A real query hides it via runKbSearch.
+    const search = $("kbSearchInput");
+    if (!search || !search.value.trim()) showBrowsePanel();
+  }
 }
 
 function renderKbMeta(meta) {
@@ -224,6 +230,15 @@ export function wireKbEvents() {
   const search = $("kbSearchInput");
   search?.addEventListener("input", debounce(() => runKbSearch(search.value), 200));
 
+  // Browse-by-course: "back to all courses" returns to the course grid.
+  $("kbBrowseBack")?.addEventListener("click", () => {
+    const notesEl = $("kbBrowseNotes");
+    if (notesEl) notesEl.hidden = true;
+    loadBrowseCourses();
+    const back = $("kbBrowseBack");
+    if (back) back.hidden = true;
+  });
+
   // Keyboard shortcuts (agent-proposed backlog):
   //   "/"  -> focus the KB search box from anywhere in the view.
   //   Esc  -> clear the search box (and its results) when it's focused.
@@ -360,8 +375,12 @@ async function runKbSearch(query) {
     results.innerHTML = "";
     const chips = $("kbFilterChips");
     if (chips) chips.hidden = true;
+    // No query → reveal the "discover by course" browse panel + example searches.
+    showBrowsePanel();
     return;
   }
+  // A real query supersedes browse; hide the browse panel.
+  hideBrowsePanel();
   try {
     const params = new URLSearchParams({ q: query, limit: "8" });
     if (kbActiveCourse) params.set("course", kbActiveCourse);
@@ -443,6 +462,140 @@ async function runKbSearch(query) {
   } catch (e) {
     results.hidden = false;
     results.innerHTML = `<div class="empty">Search failed: ${e.message}</div>`;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// "Browse by course" — a no-query discovery entry point (ROADMAP: richer
+// empty state with a "browse by course" entry point). When the search box is
+// empty we show (a) a row of example searches and (b) a course grid; clicking
+// a course fetches /api/kb-browse?course=<name> and lists that course's notes
+// in the same card shape the search results use.
+// ---------------------------------------------------------------------------
+function exampleSearches() {
+  return ["STAR method", "cover letter", "soft skills", "interview", "study guide"];
+}
+
+function renderExamples() {
+  const wrap = $("kbExamples");
+  if (!wrap) return;
+  // Keep the static label, append one chip per example.
+  wrap.querySelectorAll(".kb-example-chip").forEach((n) => n.remove());
+  for (const ex of exampleSearches()) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "kb-chip kb-example-chip";
+    b.textContent = ex;
+    b.addEventListener("click", () => {
+      const input = $("kbSearchInput");
+      if (input) { input.value = ex; runKbSearch(ex); }
+    });
+    wrap.appendChild(b);
+  }
+  wrap.hidden = false;
+}
+
+function showBrowsePanel() {
+  renderExamples();
+  const panel = $("kbBrowse");
+  if (panel) panel.hidden = false;
+  // Fresh visit → show the course grid, hide the per-course notes list.
+  const notesEl = $("kbBrowseNotes");
+  if (notesEl) notesEl.hidden = true;
+  loadBrowseCourses();
+}
+
+function hideBrowsePanel() {
+  const panel = $("kbBrowse");
+  if (panel) panel.hidden = true;
+  const ex = $("kbExamples");
+  if (ex) ex.hidden = true;
+  const back = $("kbBrowseBack");
+  if (back) back.hidden = true;
+}
+
+async function loadBrowseCourses() {
+  const list = $("kbBrowseCourses");
+  if (!list) return;
+  list.hidden = false;
+  list.innerHTML = `<div class="empty">Loading courses…</div>`;
+  try {
+    const r = await fetch("/api/kb-browse");
+    if (!r.ok) { list.innerHTML = `<div class="empty">Couldn't load courses.</div>`; return; }
+    const d = await r.json();
+    const courses = Array.isArray(d.courses) ? d.courses : [];
+    if (!courses.length) { list.innerHTML = `<div class="empty">No courses yet — the knowledge base is empty.</div>`; return; }
+    list.innerHTML = "";
+    for (const c of courses) {
+      const card = document.createElement("button");
+      card.type = "button";
+      card.className = "kb-course-card";
+      card.setAttribute("aria-label", `Browse ${c.course} (${c.count} notes)`);
+      const title = document.createElement("span");
+      title.className = "kb-course-name";
+      title.textContent = c.course;
+      const meta = document.createElement("span");
+      meta.className = "kb-course-meta";
+      const yr = Array.isArray(c.years) && c.years.length ? c.years.join(", ") : "—";
+      meta.textContent = `${c.count} note${c.count === 1 ? "" : "s"} · ${yr}`;
+      card.appendChild(title);
+      card.appendChild(meta);
+      card.addEventListener("click", () => openCourse(c.course));
+      list.appendChild(card);
+    }
+  } catch (e) {
+    list.innerHTML = `<div class="empty">Couldn't load courses (${e.message}).</div>`;
+  }
+}
+
+async function openCourse(course) {
+  const list = $("kbBrowseCourses");
+  const notesEl = $("kbBrowseNotes");
+  const back = $("kbBrowseBack");
+  if (list) list.hidden = true;
+  if (notesEl) { notesEl.hidden = false; notesEl.innerHTML = `<div class="empty">Loading ${course}…</div>`; }
+  if (back) back.hidden = false;
+  try {
+    const r = await fetch("/api/kb-browse?course=" + encodeURIComponent(course));
+    if (!r.ok) { if (notesEl) notesEl.innerHTML = `<div class="empty">Couldn't load this course.</div>`; return; }
+    const d = await r.json();
+    const notes = Array.isArray(d.notes) ? d.notes : [];
+    if (!notes.length) { if (notesEl) notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`; return; }
+    if (notesEl) {
+      notesEl.innerHTML = "";
+      for (const note of notes) {
+        const row = document.createElement("div");
+        row.className = "assignment kb-result-card";
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.dataset.noteIndex = String(note.noteIndex ?? "");
+        row.setAttribute("aria-label", `Open note: ${note.t || "(untitled)"}`);
+        const body = document.createElement("div");
+        body.className = "assignment-body";
+        const title = document.createElement("div");
+        title.className = "title";
+        title.textContent = note.t || "(untitled)";
+        body.appendChild(title);
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        meta.textContent = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
+        body.appendChild(meta);
+        if (note._snippet) {
+          const snip = document.createElement("div");
+          snip.className = "summary archive-snippet";
+          // Browse snippets have no query to highlight; show plain text.
+          snip.textContent = note._snippet;
+          body.appendChild(snip);
+        }
+        const open = () => { if (row.dataset.noteIndex !== "") openKbNote(Number(row.dataset.noteIndex)); };
+        row.appendChild(body);
+        row.addEventListener("click", open);
+        row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+        notesEl.appendChild(row);
+      }
+    }
+  } catch (e) {
+    if (notesEl) notesEl.innerHTML = `<div class="empty">Couldn't load this course (${e.message}).</div>`;
   }
 }
 

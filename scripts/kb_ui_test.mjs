@@ -63,6 +63,49 @@ try {
     await page.waitForSelector("#kbSearchInput", { timeout: 10000 });
   });
 
+  // --- "Browse by course" discovery panel (ROADMAP: rich empty state + entry point) ---
+  // With a seeded DB and an empty search box, the browse panel + example chips
+  // must be visible on load, listing the distinct courses as clickable cards.
+  await check("browse-by-course panel shows course cards on load", async () => {
+    await page.waitForSelector("#kbBrowse:not([hidden])", { timeout: 10000 });
+    await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 10000 });
+    const cards = await page.locator("#kbBrowseCourses .kb-course-card").count();
+    assert.ok(cards > 0, "expected at least one course card");
+  });
+
+  await check("example-search chips render and run a search", async () => {
+    await page.waitForSelector("#kbExamples .kb-example-chip", { timeout: 10000 });
+    const chips = await page.locator("#kbExamples .kb-example-chip").count();
+    assert.ok(chips > 0, "expected example-search chips");
+    // Clicking an example chip runs a real search and shows result cards.
+    await page.locator("#kbExamples .kb-example-chip").first().click();
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
+    const n = await page.locator("#kbResults .kb-result-card").count();
+    assert.ok(n > 0, "example chip should trigger a real search with results");
+  });
+
+  await check("clicking a course card lists that course's notes", async () => {
+    // Return to the empty-query state to surface the browse panel again.
+    await page.evaluate(() => {
+      const input = document.getElementById("kbSearchInput");
+      if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
+    });
+    await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 10000 });
+    // Open the first course.
+    await page.locator("#kbBrowseCourses .kb-course-card").first().click();
+    await page.waitForSelector("#kbBrowseNotes .kb-result-card", { timeout: 10000 });
+    const n = await page.locator("#kbBrowseNotes .kb-result-card").count();
+    assert.ok(n > 0, "course notes list should render result cards");
+    // The "back" control appears so a student can return to the course grid.
+    await page.waitForSelector("#kbBrowseBack:not([hidden])", { timeout: 5000 });
+    // Clicking a course note opens the detail modal.
+    await page.locator("#kbBrowseNotes .kb-result-card").first().click();
+    await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
+    const title = await page.locator("#kbNoteTitle").textContent();
+    assert.ok(title && title.trim().length > 0, "course note should open in detail modal");
+    await page.click("#kbNoteClose");
+  });
+
   await check("search input is functional", async () => {
     await page.fill("#kbSearchInput", "cover letter");
   });
