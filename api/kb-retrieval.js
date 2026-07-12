@@ -122,6 +122,45 @@ function tokenFuzzyAny(text, qTokens) {
   return qTokens.some((qt) => toks.some((it) => tokenFuzzyMatch(it, qt)));
 }
 
+// Common classroom/English stopwords. These appear in every note (announcements,
+// "please submit on Classroom", "thank you for your attention") so raw token
+// overlap would let a giant boilerplate "Announcements" note score hundreds of
+// points against unrelated notes and crowd out genuine cross-links. Filtered
+// out of the related-notes overlap signal only (search keeps them).
+const RELATED_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "but", "if", "then", "else", "of", "to", "in", "on",
+  "for", "with", "as", "is", "are", "was", "were", "be", "been", "being", "this", "that",
+  "these", "those", "it", "its", "we", "you", "your", "our", "they", "them", "their",
+  "he", "she", "his", "her", "i", "me", "my", "at", "by", "from", "up", "out", "do",
+  "does", "did", "has", "have", "had", "will", "would", "can", "could", "should",
+  "may", "might", "please", "thank", "thanks", "note", "notes", "class", "classes",
+  "classroom", "student", "students", "teacher", "assignment", "assignments", "course",
+  "school", "lesson", "lessons", "work", "works", "hello", "hi", "dear", "use", "using",
+  "will", "not", "no", "yes", "so", "just", "more", "also", "about", "into", "than",
+  "then", "them", "there", "here", "what", "when", "where", "which", "who", "why", "how",
+  "all", "any", "each", "every", "other", "some", "such", "only", "own", "same", "can",
+  "new", "one", "two", "get", "make", "made", "see", "like", "time", "first", "last",
+  // Slovak stopwords (the vault has many Slovak-language courses).
+  "a", "na", "s", "v", "je", "do", "sa", "že", "pre", "zo", "od", "k", "i", "u", "o",
+  "tento", "táto", "toto", "ten", "tá", "to", "tieto", "tie", "ktorý", "ktorá", "ktoré",
+  "sme", "ste", "si", "tu", "tam", "ako", "ked", "keď", "ale", "len", "už", "ešte",
+  "všetko", "vše", "každý", "každá", "každé", "svoj", "svoje", "svoju", "možno", "treba",
+  "pri", "pod", "nad", "za", "po", "vy", "via", "viac", "menej", "veľmi", "celý", "celá",
+  "jeho", "jej", "ich", "ním", "nou", "čo", "kto", "kde", "kedy", "prečo", "ak", "keby",
+]);
+
+// Strip URL-fragment tokens (https, com, google, drive, usp, web, mdexmde…)
+// that appear in every "Announcements" boilerplate and would otherwise create
+// false overlap. Anything that looks like a hostname/link artifact is dropped.
+function isUrlToken(t) {
+  return /^(https?|com|www|google|drive|docs|usp|web|mdexmde|mtm|nje|beta|flexiquiz|memrise|open|link|classroom)$/.test(t);
+}
+
+// Filter the stopword set + URL fragments from a token array (stable, case-insensitive).
+function dropStopwords(tokens) {
+  return tokens.filter((t) => !RELATED_STOPWORDS.has(t) && !isUrlToken(t));
+}
+
 /**
  * Find notes related to a given target note. A note relates if it shares the
  * target's course, shares its topic, or contains overlapping query tokens from
@@ -131,25 +170,33 @@ function tokenFuzzyAny(text, qTokens) {
  * reuse the same rendering (t, course, y, topic, p, noteIndex, _score, _snippet).
  */
 export function relatedNotes(notes, target, { limit = 5 } = {}) {
-  if (!Array.isArray(notes) || notes.length === 0 || !target) return [];
-  // Exact-token set of the target's own text. We use EXACT overlap (not the
-  // loose stem fuzzy match) so unrelated notes don't falsely "relate" — the
-  // loose matcher made every note score thousands of points and turned the
-  // route into a multi-second hang on a 400-note corpus.
-  const targetTokens = tokenize([target.t, target.s, target.x].filter(Boolean).join(" "));
+  // Course-wide "Announcements" bulletins are structural boilerplate (a
+  // different post for every course) — they share only generic Classroom
+  // phrasing with everything and are never genuinely "related content".
+  // Exclude them so they can't crowd out real cross-links (owner request #9).
+  const isBulletin = (n) => {
+    const t = (n && n.t) || "";
+    return /(^|\s)[-–]?\s*announcements?\s*$/i.test(t) || /^announcements?$/i.test(t);
+  };
+  const scored = [];
+  // Drop stopwords from the target's tokens so common Classroom phrasing
+  // ("please submit the assignment on Classroom") can't produce false overlap
+  // with boilerplate. Specific vocabulary ("quantum", "entanglement") survives.
+  const targetTokens = dropStopwords(tokenize([target.t, target.s, target.x].filter(Boolean).join(" ")));
   const targetCourse = target.course || "";
   const targetTopic = target.topic || "";
 
-  const scored = [];
   for (let i = 0; i < notes.length; i++) {
     const n = notes[i];
     if (n === target) continue; // never relate a note to itself (reference)
+    if (isBulletin(n)) continue; // skip course bulletins — not related content
     let score = 0;
     if (targetCourse && n.course === targetCourse) score += 3;
     if (targetTopic && n.topic && n.topic === targetTopic) score += 3;
-    // Exact token overlap with the target's own text (fast + precise).
+    // Exact token overlap with the target's own text (fast + precise). Both
+    // sides are stopword-filtered so boilerplate can't inflate the score.
     if (targetTokens.length) {
-      const nTokens = tokenize([n.t, n.s, n.x].filter(Boolean).join(" "));
+      const nTokens = dropStopwords(tokenize([n.t, n.s, n.x].filter(Boolean).join(" ")));
       let overlap = 0;
       for (const t of nTokens) if (targetTokens.includes(t)) overlap++;
       score += overlap;

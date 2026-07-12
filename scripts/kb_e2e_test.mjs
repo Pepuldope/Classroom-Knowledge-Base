@@ -766,6 +766,39 @@ test("bundleToMarkdown includes note body + summary, not just metadata", async (
   assert.ok(md.includes("How to write a strong cover letter"), "SUMMARY content present in markdown");
 });
 
+// ---------------------------------------------------------------------------
+// Regression (owner request #9 — related notes must not crowd with irrelevant
+// boilerplate): a giant course "Announcements" note is full of common words
+// ("classroom", "students", "assignment", "thank you") that overlap via raw
+// token counts against EVERY other note — so it scores into the hundreds and
+// drowns out genuinely relevant same-course / same-topic cross-links. The fix
+// filters stopwords from the overlap signal so boilerplate can't dominate.
+// ---------------------------------------------------------------------------
+test("relatedNotes ranks a genuinely related same-course note above generic boilerplate", () => {
+  // ~2000-word boilerplate of common words, like a real "Announcements" dump.
+  const boiler = Array.from({ length: 400 }, (_, i) => `classroom students assignment teacher thank you please note homework`).join(" ");
+  const notes = [
+    // target: a small, specific Physics note — but like every real note pulled
+    // from Classroom it also carries common vocabulary (assignment, classroom).
+    { t: "Quantum entanglement", s: "Notes on quantum entanglement.", x: "Quantum entanglement and superposition lecture. Please submit the assignment on Classroom.", course: "Physics", y: "2025-26", topic: "Quantum" },
+    // genuinely related: same course + same topic, specific vocabulary.
+    { t: "Quantum superposition", s: "Quantum superposition examples.", x: "Quantum superposition and entanglement worked examples.", course: "Physics", y: "2025-26", topic: "Quantum" },
+    // giant generic boilerplate (different course) — must NOT outrank the above.
+    { t: "Physics - Announcements", s: "", x: boiler, course: "Other", y: "2025-26", topic: "Announcements" },
+  ];
+  const target = notes[0];
+  const rel = relatedNotes(notes, target, { limit: 5 });
+  const relatedIdx = rel.findIndex((r) => r.t === "Quantum superposition");
+  const boilerIdx = rel.findIndex((r) => r.t === "Physics - Announcements");
+  // The genuinely related same-course note MUST appear in the results.
+  assert.ok(relatedIdx !== -1, "genuinely related note must appear");
+  // The giant generic boilerplate must NOT outrank it (ideally not appear at all).
+  assert.ok(
+    boilerIdx === -1 || relatedIdx < boilerIdx,
+    "genuinely related same-course note must outrank generic boilerplate"
+  );
+});
+
 test("bundleToCsv includes body + summary columns carrying real content", async () => {
   const { bundleToCsv } = await import("../kb.js");
   assert.ok(typeof bundleToCsv === "function", "bundleToCsv is exported");
