@@ -98,6 +98,12 @@ function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
+// accessToken lives in app.js's module scope; read it via the window mirror it
+// exposes (window.__cwaAccessToken). Fall back to our own cached token.
+function currentAccessToken() {
+  return (typeof window !== "undefined" && window.__cwaAccessToken) || loadKbToken() || null;
+}
+
 async function startScrape() {
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
@@ -106,7 +112,8 @@ async function startScrape() {
     if (statusEl) { statusEl.textContent = msg; statusEl.classList.toggle("error", !!isError); }
   };
 
-  if (!accessToken && !loadKbToken()) {
+  const accessToken = currentAccessToken();
+  if (!accessToken) {
     // Need a fresh Classroom token with the read-only scopes.
     if (!window.__cwaTokenClient) {
       showStatus("Sign in with Google first (use the top-right button), then try again.", true);
@@ -335,7 +342,7 @@ async function sendTutor(text) {
   try {
     const r = await fetch("/api/tutor", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: accessToken ? `Bearer ${accessToken}` : "" },
+      headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
       body: JSON.stringify({ messages: tutorMessages }),
     });
     if (!r.ok) {

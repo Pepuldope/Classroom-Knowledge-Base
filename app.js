@@ -122,6 +122,10 @@ const STALE_DAYS = 14;
 
 let tokenClient = null;
 let accessToken = null;
+// Expose the access token on window so sibling modules (e.g. kb.js) can read it
+// without reaching into app.js internals. A getter keeps it in sync with the
+// module-local variable at every assignment site.
+Object.defineProperty(window, "__cwaAccessToken", { get: () => accessToken, configurable: true });
 let sessionEpoch = 0;
 let activeAssignment = null;
 let aiHistory = [];
