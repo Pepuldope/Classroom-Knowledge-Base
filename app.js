@@ -1737,6 +1737,21 @@ function assignmentCard(a) {
     meta.appendChild(pin);
   }
 
+  if (!isPassive) {
+    const kbBtn = document.createElement("button");
+    kbBtn.className = "card-action kb-search-btn";
+    kbBtn.title = "Search the knowledge base for this topic";
+    kbBtn.textContent = "🔍 KB";
+    kbBtn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      const topic = [a.courseName, a.title].filter(Boolean).join(" ");
+      import("./kb.js")
+        .then((m) => m.kbSearchTopic(topic))
+        .catch(() => {});
+    });
+    meta.appendChild(kbBtn);
+  }
+
   if (!isPassive && !due) {
     const del = document.createElement("button");
     del.className = "card-action dismiss-btn";

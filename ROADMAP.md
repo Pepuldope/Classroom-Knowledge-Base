@@ -12,13 +12,13 @@ then builds it. Keep items concrete and student-facing where possible.
 ## 🔥 Ready (high priority)
 - [x] KB: subject/course filter chips above the search results.
 - [x] KB: highlight matched query terms in each result snippet.
-- [ ] KB: add "related notes" panel on each search result (cross-link by topic/course).
+- [x] KB: add "related notes" panel on each search result (cross-link by topic/course).
 - [x] Tutor: show clickable source chips under each answer that jump to the note.
 - [ ] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
-- [ ] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
+- [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
 ## 🧠 Soon
-- [ ] KB: highlight the matched query terms in each result snippet.
+- [x] KB: "Did you mean" typo-tolerance — suggest a corrected spelling when a search returns nothing (query-side fuzzy spelling).
 - [ ] Tutor: conversation memory across messages within a session (already in place) + a "new topic" reset.
 - [ ] KB: export the whole knowledge base as a printable PDF / markdown book.
 - [ ] Search: typo-tolerance using the existing fuzzy stem matching (extend to query side).
@@ -43,13 +43,15 @@ then builds it. Keep items concrete and student-facing where possible.
 The autonomous loop writes its own feature ideas here when the lists above are
 drained, then implements them. This section is machine-owned — the loop adds,
 ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
-- [ ] Tutor: "summarise this note" quick action on each search result card.
+- [x] Tutor: "summarise this note" quick action on each search result card.
 - [x] KB: sort results by relevance / recency / course (sort toggle chips).
 - [x] KB: keyboard shortcut (press "/" to focus search, Esc to clear).
 - [ ] Tutor: copy-to-clipboard button on each answer + "save note" to a personal study list.
 - [ ] Tutor: show which provider/model answered (already in response headers — surface it in the UI).
-- [ ] Search: "did you mean" suggestion when a query returns <3 results.
-- [x] KB: harden the autonomous loop's verification gate so a failing live e2e actually blocks the run (test.sh previously swallowed the live exit code).
+- [x] Search: "did you mean" suggestion when a query returns <3 results.
+- [x] KB: related-notes preview chips directly under each search result card (no need to open the note first).
+- [x] KB: Planner→KB bridge — a "🔍 KB" button on every assignment card that searches the knowledge base for that topic.
+- [ ] KB: richer empty state with example searches and a "browse by course" entry point.
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

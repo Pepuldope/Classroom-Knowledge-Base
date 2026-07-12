@@ -1,6 +1,6 @@
 import { jsonResponse } from "./_helpers.js";
 import { getBundle, getMeta } from "./kb-store.js";
-import { searchNotes } from "./kb-retrieval.js";
+import { searchNotes, suggestCorrection } from "./kb-retrieval.js";
 
 export const config = { runtime: "edge" };
 
@@ -45,5 +45,13 @@ export default async function handler(req) {
     );
   }
   const results = searchNotes(notes, q, { limit });
-  return jsonResponse({ meta: await getMeta(), results, filters: facets }, 200);
+  const response = { meta: await getMeta(), results, filters: facets };
+  // "Did you mean" — when a search returns nothing but a confident spelling
+  // correction exists in the corpus, surface it so the student can one-click
+  // retry. Only attached when results are empty (never nags a good query).
+  if (results.length === 0 && (courseFilter === "" && yearFilter === "")) {
+    const suggestion = suggestCorrection(notes, q);
+    if (suggestion) response.didYouMean = suggestion;
+  }
+  return jsonResponse(response, 200);
 }

@@ -177,3 +177,100 @@ export function relatedNotes(notes, target, { limit = 5 } = {}) {
   }
   return out;
 }
+
+/**
+ * Compact related-notes preview for a note by its bundle index. Thin wrapper
+ * over relatedNotes() so the search-results surface can render the same
+ * cross-links the note-detail modal shows. Returns the same shape
+ * (t, course, y, topic, p, noteIndex, _score, _snippet). The note itself is
+ * never included (relatedNotes already excludes the reference note).
+ */
+export function relatedNotesPreview(notes, index, opts = {}) {
+  if (!Array.isArray(notes) || !Number.isInteger(index) || index < 0 || index >= notes.length) return [];
+  const target = notes[index];
+  if (!target) return [];
+  return relatedNotes(notes, target, opts);
+}
+
+// ---------------------------------------------------------------------------
+// "Did you mean" typo-tolerance.
+// Build the shared vocabulary of all index tokens so we can find a confident
+// near-miss when a query token is spelled wrong.
+// ---------------------------------------------------------------------------
+function collectVocabulary(notes) {
+  const set = new Set();
+  for (const n of notes) {
+    for (const tok of tokenize([n.t, n.s, n.x].filter(Boolean).join(" "))) set.add(tok);
+  }
+  return set;
+}
+
+// Standard Levenshtein edit distance (small strings only — query tokens).
+function levenshtein(a, b) {
+  const m = a.length, n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = new Array(n + 1);
+  for (let j = 0; j <= n; j++) prev[j] = j;
+  let cur = new Array(n + 1);
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+    }
+    const tmp = prev; prev = cur; cur = tmp;
+  }
+  return prev[n];
+}
+
+// Find the single best confident correction for a non-matching query token.
+// Returns null when no confident near-miss exists (so we never false-suggest).
+function bestCorrection(qt, vocab) {
+  const maxDist = qt.length <= 4 ? 0 : qt.length <= 6 ? 1 : 2;
+  let best = null, bestDist = Infinity;
+  for (const tok of vocab) {
+    if (Math.abs(tok.length - qt.length) > maxDist + 1) continue;
+    const d = levenshtein(qt, tok);
+    if (d > maxDist) continue;
+    // Require first-character agreement for non-trivial edits to avoid wild
+    // swaps (e.g. "cat" -> "act"); trivial single-edit swaps are allowed.
+    if (d > 1 && tok[0] !== qt[0]) continue;
+    if (d < bestDist) { bestDist = d; best = tok; }
+  }
+  return best;
+}
+
+/**
+ * Suggest a corrected spelling for a query that returns no matches.
+ * Returns a corrected query string (e.g. "mitochondria") when the original
+ * misses but a confident edit-distance near-miss exists in the corpus AND the
+ * corrected query actually yields results. Returns null when the query already
+ * matches, when there's no confident correction, or when the correction would
+ * still produce nothing (so we never show a useless "did you mean").
+ *
+ * Reuses searchNotes() so the suggestion is always grounded in real results.
+ */
+export function suggestCorrection(notes, query) {
+  if (!Array.isArray(notes) || notes.length === 0) return null;
+  const qTokens = tokenize(query);
+  if (qTokens.length === 0) return null;
+  // Already matches something — no suggestion.
+  if (searchNotes(notes, query, { limit: 1 }).length > 0) return null;
+  const vocab = collectVocabulary(notes);
+  if (vocab.size === 0) return null;
+  const corrected = [];
+  for (const qt of qTokens) {
+    let matched = false;
+    for (const tok of vocab) { if (tokenFuzzyMatch(tok, qt)) { matched = true; break; } }
+    if (matched) { corrected.push(qt); continue; }
+    const cand = bestCorrection(qt, vocab);
+    if (!cand) return null; // unresolvable token -> no suggestion at all
+    corrected.push(cand);
+  }
+  const correctedQuery = corrected.join(" ");
+  if (correctedQuery === qTokens.join(" ")) return null;
+  // Only suggest if the corrected query actually finds something.
+  if (searchNotes(notes, correctedQuery, { limit: 1 }).length === 0) return null;
+  return correctedQuery;
+}

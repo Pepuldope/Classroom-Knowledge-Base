@@ -19,7 +19,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchNotes, relatedNotes } from "../api/kb-retrieval.js";
+import { searchNotes, relatedNotes, suggestCorrection, relatedNotesPreview } from "../api/kb-retrieval.js";
 import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
@@ -356,4 +356,78 @@ test("tutorSourceList de-duplicates notes by index and skips invalid entries", (
   const list = tutorSourceList(retrieved);
   const indexes = list.map((c) => c.noteIndex).sort();
   assert.deepEqual(indexes, [5, 9], "only valid, unique indexes kept");
+});
+
+// ---------------------------------------------------------------------------
+// Feature: "Did you mean" typo-tolerance (agent-proposed backlog).
+// suggestCorrection(notes, query) returns a corrected spelling of the query
+// when the original query hits nothing but a near-miss exists in the corpus
+// (stem-edit distance on the first/few tokens). It must ONLY suggest when a
+// confident correction exists (never a false "did you mean" on a good query),
+// and must be fast (reuses the same index the search builds).
+// ---------------------------------------------------------------------------
+test("suggestCorrection returns a close real term when the query is a typo", () => {
+  const notes = sampleBundle().notes;
+  // "mitchondria" is a typo of "mitochondria" which appears in a note body.
+  const s = suggestCorrection(notes, "mitchondria");
+  assert.ok(s && typeof s === "string", "should suggest a correction string");
+  assert.ok(/mitochondria/i.test(s), `suggestion should fix the typo, got: ${s}`);
+});
+
+test("suggestCorrection returns null for a query that already matches", () => {
+  const notes = sampleBundle().notes;
+  // "cover letter" is a real multi-word match in the corpus.
+  const s = suggestCorrection(notes, "cover letter");
+  assert.equal(s, null, "no suggestion when the query already matches");
+});
+
+test("suggestCorrection returns null for gibberish with no near-miss", () => {
+  const notes = sampleBundle().notes;
+  const s = suggestCorrection(notes, "zzqqxxqwqy zxvbnm");
+  assert.equal(s, null, "no suggestion for pure gibberish");
+});
+
+test("/api/kb-search surfaces a didYouMean suggestion when a typo returns nothing", async () => {
+  await seed(sampleBundle());
+  const r = await kbSearch(makeReq("/api/kb-search?q=" + encodeURIComponent("mitchondria") + "&limit=8"));
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.ok(Array.isArray(d.results), "results array present");
+  // Either the typo matches nothing (results empty) AND a suggestion exists,
+  // or the loose fuzzy matcher already caught it (valid). The key contract:
+  // when results are empty there must be a non-empty didYouMean hint.
+  if (d.results.length === 0) {
+    assert.ok(d.didYouMean && typeof d.didYouMean === "string" && d.didYouMean.length > 0,
+      "empty result set must carry a didYouMean hint");
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Feature: related-notes preview chip on each search result card.
+// The note-detail modal already cross-links related notes; the SAME cross-link
+// must be available from the search-results surface so a student can hop
+// between related notes without opening each one. We expose
+// relatedNotesPreview(notes, noteIndex, {limit}) returning a small ranked set
+// (same shape as relatedNotes) so the UI can render compact chips under a card.
+// ---------------------------------------------------------------------------
+test("relatedNotesPreview returns related notes for a note index", () => {
+  const notes = sampleBundle().notes;
+  const target = notes[0]; // Cover Letter Guide
+  const idx = notes.indexOf(target);
+  const preview = relatedNotesPreview(notes, idx, { limit: 3 });
+  assert.ok(Array.isArray(preview), "must return an array");
+  // Must never include the note itself.
+  assert.ok(!preview.some((r) => r.noteIndex === idx), "self excluded from preview");
+  for (const r of preview) {
+    const sameCourse = r.course && r.course === target.course;
+    const sameTopic = r.topic && target.topic && r.topic === target.topic;
+    assert.ok(sameCourse || sameTopic || !!r._score, "each preview note must relate");
+  }
+});
+
+test("relatedNotesPreview is a wrapper that honours the same limit as relatedNotes", () => {
+  const notes = sampleBundle().notes;
+  const idx = 0;
+  const preview = relatedNotesPreview(notes, idx, { limit: 1 });
+  assert.ok(preview.length <= 1, "preview count must not exceed limit");
 });

@@ -548,6 +548,8 @@ summary::-webkit-details-marker { color: var(--muted); }
 .card-action:hover { background: rgba(0,0,0,0.05); color: var(--fg); }
 .pin-btn.pinned { color: var(--p3); }
 .dismiss-btn:hover { color: var(--danger); }
+.kb-search-btn { color: var(--accent, #2563eb); font-weight: 600; }
+.kb-search-btn:hover { background: var(--accent-bg, #eff6ff); color: var(--accent-hover, #1d4ed8); }
 
 #pinnedWrap h2 { color: var(--p3); margin-top: 1rem; }
 
@@ -1051,6 +1053,32 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-related-item:focus-visible { border-color: var(--accent, #2563eb); transform: translateY(-1px); outline: none; }
 .kb-related-item-title { font-weight: 600; font-size: 0.9rem; color: var(--fg, #1a1a1a); }
 .kb-related-item-meta { font-size: 0.78rem; color: var(--muted); }
+
+/* Related-notes preview chips under each search-result card. */
+.kb-related-preview {
+  display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;
+  margin-top: 0.5rem; padding-top: 0.45rem;
+  border-top: 1px dashed var(--border, #eee);
+}
+.kb-related-preview-label { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
+.kb-related-preview-chip {
+  font-size: 0.72rem; padding: 0.15rem 0.5rem; max-width: 220px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* "Did you mean" typo-tolerance hint on empty searches. */
+.kb-didyoumean {
+  display: flex; flex-wrap: wrap; gap: 0.25rem; align-items: center;
+  padding: 0.6rem 0.8rem; margin-bottom: 0.6rem;
+  background: var(--accent-bg, #eff6ff); border: 1px solid var(--border, #eee);
+  border-radius: 0.5rem; font-size: 0.9rem; color: var(--fg, #1a1a1a);
+}
+.kb-didyoumean-btn {
+  font: inherit; font-weight: 600; color: var(--accent, #2563eb);
+  background: none; border: none; padding: 0; cursor: pointer;
+  text-decoration: underline;
+}
+.kb-didyoumean-btn:hover { color: var(--accent-hover, #1d4ed8); }
 
 .archive-year { margin-bottom: 0.75rem; }
 .archive-year > summary { font-weight: 600; }

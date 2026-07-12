@@ -32,6 +32,21 @@ export function showKbView() {
   refreshKb();
 }
 
+// Planner→KB bridge: jump from an assignment straight into a KB search for its
+// topic. `topic` is a free-text query (e.g. the assignment title or course).
+// Switches to the KB view, prefills the search box, and runs the search.
+export function kbSearchTopic(topic) {
+  const t = (topic || "").trim();
+  showKbView();
+  const input = $("kbSearchInput");
+  if (input) {
+    input.value = t;
+    runKbSearch(t);
+  } else {
+    refreshKb();
+  }
+}
+
 async function refreshKb() {
   const onboarding = $("kbOnboarding");
   const main = $("kbMain");
@@ -357,7 +372,31 @@ async function runKbSearch(query) {
     results.innerHTML = "";
     renderFilterChips(d.filters);
     if (!d.results || d.results.length === 0) {
-      results.innerHTML = `<div class="empty">No matches in the knowledge base.</div>`;
+      // "Did you mean" — when a typo returned nothing but a confident
+      // correction exists in the corpus, offer a one-click retry.
+      if (d.didYouMean) {
+        const dym = document.createElement("div");
+        dym.className = "kb-didyoumean";
+        const label = document.createElement("span");
+        label.textContent = "Did you mean ";
+        dym.appendChild(label);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "kb-didyoumean-btn";
+        btn.textContent = d.didYouMean;
+        btn.addEventListener("click", () => {
+          const input = $("kbSearchInput");
+          if (input) input.value = d.didYouMean;
+          runKbSearch(d.didYouMean);
+        });
+        dym.appendChild(btn);
+        dym.appendChild(document.createTextNode(" ?"));
+        results.appendChild(dym);
+      }
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No matches in the knowledge base.";
+      results.appendChild(empty);
       return;
     }
     for (const note of d.results) {
@@ -383,6 +422,12 @@ async function runKbSearch(query) {
         snip.innerHTML = highlightSnippet(note._snippet, query);
         body.appendChild(snip);
       }
+      // Related-notes preview: compact cross-links under the card so a
+      // student can hop between related notes without opening each one.
+      const preview = document.createElement("div");
+      preview.className = "kb-related-preview";
+      preview.hidden = true;
+      body.appendChild(preview);
       row.appendChild(body);
       const open = () => {
         if (row.dataset.noteIndex !== "" && row.dataset.noteIndex != null) openKbNote(Number(row.dataset.noteIndex));
@@ -392,10 +437,45 @@ async function runKbSearch(query) {
         if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); }
       });
       results.appendChild(row);
+      // Fill the preview asynchronously (reuses the related-notes route).
+      if (note.noteIndex != null) renderRelatedPreview(preview, note.noteIndex);
     }
   } catch (e) {
     results.hidden = false;
     results.innerHTML = `<div class="empty">Search failed: ${e.message}</div>`;
+  }
+}
+
+// Render a compact related-notes preview inside a search-result card.
+// Reuses /api/kb-related so the cross-links match the detail-modal panel.
+async function renderRelatedPreview(container, noteIndex) {
+  if (!container) return;
+  try {
+    const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=3`);
+    if (!r.ok) return;
+    const d = await r.json();
+    const related = d.related || [];
+    if (!related.length) return;
+    container.hidden = false;
+    const tag = document.createElement("span");
+    tag.className = "kb-related-preview-label";
+    tag.textContent = "Related:";
+    container.appendChild(tag);
+    for (const rel of related) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "kb-chip kb-related-preview-chip";
+      b.title = "Open related note";
+      // Only show the title in the compact chip; meta on hover via title.
+      b.textContent = rel.t || "(untitled)";
+      b.addEventListener("click", (ev) => {
+        ev.stopPropagation(); // don't also open the parent card
+        openKbNote(rel.noteIndex);
+      });
+      container.appendChild(b);
+    }
+  } catch {
+    /* related preview is non-critical; ignore */
   }
 }
 
