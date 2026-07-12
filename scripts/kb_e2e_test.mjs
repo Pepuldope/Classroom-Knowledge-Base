@@ -716,3 +716,23 @@ test("bundleFromRaw includes teacher materials, student submission links, and as
   const ref = b.notes.find((n) => n.t === "Ref");
   assert.ok(ref && ref.x.includes("https://example.com/g"), "courseWorkMaterials ingested as a note");
 });
+
+// ---------------------------------------------------------------------------
+// Note body link rendering — teacher/submission markdown links must become
+// real clickable <a> tags in the KB/archive note view, and unsafe protocols
+// (javascript:, data:) must be neutralized. Guards the "make links clickable"
+// requirement.
+// ---------------------------------------------------------------------------
+test("renderLightMarkdown turns [text](url) into clickable, safe <a>", async () => {
+  const { renderLightMarkdown } = await import("../archive.js");
+  const md = "Teacher materials:\n- [Worksheet PDF](https://classroom.google.com/c/ABC/d/DEF)\n\n[Open assignment in Classroom](https://classroom.google.com/c/ABC/w/1)\n\n[evil](javascript:alert(1))";
+  const html = renderLightMarkdown(md);
+  // clickable anchors with safe target + rel
+  assert.ok(html.includes('href="https://classroom.google.com/c/ABC/d/DEF"'), "teacher link is an <a> with real href");
+  assert.ok(html.includes('target="_blank"'), "links open in a new tab");
+  assert.ok(html.includes('rel="noopener noreferrer"'), "links are rel-isolated");
+  assert.ok(html.includes('title="https://classroom.google.com/c/ABC/d/DEF"'), "link has a hover title (preview of destination)");
+  // unsafe protocol neutralized
+  assert.ok(html.includes('href="#"'), "javascript: link neutralized to #");
+  assert.ok(!/javascript:/.test(html.replace(/href="#"/g, "")), "no raw javascript: href survives");
+});

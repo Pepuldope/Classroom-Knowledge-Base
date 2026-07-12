@@ -210,11 +210,30 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Only allow benign link protocols — never javascript:, data:, etc.
+function safeHref(url) {
+  const u = String(url).trim();
+  if (/^(https?:|mailto:|obsidian:)/i.test(u)) return u;
+  if (/^\//.test(u)) return u; // same-origin relative path
+  return "#";
+}
+
 function inlineMd(s) {
-  return s
+  // Markdown links [text](url) -> safe <a>. Must run BEFORE emphasis so the
+  // URL's characters aren't mangled.
+  let out = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) => {
+    const href = safeHref(url);
+    const label = text.replace(/</g, "&lt;");
+    // title attribute = lightweight "preview" of where the link goes (no
+    // server round-trip, no data leak). Neutralized links (href="#") skip it.
+    const title = href === "#" ? "" : ` title="${href.replace(/"/g, "&quot;")}"`;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer"${title}>${label}</a>`;
+  });
+  out = out
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code>$1</code>")
     .replace(/(^|[^*])\*(?!\*)([^*]+)\*(?!\*)/g, "$1<em>$2</em>");
+  return out;
 }
 
 /** Render a small safe markdown subset of `text` to an HTML string. */

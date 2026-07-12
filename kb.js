@@ -16,6 +16,7 @@
 //   POST /api/tutor        { messages:[...] }  (streaming SSE, uses DB context)
 
 import { highlightSnippet } from "./kb-highlight.js";
+import { renderLightMarkdown } from "./archive.js";
 
 const $ = (id) => document.getElementById(id);
 const KB_TOKEN_KEY = "cwa_kb_token";
@@ -837,10 +838,12 @@ async function openKbNote(index) {
     const note = await r.json();
     if (titleEl) titleEl.textContent = note.t || "(untitled)";
     if (metaEl) metaEl.textContent = [note.course, note.y, note.topic].filter(Boolean).join("  ·  ");
-    // Prefer the full body, fall back to summary. Escape to avoid injection.
+    // Prefer the full body, fall back to summary. renderLightMarkdown escapes
+    // HTML and turns markdown links ([text](url)) into clickable <a> tags, so
+    // teacher materials + student submission links are actually clickable.
     const fullText = (note.x || note.s || "").trim();
     if (fullText) {
-      bodyEl.textContent = fullText;
+      bodyEl.innerHTML = renderLightMarkdown(fullText);
     } else {
       bodyEl.innerHTML = `<div class="empty">This note has no body text.</div>`;
     }
