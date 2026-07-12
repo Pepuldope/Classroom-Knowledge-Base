@@ -736,3 +736,57 @@ test("renderLightMarkdown turns [text](url) into clickable, safe <a>", async () 
   assert.ok(html.includes('href="#"'), "javascript: link neutralized to #");
   assert.ok(!/javascript:/.test(html.replace(/href="#"/g, "")), "no raw javascript: href survives");
 });
+
+// ---------------------------------------------------------------------------
+// KB EXPORT fitness — the owner-requested export must carry the actual note
+// CONTENT (body `x` and summary `s`), not just an index of metadata. A
+// "knowledge base" export that omits the bodies is worthless to a student.
+// These regression tests guard that contract for both Markdown and CSV.
+// ---------------------------------------------------------------------------
+test("bundleToMarkdown includes note body + summary, not just metadata", async () => {
+  const { bundleToMarkdown } = await import("../kb.js");
+  assert.ok(typeof bundleToMarkdown === "function", "bundleToMarkdown is exported");
+  const bundle = {
+    generatedAt: new Date().toISOString(),
+    notes: [{
+      t: "Cover Letter Guide",
+      s: "How to write a strong cover letter that lands interviews.",
+      x: "A cover letter should open with a hook and show fit. Use the STAR method.",
+      course: "ELA 1 Gama",
+      y: "2023-24",
+      topic: "Writing",
+      p: "vault/ELA/Cover.md",
+      tags: ["writing", "jobs"],
+    }],
+  };
+  const md = bundleToMarkdown(bundle);
+  assert.ok(md.includes("Cover Letter Guide"), "title present");
+  assert.ok(md.includes("ELA 1 Gama"), "course grouping present");
+  assert.ok(md.includes("A cover letter should open with a hook"), "BODY content present in markdown");
+  assert.ok(md.includes("How to write a strong cover letter"), "SUMMARY content present in markdown");
+});
+
+test("bundleToCsv includes body + summary columns carrying real content", async () => {
+  const { bundleToCsv } = await import("../kb.js");
+  assert.ok(typeof bundleToCsv === "function", "bundleToCsv is exported");
+  const bundle = {
+    notes: [{
+      t: "Cover Letter Guide",
+      s: "How to write a strong cover letter that lands interviews.",
+      x: "A cover letter should open with a hook and show fit. Use the STAR method.",
+      course: "ELA 1 Gama",
+      y: "2023-24",
+      topic: "Writing",
+      p: "vault/ELA/Cover.md",
+      tags: ["writing", "jobs"],
+    }],
+  };
+  const csv = bundleToCsv(bundle);
+  const header = csv.split("\n")[0];
+  assert.ok(header.includes("summary"), "summary column exists");
+  assert.ok(header.includes("body"), "body column exists");
+  assert.ok(header.includes("path"), "path column exists (not mislabeled as body)");
+  const row = csv.split("\n")[1] || "";
+  assert.ok(row.includes("A cover letter should open with a hook"), "BODY content present in CSV row");
+  assert.ok(row.includes("How to write a strong cover letter"), "SUMMARY content present in CSV row");
+});

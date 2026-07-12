@@ -68,7 +68,7 @@ export default async function handler(req) {
   // ---- Route through all providers with failover ----
   let routed;
   try {
-    routed = await routeChat(messages, { max_tokens: 4000, temperature: 0.4, stream: true });
+    routed = await routeChat(messages, { task: "tutor", stream: true });
   } catch (e) {
     return jsonResponse({ error: "AI request failed", details: e.message }, 502);
   }

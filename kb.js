@@ -20,7 +20,7 @@ import { renderLightMarkdown } from "./archive.js";
 
 const $ = (id) => document.getElementById(id);
 const KB_TOKEN_KEY = "cwa_kb_token";
-export { highlightSnippet };
+export { highlightSnippet, bundleToMarkdown, bundleToCsv };
 
 // ---------------------------------------------------------------------------
 // View switching
@@ -111,6 +111,7 @@ function bundleToMarkdown(bundle) {
   const notes = Array.isArray(bundle.notes) ? bundle.notes : [];
   const lines = ["# Classroom Knowledge Base Export", ""];
   if (bundle.generatedAt) lines.push(`_Generated: ${new Date(bundle.generatedAt).toLocaleString()}_`, "");
+  if (notes.length) lines.push(`_${notes.length} notes_`, "");
   // Group by course.
   const byCourse = new Map();
   for (const n of notes) {
@@ -123,9 +124,13 @@ function bundleToMarkdown(bundle) {
     for (const n of ns) {
       const head = [n.t || "Untitled", n.y ? `(${n.y})` : "", n.topic ? `— ${n.topic}` : ""].filter(Boolean).join(" ");
       lines.push(`### ${head}`, "");
+      // Derived summary (the ×3-weighted field) — front and centre.
+      if (n.s) lines.push(`> ${n.s}`, "");
       if (Array.isArray(n.tags) && n.tags.length) lines.push(`*Tags: ${n.tags.join(", ")}*`, "");
-      if (n.p) lines.push(n.p, "");
-      lines.push("---", "");
+      if (n.p) lines.push(`_Source: ${n.p}_`, "");
+      const body = (n.x || "").trim();
+      if (body) lines.push("", body);
+      lines.push("", "---", "");
     }
   }
   return lines.join("\n");
@@ -133,7 +138,7 @@ function bundleToMarkdown(bundle) {
 
 function bundleToCsv(bundle) {
   const notes = Array.isArray(bundle.notes) ? bundle.notes : [];
-  const rows = [["title", "course", "year", "topic", "tags", "body"]];
+  const rows = [["title", "course", "year", "topic", "tags", "summary", "body", "path"]];
   for (const n of notes) {
     rows.push([
       n.t || "",
@@ -141,6 +146,8 @@ function bundleToCsv(bundle) {
       n.y || "",
       n.topic || "",
       Array.isArray(n.tags) ? n.tags.join("; ") : "",
+      n.s || "",
+      n.x || "",
       n.p || "",
     ].map(escapeCsvCell));
   }

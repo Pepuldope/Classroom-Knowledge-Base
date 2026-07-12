@@ -1,11 +1,30 @@
 // seed-dev.mjs — parse a slice of the REAL vault and POST it to the local
 // dev server's /api/kb-scrape so the KB has data to search/show visually.
 import { readFile, readdir } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 
 const VAULT = "/opt/data/school-backup";
 const PORT = Number(process.argv[2] || 4321);
 const LIMIT = Number(process.argv[3] || 400); // how many notes to seed
+
+// kb-scrape.js requires write auth for EVERY source (the security commit
+// a9d4b89 added requireWriteAuth across all paths, including `source:"bundle"`).
+// The dev server loads KB_WRITE_TOKEN from the same env file below; this script
+// runs as a SEPARATE process, so load it here or the seed will 401 and leave
+// the in-memory DB empty (which makes every UI e2e interaction time out).
+function loadWriteToken() {
+  if (process.env.KB_WRITE_TOKEN) return process.env.KB_WRITE_TOKEN;
+  try {
+    const txt = readFileSync("/opt/data/.hermes/.env", "utf8");
+    for (const line of txt.split("\n")) {
+      const m = line.match(/^KB_WRITE_TOKEN=(.+)$/);
+      if (m) return m[1].trim().replace(/^["']|["']$/g, "");
+    }
+  } catch {}
+  return "";
+}
+const KB_WRITE_TOKEN = loadWriteToken();
 
 function parseObsidian(content) {
   const lines = content.split("\n");
@@ -74,7 +93,7 @@ const bundle = {
 
 const res = await fetch(`http://localhost:${PORT}/api/kb-scrape`, {
   method: "POST",
-  headers: { "Content-Type": "application/json" },
+  headers: { "Content-Type": "application/json", "X-KB-Write-Token": KB_WRITE_TOKEN },
   body: JSON.stringify({ source: "bundle", bundle }),
 });
 console.log("scrape status:", res.status);

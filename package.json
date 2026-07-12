@@ -10,6 +10,7 @@
     "test:ui": "PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.pw-browsers node scripts/kb_ui_test.mjs",
     "test:api": "node scripts/kb_e2e_test.mjs",
     "test:live": "PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.pw-browsers node scripts/kb_live_test.mjs",
+    "test:router": "node scripts/ai_router_test.mjs",
     "dev": "node scripts/dev-server.mjs"
   },
   "repository": {
