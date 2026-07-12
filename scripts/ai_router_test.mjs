@@ -188,6 +188,50 @@ test("metrics track selections, fallbacks, and per-provider counts", async () =>
   assert.ok("fallbackRate" in after, "fallbackRate computed");
 });
 
+// NEW: hard task routes to NVIDIA effort-3 + fires a parallel DeepSeek shadow
+// (the post-2026-07-12 routing: Nemotron replaces flaky deepseek-v4-flash on
+// NVIDIA; DeepSeek-v4-pro stays in the loop as an independent shadow check).
+test("hard task uses NVIDIA effort-3 and attaches a parallel DeepSeek shadow", async () => {
+  installFetch();
+  const r = await routeChat([{ role: "user", content: "audit this app" }], { task: "hard" });
+  assert.equal(effMap.get(r.provider), 3, "hard task hits effort-3");
+  // Primary must be a real effort-3 provider and must NOT be the old flaky
+  // deepseek-v4-flash model. With the mock, rotation can pick nvidia OR
+  // openrouter (both effort-3) — both are valid post-fix choices.
+  assert.ok(["nvidia", "openrouter"].includes(r.provider), `effort-3 primary is nvidia or openrouter, got ${r.provider}`);
+  assert.notEqual(r.model, "deepseek-ai/deepseek-v4-flash", "must NOT route to the flaky deepseek-flash model");
+  if (r.provider === "nvidia") {
+    assert.equal(r.model, "nvidia/llama-3.3-nemotron-super-49b-v1", "nvidia effort-3 slot is Nemotron, not deepseek-flash");
+  }
+  assert.ok(r.meta && r.meta.tier === 3, "meta.tier === 3");
+  // Shadow is fired in parallel for hard non-stream; it must resolve to a check
+  // object (either an ok second opinion or a swallowed ok:false). It must NOT
+  // throw and must not be the primary response.
+  assert.ok(r.shadow && typeof r.shadow.then === "function", "shadow is a pending promise on the response");
+  const s = await r.shadow;
+  assert.ok("ok" in s, "shadow resolved with an ok flag");
+  assert.ok("model" in s, "shadow reports which model ran");
+  // DeepSeek shadow must never be the served text.
+  assert.notEqual(r.text, s.text, "shadow text is distinct from primary (it is not the served answer)");
+});
+
+// NEW: shadow is skipped when the primary already served via OpenRouter/DeepSeek
+// (no double-counting), and for streaming tutor calls (no parallel second-opinion).
+test("shadow skipped when primary is openrouter and for streaming calls", async () => {
+  // Force everyone except openrouter down so the primary becomes openrouter.
+  for (const n of ["nvidia", "google", "groq", "mistral", "cerebras", "github", "qwen", "freellmapi"]) forceProviderDown(n, true);
+  installFetch();
+  const r = await routeChat([{ role: "user", content: "audit" }], { task: "hard" });
+  assert.equal(r.provider, "openrouter", "primary fell through to openrouter");
+  const s = await r.shadow;
+  assert.equal(s.ok, false, "shadow skipped because primary already served by openrouter");
+  // streaming hard call -> no shadow at all
+  resetRouterHealth();
+  for (const n of ["nvidia", "google", "groq", "mistral", "cerebras", "github", "qwen", "freellmapi", "openrouter"]) forceProviderDown(n, false);
+  const r2 = await routeChat([{ role: "user", content: "x" }], { task: "hard", stream: true });
+  assert.equal(r2.shadow, null, "streaming hard call has no shadow check");
+});
+
 // CHECK #1 (extended) — CONTROLLED half-open recovery
 // A tripped breaker must NOT flap straight back into rotation on one success:
 // it goes open -> half_open (probe) -> closed only after a successful probe,

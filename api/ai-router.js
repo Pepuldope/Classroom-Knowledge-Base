@@ -24,7 +24,13 @@
 //   capabilities = which advanced features this model reliably supports.
 
 export const PROVIDERS = [
-  // 1. NVIDIA — DeepSeek v4 Flash (strong, fast, reliable free tier; default workhorse)
+  // 1. NVIDIA — Llama-3.3-Nemotron-Super-49B (reliable effort-3 workhorse)
+  //    Replaces deepseek-ai/deepseek-v4-flash, which returns 503
+  //    "ResourceExhausted: All workers are busy" intermittently on NVIDIA's
+  //    free tier (verified ~25% of calls, 7-20s latency) — see investigation
+  //    2026-07-12. Nemotron-Super-49B is fast (sub-second) and stable on the
+  //    same key, so it's the primary effort-3 slot. DeepSeek-v4-PRO is still
+  //    in the loop via OpenRouter (slot 9) as escalation + parallel checker.
   //    HARD LIMIT (per Pepuldo): the whole NVIDIA API key must stay UNDER 48
   //    requests/minute. We enforce a 46/min sliding-window throttle below so the
   //    router skips NVIDIA (and fails over) rather than blowing the key-wide cap.
@@ -32,7 +38,7 @@ export const PROVIDERS = [
     name: "nvidia",
     baseURL: "https://integrate.api.nvidia.com/v1/chat/completions",
     apiKey: process.env.NVIDIA_API_KEY,
-    model: "deepseek-ai/deepseek-v4-flash",
+    model: "nvidia/llama-3.3-nemotron-super-49b-v1",
     effort: 3,
     capabilities: ["json", "long_context"],
     rpmLimit: 46, // < 48 key-wide ceiling; enforced in routeChat
@@ -333,6 +339,10 @@ const _metrics = {
   fallbacks: 0,
   probes: 0,
   errors: 0,
+  shadowChecks: 0,
+  shadowOk: 0,
+  shadowFailures: 0,
+  shadowAgreements: 0,
   byProvider: {},
   byTier: {},
   byReason: {},
@@ -383,9 +393,11 @@ export function getRouterMetrics() {
   }));
   const unhealthy = health.filter((h) => h.unhealthy).map((h) => h.provider);
   const fallbackRate = _metrics.selections ? _metrics.fallbacks / _metrics.selections : 0;
+  const shadowRate = _metrics.shadowChecks ? _metrics.shadowOk / _metrics.shadowChecks : 0;
   return {
     ..._metrics,
     fallbackRate,
+    shadowRate,
     health,
     alert: unhealthy.length > 0 || fallbackRate > 0.2,
     unhealthy,
@@ -434,6 +446,63 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream }
   if (stream) return { stream: res.body, provider: p.name, model: p.model, response: res };
   const data = await res.json();
   return { text: data.choices?.[0]?.message?.content || "", provider: p.name, model: p.model };
+}
+
+/**
+ * Shadow checker — keeps DeepSeek in the loop as an INDEPENDENT PARALLEL
+ * second opinion on hard/effort-3 calls. Nemotron (NVIDIA) is the authoritative
+ * answer; DeepSeek-v4-pro (OpenRouter) fires the same request concurrently and
+ * never blocks the primary path. Used only as a cross-check / confidence signal
+ * + telemetry, NOT as the served answer. Failures are swallowed (it must never
+ * degrade the primary response).
+ *
+ * @param {Array} messages  same messages as the primary call
+ * @param {Object} opts     { max_tokens, temperature }
+ * @param {string} primaryProvider name of the provider that actually answered
+ * @returns {Promise<Object>} { model, text, agreement, ok, error }
+ */
+export async function shadowCheckDeepSeek(messages, opts, getPrimary) {
+  // Only run for effort-3 (hard) calls, and only if OpenRouter/DeepSeek is up
+  // and not the one that already served the answer (avoid double-counting).
+  const deepseek = PROVIDERS.find((p) => p.name === "openrouter");
+  if (!deepseek || !deepseek.apiKey || !deepseek.baseURL) {
+    return { ok: false, error: "deepseek/openrouter not configured", model: null, text: null, agreement: null };
+  }
+  const primary = typeof getPrimary === "function" ? getPrimary() : getPrimary;
+  if (primary === "openrouter") {
+    return { ok: false, error: "primary already served by openrouter", model: null, text: null, agreement: null };
+  }
+  if (!underRpmLimit(deepseek)) {
+    return { ok: false, error: "openrouter rpm-limited", model: null, text: null, agreement: null };
+  }
+  bump(_metrics, "shadowChecks");
+  try {
+    const r = await callProviderOnce(deepseek, {
+      messages,
+      max_tokens: opts.max_tokens ?? 2000,
+      temperature: opts.temperature ?? 0.3,
+      stream: false,
+    });
+    bump(_metrics, "shadowOk");
+    return { ok: true, model: r.model, text: r.text || "", agreement: null, provider: "openrouter" };
+  } catch (e) {
+    bump(_metrics, "shadowFailures");
+    return { ok: false, error: e?.message || String(e), model: deepseek.model, text: null, agreement: null };
+  }
+}
+
+// Cheap lexical agreement signal between two model outputs (0..1). Not a
+// semantic judge — just a telemetry hint that both models landed on similar
+// substance (shared key tokens). Wrap in try/catch; never throws.
+function agreementScore(a, b) {
+  try {
+    const norm = (s) => new Set((s || "").toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter((w) => w.length > 3));
+    const A = norm(a), B = norm(b);
+    if (A.size === 0 || B.size === 0) return null;
+    let inter = 0;
+    for (const w of A) if (B.has(w)) inter++;
+    return inter / Math.min(A.size, B.size);
+  } catch { return null; }
 }
 
 // Classify-first: a cheap/fast model decides the tier before we spend a
@@ -612,7 +681,26 @@ export async function routeChat(messages, opts = {}) {
         fallbackReason: tried.length ? reason : null,
         latencyMs: latency,
       };
-      return { ...r, meta };
+      // ---- Parallel DeepSeek shadow check (hard/effort-3 only, non-stream) ----
+      // Nemotron (or whichever provider answered) is authoritative; DeepSeek-v4-pro
+      // (OpenRouter) runs the SAME request concurrently as an independent second
+      // opinion. It never blocks the primary response. Result is attached for
+      // telemetry / confidence — not used as the served text.
+      let shadow = null;
+      if (tier === 3 && !stream) {
+        let answered = p.name;
+        shadow = shadowCheckDeepSeek(messages, { max_tokens: MT, temperature: TEMP }, () => answered)
+          .then((s) => {
+            if (s.ok && r.text) {
+              const a = agreementScore(r.text, s.text);
+              if (a != null) bump(_metrics, "shadowAgreements");
+              s.agreement = a;
+            }
+            return s;
+          })
+          .catch((e) => ({ ok: false, error: String(e), model: "deepseek-v4-pro", text: null, agreement: null }));
+      }
+      return { ...r, meta, shadow };
     } catch (e) {
       const latency = Date.now() - pt0;
       recordOutcome(p, false);
