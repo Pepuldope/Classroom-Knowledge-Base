@@ -672,3 +672,47 @@ test("classroom mode:'list' returns course ids, mode:'course' appends one course
     if (beforeTok !== undefined) process.env.KB_WRITE_TOKEN = beforeTok;
   }
 });
+
+// ---------------------------------------------------------------------------
+// Assignment material + student submission inclusion (the "scrape the actual
+// assignment materials" requirement). Locks the contract that a coursework note
+// renders BOTH the teacher's posted materials AND the student's submitted-file
+// link AND a deep link back to the assignment in Classroom.
+// ---------------------------------------------------------------------------
+test("bundleFromRaw includes teacher materials, student submission links, and assignment deep-link", async () => {
+  const { bundleFromRaw } = await import("../archive-builder.js");
+  const raw = {
+    courses: [{ id: "c1", name: "Algebra II", creationTime: "2024-09-01T00:00:00Z" }],
+    courseData: {
+      c1: {
+        topics: [{ topicId: "t1", name: "Quadratics" }],
+        courseWork: [{
+          id: "w1", title: "Worksheet", description: "Do it.", topicId: "t1",
+          dueDate: { year: 2024, month: 10, day: 15 }, maxPoints: 20,
+          alternateLink: "https://classroom.google.com/c/ABC/w/1",
+          materials: [{ driveFile: { title: "Worksheet PDF", alternateLink: "https://classroom.google.com/c/ABC/d/DEF" } }],
+        }],
+        courseWorkMaterials: [{ id: "m1", title: "Ref", materials: [{ link: { title: "Guide", url: "https://example.com/g" } }] }],
+        announcements: [{ id: "a1", text: "Test", creationTime: "2024-10-01T10:00:00Z", alternateLink: "https://classroom.google.com/c/ABC/a/1" }],
+        submissions: [{
+          courseWorkId: "w1", state: "TURNED_IN", assignedGrade: 18,
+          assignmentSubmission: { attachments: [{ driveFile: { title: "mine.pdf", alternateLink: "https://classroom.google.com/c/SUB/d/W" } }] },
+        }],
+      },
+    },
+  };
+  const b = bundleFromRaw(raw);
+  const cw = b.notes.find((n) => n.t === "Worksheet");
+  assert.ok(cw, "coursework note present");
+  // Teacher materials
+  assert.ok(/Teacher materials/.test(cw.x), "teacher materials heading present");
+  assert.ok(cw.x.includes("https://classroom.google.com/c/ABC/d/DEF"), "teacher Drive link present");
+  // Student submission link
+  assert.ok(/Your submission/.test(cw.x) && /What you submitted/.test(cw.x), "student submission section present");
+  assert.ok(cw.x.includes("https://classroom.google.com/c/SUB/d/W"), "student submitted-file link present");
+  // Deep link to the assignment page
+  assert.ok(cw.x.includes("[Open assignment in Classroom](https://classroom.google.com/c/ABC/w/1)"), "assignment deep-link present");
+  // CourseWorkMaterials (teacher-posted reference material) also ingested
+  const ref = b.notes.find((n) => n.t === "Ref");
+  assert.ok(ref && ref.x.includes("https://example.com/g"), "courseWorkMaterials ingested as a note");
+});

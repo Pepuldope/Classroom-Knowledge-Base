@@ -106,11 +106,11 @@ function fmtMaterialLine(m) {
   return null;
 }
 
-function fmtMaterialsList(materials) {
+function fmtMaterialsList(materials, heading = "Materials") {
   if (!Array.isArray(materials) || materials.length === 0) return null;
   const lines = materials.map(fmtMaterialLine).filter(Boolean);
   if (lines.length === 0) return null;
-  return `Materials:\n${lines.join("\n")}`;
+  return `${heading}:\n${lines.join("\n")}`;
 }
 
 function fmtDueDate(dueDate, dueTime) {
@@ -125,7 +125,7 @@ function fmtDueDate(dueDate, dueTime) {
 
 function fmtSubmission(sub, maxPoints) {
   if (!sub) return null;
-  let stateLine = `Submission: ${sub.state || "UNKNOWN"}`;
+  let stateLine = `Your submission: ${sub.state || "UNKNOWN"}`;
   if (sub.assignedGrade != null) {
     stateLine += `, grade ${sub.assignedGrade}${maxPoints != null ? ` / ${maxPoints}` : ""}`;
   }
@@ -133,7 +133,7 @@ function fmtSubmission(sub, maxPoints) {
   const attachments = sub.assignmentSubmission && sub.assignmentSubmission.attachments;
   if (Array.isArray(attachments) && attachments.length) {
     const attLines = attachments.map(fmtMaterialLine).filter(Boolean);
-    if (attLines.length) lines.push(...attLines);
+    if (attLines.length) lines.push("What you submitted:", ...attLines);
   }
   return lines.join("\n");
 }
@@ -141,21 +141,25 @@ function fmtSubmission(sub, maxPoints) {
 function courseWorkBody(item, submission) {
   const parts = [];
   if (item.description) parts.push(item.description.trim());
-  const materialsBlock = fmtMaterialsList(item.materials);
+  const materialsBlock = fmtMaterialsList(item.materials, "Teacher materials");
   if (materialsBlock) parts.push(materialsBlock);
   const due = fmtDueDate(item.dueDate, item.dueTime);
   if (due) parts.push(due);
   if (item.maxPoints != null) parts.push(`Max points: ${item.maxPoints}`);
   const subText = fmtSubmission(submission, item.maxPoints);
   if (subText) parts.push(subText);
+  // Deep link back to the assignment in Classroom itself (the "page the teacher
+  // put this on"), so a note in the KB is always one click from its source.
+  if (item.alternateLink) parts.push(`[Open assignment in Classroom](${item.alternateLink})`);
   return parts.join("\n\n");
 }
 
 function materialBody(item) {
   const parts = [];
   if (item.description) parts.push(item.description.trim());
-  const materialsBlock = fmtMaterialsList(item.materials);
+  const materialsBlock = fmtMaterialsList(item.materials, "Teacher materials");
   if (materialsBlock) parts.push(materialsBlock);
+  if (item.alternateLink) parts.push(`[Open in Classroom](${item.alternateLink})`);
   return parts.join("\n\n");
 }
 
