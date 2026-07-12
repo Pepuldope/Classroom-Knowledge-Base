@@ -1306,6 +1306,12 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-build-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
 .kb-search-bar { margin: 1.25rem 0 0.75rem; }
 .kb-search-bar input { width: 100%; padding: 0.7rem 0.9rem; font-size: 1rem; border: 1px solid var(--border); border-radius: 10px; }
+.kb-export-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.55rem 0.7rem; margin: 0.75rem 0 0; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 10px; }
+.kb-export-label { font-size: 0.85rem; color: var(--muted); }
+.kb-export-bar .ghost-btn { font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0.32rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--fg); transition: background 0.12s, border-color 0.12s, color 0.12s; }
+.kb-export-bar .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
+.kb-export-status { font-size: 0.8rem; color: var(--muted); margin-left: 0.25rem; }
+.kb-export-status.error { color: var(--danger); }
 .kb-tutor-wrap { margin-top: 1.5rem; text-align: center; }
 .ai-context-note { display: block; font-size: 0.8rem; color: var(--muted); padding: 0.4rem 0.6rem; background: var(--accent-bg); border-radius: 8px; margin-bottom: 0.5rem; }
 #kbTutorSources { margin-bottom: 0.5rem; }

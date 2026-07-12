@@ -61,6 +61,104 @@ function renderKbMeta(meta) {
 }
 
 // ---------------------------------------------------------------------------
+// Export (public — the shared DB is readable by anyone, no login required)
+// ---------------------------------------------------------------------------
+function downloadFile(filename, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportFilename(ext) {
+  const d = new Date().toISOString().slice(0, 10);
+  return `classroom-kb-${d}.${ext}`;
+}
+
+function escapeCsvCell(v) {
+  const s = String(v ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+function bundleToMarkdown(bundle) {
+  const notes = Array.isArray(bundle.notes) ? bundle.notes : [];
+  const lines = ["# Classroom Knowledge Base Export", ""];
+  if (bundle.generatedAt) lines.push(`_Generated: ${new Date(bundle.generatedAt).toLocaleString()}_`, "");
+  // Group by course.
+  const byCourse = new Map();
+  for (const n of notes) {
+    const c = n.course || "Uncategorised";
+    if (!byCourse.has(c)) byCourse.set(c, []);
+    byCourse.get(c).push(n);
+  }
+  for (const [course, ns] of byCourse) {
+    lines.push(`## ${course}`, "");
+    for (const n of ns) {
+      const head = [n.t || "Untitled", n.y ? `(${n.y})` : "", n.topic ? `— ${n.topic}` : ""].filter(Boolean).join(" ");
+      lines.push(`### ${head}`, "");
+      if (Array.isArray(n.tags) && n.tags.length) lines.push(`*Tags: ${n.tags.join(", ")}*`, "");
+      if (n.p) lines.push(n.p, "");
+      lines.push("---", "");
+    }
+  }
+  return lines.join("\n");
+}
+
+function bundleToCsv(bundle) {
+  const notes = Array.isArray(bundle.notes) ? bundle.notes : [];
+  const rows = [["title", "course", "year", "topic", "tags", "body"]];
+  for (const n of notes) {
+    rows.push([
+      n.t || "",
+      n.course || "",
+      n.y || "",
+      n.topic || "",
+      Array.isArray(n.tags) ? n.tags.join("; ") : "",
+      n.p || "",
+    ].map(escapeCsvCell));
+  }
+  return rows.map((r) => r.join(",")).join("\n");
+}
+
+async function exportKb(format) {
+  const status = $("kbExportStatus");
+  const setStatus = (msg, isError) => {
+    if (!status) return;
+    status.textContent = msg;
+    status.hidden = false;
+    status.classList.toggle("error", !!isError);
+  };
+  setStatus("Preparing…");
+  try {
+    const r = await fetch("/api/kb-store?action=export");
+    if (!r.ok) throw new Error(`export failed (${r.status})`);
+    const data = await r.json();
+    const bundle = data.bundle;
+    if (!bundle || !Array.isArray(bundle.notes) || bundle.notes.length === 0) {
+      setStatus("Nothing to export yet — the knowledge base is empty.", true);
+      return;
+    }
+    if (format === "json") {
+      downloadFile(exportFilename("json"), JSON.stringify(bundle, null, 2), "application/json");
+    } else if (format === "md") {
+      downloadFile(exportFilename("md"), bundleToMarkdown(bundle), "text/markdown");
+    } else if (format === "csv") {
+      downloadFile(exportFilename("csv"), bundleToCsv(bundle), "text/csv");
+    }
+    setStatus(`Exported ${bundle.notes.length} notes.`);
+  } catch (err) {
+    setStatus("Export failed: " + (err.message || err), true);
+  }
+}
+
+
+
+// ---------------------------------------------------------------------------
 // Build / scrape into the shared DB
 // ---------------------------------------------------------------------------
 let _kbWired = false;
@@ -92,6 +190,11 @@ export function wireKbEvents() {
 
   const search = $("kbSearchInput");
   search?.addEventListener("input", debounce(() => runKbSearch(search.value), 200));
+
+  // Export controls (public — the shared DB is readable by anyone).
+  $("kbExportJson")?.addEventListener("click", () => exportKb("json"));
+  $("kbExportMd")?.addEventListener("click", () => exportKb("md"));
+  $("kbExportCsv")?.addEventListener("click", () => exportKb("csv"));
 }
 
 function debounce(fn, ms) {
