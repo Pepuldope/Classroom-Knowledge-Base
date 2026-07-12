@@ -14,3 +14,4 @@ HANDOFF.md
 # Playwright browsers (downloaded binaries, not source)
 scripts/screenshots/
 .pw-browsers/
+.env*
