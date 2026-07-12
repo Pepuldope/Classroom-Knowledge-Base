@@ -1036,6 +1036,21 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-bottom: 1px solid var(--border, #eee);
 }
 
+/* Feature A: "Related notes" panel inside the note-detail modal. */
+.kb-related { margin-top: 1rem; border-top: 1px solid var(--border, #eee); padding-top: 0.75rem; }
+.kb-related-title { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
+.kb-related-list { display: flex; flex-direction: column; gap: 0.4rem; }
+.kb-related-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
+  text-align: left; width: 100%; padding: 0.5rem 0.7rem; cursor: pointer;
+  background: var(--accent-bg, #eff6ff); border: 1px solid var(--border, #eee);
+  border-radius: 0.5rem; transition: border-color .12s ease, transform .12s ease;
+}
+.kb-related-item:hover,
+.kb-related-item:focus-visible { border-color: var(--accent, #2563eb); transform: translateY(-1px); outline: none; }
+.kb-related-item-title { font-weight: 600; font-size: 0.9rem; color: var(--fg, #1a1a1a); }
+.kb-related-item-meta { font-size: 0.78rem; color: var(--muted); }
+
 .archive-year { margin-bottom: 0.75rem; }
 .archive-year > summary { font-weight: 600; }
 .archive-course {

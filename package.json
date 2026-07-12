@@ -1,6 +1,29 @@
 {
-  "name": "classroom-web-analyzer",
+  "name": "classroom-knowledge-base",
   "version": "0.1.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "description": "A Vercel site that does what the original Classroom Web Analyzer does — the live study-plan dashboard + per-assignment AI chat — and adds a shared Knowledge Base.",
+  "main": "app.js",
+  "scripts": {
+    "test": "bash scripts/test.sh",
+    "test:ui": "PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.pw-browsers node scripts/kb_ui_test.mjs",
+    "test:api": "node scripts/kb_e2e_test.mjs",
+    "test:live": "PLAYWRIGHT_BROWSERS_PATH=$(pwd)/.pw-browsers node scripts/kb_live_test.mjs",
+    "dev": "node scripts/dev-server.mjs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Pepuldope/Classroom-Knowledge-Base.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Pepuldope/Classroom-Knowledge-Base/issues"
+  },
+  "homepage": "https://github.com/Pepuldope/Classroom-Knowledge-Base#readme",
+  "devDependencies": {
+    "playwright": "^1.61.1"
+  }
 }

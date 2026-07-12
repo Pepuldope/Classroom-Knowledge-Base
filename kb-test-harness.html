@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KB UI Test Harness</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main>
+    <!-- Minimal standalone mount for the Knowledge Base feature so the local
+         Playwright UI test can drive the REAL kb.js + REAL api routes without
+         booting the full app.js (which statically imports archive.js and fails
+         to initialize in the local dev harness). The live Vercel test covers
+         the full integrated app. -->
+    <section id="kbView">
+      <div id="kbOnboarding" class="welcome-card">
+        <h2 class="welcome-title">Shared Classroom Knowledge Base 📚</h2>
+      </div>
+      <div id="kbBuildPanel" class="archive-build-panel" hidden>
+        <div id="kbBuildStatus">Starting…</div>
+        <div class="archive-build-progress"><div id="kbBuildProgressBar"></div></div>
+        <div id="kbBuildLog"></div>
+      </div>
+      <div id="kbMain" hidden>
+        <div id="kbMetaBar" class="stat-bar"></div>
+        <div class="kb-search-bar">
+          <input id="kbSearchInput" type="text" placeholder="Search the knowledge base…" autocomplete="off" />
+        </div>
+        <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
+        <div id="kbResults" class="list compact" hidden></div>
+        <div class="kb-tutor-wrap">
+          <button id="kbTutorOpen" class="primary" type="button">💬 Ask the AI tutor</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="kbTutorModal" class="modal" hidden>
+    <div class="modal-card modal-card-tall">
+      <header><h3>AI Tutor</h3><button id="kbTutorClose" aria-label="Close">×</button></header>
+      <div id="kbTutorSources" class="ai-context"></div>
+      <div id="kbTutorMessages" class="ai-messages"></div>
+      <form id="kbTutorForm" class="ai-form">
+        <input id="kbTutorInput" type="text" placeholder="Ask about the knowledge base…" autocomplete="off" />
+        <button type="submit">Send</button>
+      </form>
+      <div class="ai-quick">
+        <button data-prompt="Explain from scratch">Explain from scratch</button>
+        <button data-prompt="Quiz me">Quiz me</button>
+        <button data-prompt="Key points">Key points</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="kbNoteModal" class="modal" hidden>
+    <div class="modal-card modal-card-tall">
+      <header><h3 id="kbNoteTitle">Note</h3><button id="kbNoteClose" aria-label="Close">×</button></header>
+      <div id="kbNoteMeta" class="kb-note-meta"></div>
+      <div id="kbNoteBody" class="archive-note-body"></div>
+      <div id="kbNoteRelated" class="kb-related" hidden>
+        <h4 class="kb-related-title">Related notes</h4>
+        <div id="kbNoteRelatedList" class="kb-related-list"></div>
+      </div>
+      <footer>
+        <a id="kbNoteObsidianLink" class="classroom-link" target="_blank" rel="noopener" hidden>Open in Obsidian</a>
+        <button id="kbNoteCloseBtn" class="primary">Close</button>
+      </footer>
+    </div>
+  </div>
+
+  <script type="module">
+    import { showKbView } from "/kb.js";
+    // Wire events + reveal the KB surface (equivalent to setView('kb') in app.js).
+    showKbView();
+  </script>
+</body>
+</html>

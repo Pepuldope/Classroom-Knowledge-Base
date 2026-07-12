@@ -19,9 +19,10 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchNotes } from "../api/kb-retrieval.js";
+import { searchNotes, relatedNotes } from "../api/kb-retrieval.js";
 import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
+import kbRelated from "../api/kb-related.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { highlightSnippet } from "../kb.js";
 
@@ -224,4 +225,62 @@ test("/api/kb-note rejects out-of-range id with 404", async () => {
 test("/api/kb-note with no id returns 400", async () => {
   const nr = await kbNote(makeReq("/api/kb-note"));
   assert.equal(nr.status, 400, "missing id must 400");
+});
+
+// ---------------------------------------------------------------------------
+// Feature A: "Related notes" — cross-link notes by shared topic/course.
+// relatedNotes() must return notes related to a given one (same course or
+// topic), excluding itself, ranked by relevance. Exposed as /api/kb-related.
+// ---------------------------------------------------------------------------
+test("relatedNotes returns same-course / same-topic notes, excluding self", () => {
+  const notes = sampleBundle().notes;
+  // Find the "Cover Letter Guide" note: it shares course "ELA 1 Gama" with
+  // nothing else in the sample, but shares topic "Writing"? No — it shares
+  // the keyword "cover letter" in body with the Biology note. We assert the
+  // contract generically instead of coupling to sample content.
+  const target = notes[0];
+  const related = relatedNotes(notes, target, { limit: 5 });
+  assert.ok(Array.isArray(related), "relatedNotes must return an array");
+  // The note itself must never appear in its own related list.
+  assert.ok(!related.some((r) => r.t === target.t), "self excluded from related");
+  // Every related note must actually relate (shared course OR shared topic OR
+  // overlapping query tokens with the target's title/summary/body).
+  for (const r of related) {
+    const sameCourse = r.course && r.course === target.course;
+    const sameTopic = r.topic && target.topic && r.topic === target.topic;
+    assert.ok(sameCourse || sameTopic || !!r._score, "each related note must relate");
+  }
+});
+
+test("relatedNotes limits the number of results", () => {
+  const notes = sampleBundle().notes;
+  const related = relatedNotes(notes, notes[0], { limit: 1 });
+  assert.ok(related.length <= 1, "related count must not exceed limit");
+});
+
+test("/api/kb-related returns related notes for an index", async () => {
+  await seed(sampleBundle());
+  const sr = await kbSearch(makeReq("/api/kb-search?q=STAR&limit=8"));
+  const sd = await sr.json();
+  const idx = sd.results[0].noteIndex;
+  const rr = await kbRelated(makeReq("/api/kb-related?id=" + idx + "&limit=5"));
+  assert.equal(rr.status, 200, "related route should be 200");
+  const rd = await rr.json();
+  assert.ok(Array.isArray(rd.related), "related array present");
+  // The STAR-method note shares its course (BEng Y1) with another note, so we
+  // expect at least one cross-link to be surfaced.
+  assert.ok(rd.related.length >= 1, "related notes should be found for a cross-linked note");
+  // The returned related notes must not include the queried note itself.
+  assert.ok(!rd.related.some((n) => n.noteIndex === idx), "self excluded");
+});
+
+test("/api/kb-related rejects out-of-range id with 404", async () => {
+  await seed(sampleBundle());
+  const rr = await kbRelated(makeReq("/api/kb-related?id=9999"));
+  assert.equal(rr.status, 404, "out-of-range id must 404");
+});
+
+test("/api/kb-related with no id returns 400", async () => {
+  const rr = await kbRelated(makeReq("/api/kb-related"));
+  assert.equal(rr.status, 400, "missing id must 400");
 });

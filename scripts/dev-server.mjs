@@ -32,12 +32,14 @@ try {
 const kbSearch = (await import("../api/kb-search.js")).default;
 const kbScrape = (await import("../api/kb-scrape.js")).default;
 const kbNote = (await import("../api/kb-note.js")).default;
+const kbRelated = (await import("../api/kb-related.js")).default;
 const oauthConfig = (await import("../api/oauth-config.js")).default;
 const tutor = (await import("../api/tutor.js")).default;
 
 const STATIC = {
   "/": "../index.html",
   "/index.html": "../index.html",
+  "/kb-test-harness.html": "../kb-test-harness.html",
   "/app.js": "../app.js",
   "/kb.js": "../kb.js",
   "/kb-highlight.js": "../kb-highlight.js",
@@ -53,6 +55,7 @@ const server = http.createServer(async (req, res) => {
   if (p === "/api/kb-search") return await runHandler(kbSearch, req, res, url);
   if (p === "/api/kb-scrape") return await runHandler(kbScrape, req, res, url);
   if (p === "/api/kb-note") return await runHandler(kbNote, req, res, url);
+  if (p === "/api/kb-related") return await runHandler(kbRelated, req, res, url);
   if (p === "/api/oauth-config") return await runHandler(oauthConfig, req, res, url);
   if (p === "/api/tutor") return await runHandler(tutor, req, res, url);
   if (p.startsWith("/api/")) {

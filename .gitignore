@@ -1,12 +1,16 @@
 .env
 .env.local
 .vercel
-node_modules
+node_modules/
 .DS_Store
+__pycache__/
+*.pyc
 
 # Claude context — local only, do not publish
 CLAUDE.md
 HANDOFF.md
 .kb.local.json
-__pycache__/
-*.pyc
+
+# Playwright browsers (downloaded binaries, not source)
+scripts/screenshots/
+.pw-browsers/

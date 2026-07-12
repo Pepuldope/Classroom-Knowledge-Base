@@ -99,11 +99,22 @@ function debounce(fn, ms) {
 }
 
 async function startScrape() {
+  const panel = $("kbBuildPanel");
+  const statusEl = $("kbBuildStatus");
+  const showStatus = (msg, isError) => {
+    if (panel) panel.hidden = false;
+    if (statusEl) { statusEl.textContent = msg; statusEl.classList.toggle("error", !!isError); }
+  };
+
   if (!accessToken && !loadKbToken()) {
     // Need a fresh Classroom token with the read-only scopes.
-    if (!window.__cwaTokenClient) { alert("Sign in with Google first (use the top-right button)."); return; }
+    if (!window.__cwaTokenClient) {
+      showStatus("Sign in with Google first (use the top-right button), then try again.", true);
+      console.warn("[KB] startScrape: no token and no Google token client available.");
+      return;
+    }
     window.__cwaTokenClient.callback = (resp) => {
-      if (resp.error) { setKbBuildError(resp.error); return; }
+      if (resp.error) { showStatus("Google sign-in failed: " + resp.error, true); return; }
       accessToken = resp.access_token;
       storeKbToken(resp.access_token, Number(resp.expires_in) || 3600);
       doScrape(resp.access_token);
@@ -112,7 +123,7 @@ async function startScrape() {
       // prompt:'' reuses the silent/consent flow; note: scopes here MUST include
       // the Classroom read-only set (see SCOPES in app.js / index.html preconnect).
       window.__cwaTokenClient.requestAccessToken({ prompt: "" });
-    } catch (e) { setKbBuildError(e.message); }
+    } catch (e) { showStatus("Could not start Google sign-in: " + e.message, true); }
     return;
   }
   doScrape(accessToken || loadKbToken());
@@ -401,9 +412,45 @@ async function openKbNote(index) {
       if (note.p) { linkEl.href = "obsidian://open?path=" + encodeURIComponent(note.p); linkEl.hidden = false; }
       else linkEl.hidden = true;
     }
+    // Feature A: cross-link related notes.
+    await renderRelatedNotes(index);
   } catch (e) {
     bodyEl.innerHTML = `<div class="empty">Failed to load note: ${e.message}</div>`;
   }
+}
+
+async function renderRelatedNotes(index) {
+  const wrap = $("kbNoteRelated");
+  const list = $("kbNoteRelatedList");
+  if (!wrap || !list) return;
+  wrap.hidden = true;
+  list.innerHTML = "";
+  try {
+    const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=5");
+    console.log("[DBG-rel] status", r.status, "ok", r.ok);
+    if (!r.ok) return;
+    const d = await r.json();
+    console.log("[DBG-rel] got related len", (d.related||[]).length);
+    const related = d.related || [];
+    if (!related.length) return;
+    console.log("[DBG-rel] about to render", related.length, "items");
+    for (const rel of related) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "kb-related-item";
+      const title = document.createElement("span");
+      title.className = "kb-related-item-title";
+      title.textContent = rel.t || "(untitled)";
+      item.appendChild(title);
+      const meta = document.createElement("span");
+      meta.className = "kb-related-item-meta";
+      meta.textContent = [rel.course, rel.y].filter(Boolean).join(" · ");
+      item.appendChild(meta);
+      item.addEventListener("click", () => openKbNote(rel.noteIndex));
+      list.appendChild(item);
+    }
+    wrap.hidden = false;
+  } catch { /* related panel is non-critical; ignore */ }
 }
 
 function closeKbNote() {

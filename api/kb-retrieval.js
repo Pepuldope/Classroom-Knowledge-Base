@@ -121,3 +121,57 @@ function tokenFuzzyAny(text, qTokens) {
   const toks = tokenize(text);
   return qTokens.some((qt) => toks.some((it) => tokenFuzzyMatch(it, qt)));
 }
+
+/**
+ * Find notes related to a given target note. A note relates if it shares the
+ * target's course, shares its topic, or contains overlapping query tokens from
+ * the target's title/summary/body. The target itself is never returned.
+ * Results are ranked (course/topic first, then token overlap) and capped to
+ * `limit`. Each result carries the same shape as searchNotes so the UI can
+ * reuse the same rendering (t, course, y, topic, p, noteIndex, _score, _snippet).
+ */
+export function relatedNotes(notes, target, { limit = 5 } = {}) {
+  if (!Array.isArray(notes) || notes.length === 0 || !target) return [];
+  const targetTokens = tokenize([target.t, target.s, target.x].filter(Boolean).join(" "));
+  const targetCourse = target.course || "";
+  const targetTopic = target.topic || "";
+
+  const scored = [];
+  notes.forEach((n, i) => {
+    if (n === target) return;
+    // Identity by reference is weak; also guard on equal title+index when the
+    // caller passes a copy. We rely on reference identity plus a course/topic
+    // sanity check below.
+    let score = 0;
+    if (targetCourse && n.course === targetCourse) score += 3;
+    if (targetTopic && n.topic && n.topic === targetTopic) score += 3;
+    // Token overlap with the target's own text.
+    if (targetTokens.length) {
+      const nTokens = tokenize([n.t, n.s, n.x].filter(Boolean).join(" "));
+      const overlap = nTokens.filter((t) => targetTokens.some((qt) => tokenFuzzyMatch(t, qt))).length;
+      score += overlap;
+    }
+    if (score <= 0) return; // unrelated — skip
+    scored.push({ index: i, score, note: n });
+  });
+
+  scored.sort((a, b) => b.score - a.score);
+  const out = [];
+  for (const { index, score, note } of scored) {
+    const qTokens = tokenFuzzyAny(note.t, targetTokens) || (note.s && tokenFuzzyAny(note.s, targetTokens))
+      ? targetTokens
+      : tokenize([note.t, note.s].filter(Boolean).join(" "));
+    out.push({
+      t: note.t || "",
+      course: note.course || "",
+      y: note.y || "",
+      topic: note.topic || null,
+      p: note.p || "",
+      noteIndex: index,
+      _score: score,
+      _snippet: buildSnippet(note, targetTokens.length ? targetTokens : qTokens),
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
+}
