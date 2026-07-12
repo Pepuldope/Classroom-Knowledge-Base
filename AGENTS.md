@@ -24,6 +24,22 @@ views). They are DIFFERENT things and must stay separate.
 - **Never** collapse KB into archive. The KB ingests FROM the archive but is a
   distinct, usable study surface with its own UI and data shape.
 
+## STANDING ENGINEERING DISCIPLINE (search-before-build)
+Before writing new code, REUSE FIRST. Check in this order and **show what you
+checked** before implementing:
+1. **Current codebase** — existing function/module/pattern?
+2. **Existing utilities** — `lib/`, `utils/`, `scripts/`, shared helpers?
+3. **Installed dependencies** — already in `package.json`/lockfile?
+4. **Official docs** — documented API/config for the need?
+5. **Known issue threads** — exact error/behavior on GitHub/SO?
+Prefer reuse, config, or a standard library over custom code. Build from scratch
+only if nothing fits OR custom code is clearly simpler and safer. Full rule +
+workflow: Hermes skill `search-before-build`.
+**Web-search caution:** do NOT web-search (rungs 4–5) for trivial local edits
+(typo, rename, one-liner, wiring an existing export) — that adds latency and noise.
+Reserve web search for external APIs, uncertain framework behavior, real bugs, and
+nontrivial architecture decisions. Then: check → plan → implement → test.
+
 ## PER-RUN WORK ORDER (functional-first)
 0. **PROVE IT IS POPULATED.** After ANY ingestion change, hit the live
    `https://classroom-knowledge-google.vercel.app/api/kb-search?q=<real term>`
