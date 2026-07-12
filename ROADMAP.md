@@ -44,11 +44,12 @@ The autonomous loop writes its own feature ideas here when the lists above are
 drained, then implements them. This section is machine-owned — the loop adds,
 ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Tutor: "summarise this note" quick action on each search result card.
-- [ ] KB: sort results by relevance / recency / course (sort toggle chips).
+- [x] KB: sort results by relevance / recency / course (sort toggle chips).
+- [x] KB: keyboard shortcut (press "/" to focus search, Esc to clear).
 - [ ] Tutor: copy-to-clipboard button on each answer + "save note" to a personal study list.
-- [ ] KB: keyboard shortcut (press "/" to focus search, Esc to clear).
 - [ ] Tutor: show which provider/model answered (already in response headers — surface it in the UI).
 - [ ] Search: "did you mean" suggestion when a query returns <3 results.
+- [x] KB: harden the autonomous loop's verification gate so a failing live e2e actually blocks the run (test.sh previously swallowed the live exit code).
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

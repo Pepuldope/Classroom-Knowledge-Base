@@ -191,6 +191,21 @@ export function wireKbEvents() {
   const search = $("kbSearchInput");
   search?.addEventListener("input", debounce(() => runKbSearch(search.value), 200));
 
+  // Keyboard shortcuts (agent-proposed backlog):
+  //   "/"  -> focus the KB search box from anywhere in the view.
+  //   Esc  -> clear the search box (and its results) when it's focused.
+  document.addEventListener("keydown", (e) => {
+    const tag = (e.target && e.target.tagName) || "";
+    const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target && e.target.isContentEditable);
+    if (e.key === "/" && !typing) {
+      const box = $("kbSearchInput");
+      if (box) { e.preventDefault(); box.focus(); }
+    } else if (e.key === "Escape" && e.target && e.target.id === "kbSearchInput") {
+      e.target.value = "";
+      runKbSearch("");
+    }
+  });
+
   // Export controls (public — the shared DB is readable by anyone).
   $("kbExportJson")?.addEventListener("click", () => exportKb("json"));
   $("kbExportMd")?.addEventListener("click", () => exportKb("md"));

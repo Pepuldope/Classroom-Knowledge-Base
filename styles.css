@@ -1304,6 +1304,14 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 
 /* ---- Knowledge Base view ---- */
+/* The KB view fills the viewport so the empty-state onboarding card can be
+   vertically centered. We center the card with auto margins (not
+   justify-content, whose `safe` keyword is poorly supported): auto top/bottom
+   margins center it vertically and collapse to 0 when the card is taller
+   than the view, keeping it scrollable. The populated search surface is
+   unaffected (it stays top-aligned and full-width). */
+#kbView { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
+#kbOnboarding { margin: auto; }
 .kb-build-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
 .kb-search-bar { margin: 1.25rem 0 0.75rem; }
 .kb-search-bar input { width: 100%; padding: 0.7rem 0.9rem; font-size: 1rem; border: 1px solid var(--border); border-radius: 10px; }

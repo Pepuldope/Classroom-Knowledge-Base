@@ -41,7 +41,17 @@ kill "$SRV" 2>/dev/null
 if [ "$UI_OK" -ne 0 ]; then echo "UI e2e FAILED"; exit 1; fi
 
 echo "==> Live-site e2e (skipped if KB_LIVE_URL unset)"
-node scripts/kb_live_test.mjs
-# live test exits 0 when skipped or passing
+if [ -z "${KB_LIVE_URL:-}" ]; then
+  echo "[live] KB_LIVE_URL unset — skipping live verification."
+  LIVE_OK=0
+else
+  node scripts/kb_live_test.mjs
+  LIVE_OK=$?
+fi
+
+if [ "$LIVE_OK" -ne 0 ]; then
+  echo "LIVE E2E FAILED (production regression detected)"
+  exit 1
+fi
 
 echo "ALL TESTS PASSED"

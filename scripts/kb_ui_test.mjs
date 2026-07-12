@@ -87,6 +87,54 @@ try {
     assert.ok(marks > 0, "expected <mark> highlights in snippets");
   });
 
+  // --- Onboarding vertical centering (KB view, empty-DB state) ---
+  // The #kbOnboarding welcome card must be centered in the viewport — both
+  // horizontally AND vertically. A regression pinned it to the top (y=24)
+  // leaving a big empty gap. We assert the visible card's vertical center
+  // sits within tolerance of the viewport's vertical center.
+  // The harness normally seeds a bundle (so the populated #kbMain shows and
+  // #kbOnboarding is hidden), so we explicitly switch to the empty state to
+  // exercise the onboarding layout — the exact surface the bug lived in.
+  await check("KB onboarding card is vertically centered in the view", async () => {
+    const dims = await page.evaluate(() => {
+      const card = document.getElementById("kbOnboarding");
+      const main = document.getElementById("kbMain");
+      if (!card) return null;
+      // Force the empty state so the onboarding card is the visible surface.
+      if (main) main.hidden = true;
+      card.hidden = false;
+      const cRect = card.getBoundingClientRect();
+      return {
+        vh: window.innerHeight, vw: window.innerWidth,
+        ch: cRect.height, cTop: cRect.top,
+        cLeft: cRect.left, cw: cRect.width,
+      };
+    });
+    assert.ok(dims, "kbOnboarding must exist");
+    // Vertical: card center should sit at the viewport's vertical center.
+    const vCenter = dims.vh / 2;
+    const cCenter = dims.cTop + dims.ch / 2;
+    assert.ok(
+      Math.abs(vCenter - cCenter) < dims.vh * 0.12,
+      `onboarding card not vertically centered (delta=${Math.abs(vCenter - cCenter).toFixed(0)}px, viewport=${dims.vh}px)`
+    );
+    // Horizontal: known-good, assert it stays centered.
+    const hCenter = dims.vw / 2;
+    const cHCenter = dims.cLeft + dims.cw / 2;
+    assert.ok(
+      Math.abs(hCenter - cHCenter) < 6,
+      `onboarding card not horizontally centered (delta=${Math.abs(hCenter - cHCenter).toFixed(0)}px)`
+    );
+    });
+    // Restore the populated (seeded) state so the following checks can drive
+    // the live search surface — we only borrowed the empty state to measure it.
+    await page.evaluate(() => {
+    const card = document.getElementById("kbOnboarding");
+    const main = document.getElementById("kbMain");
+    if (card) card.hidden = true;
+    if (main) main.hidden = false;
+    });
+
   await page.screenshot({ path: SHOTS + "01-search-results.png", fullPage: true });
 
   // --- Click a result card -> detail modal ---
@@ -141,6 +189,28 @@ try {
     await page.fill("#kbSearchInput", "zzqqxxqwqy zxvbnm asdfgh");
     await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .empty", { timeout: 8000 });
+  });
+
+  // --- Keyboard shortcuts (agent-proposed backlog) ---
+  // "/" focuses the KB search box without needing to click it; "Escape"
+  // clears the search and blurs the input when it's focused.
+  await check("pressing '/' focuses the KB search input", async () => {
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press("/");
+    await page.waitForFunction(
+      () => document.activeElement && document.activeElement.id === "kbSearchInput",
+      { timeout: 4000 }
+    );
+  });
+
+  await check("pressing Escape clears the focused KB search", async () => {
+    await page.fill("#kbSearchInput", "some query text");
+    await page.focus("#kbSearchInput");
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(
+      () => (document.getElementById("kbSearchInput")?.value || "") === "",
+      { timeout: 4000 }
+    );
   });
 
   // --- No uncaught page errors throughout ---
