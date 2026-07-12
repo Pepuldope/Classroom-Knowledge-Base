@@ -26,7 +26,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList } from "../kb.js";
+import { highlightSnippet, tutorSourceList, kbFilterModel } from "../kb.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -822,4 +822,30 @@ test("bundleToCsv includes body + summary columns carrying real content", async 
   const row = csv.split("\n")[1] || "";
   assert.ok(row.includes("A cover letter should open with a hook"), "BODY content present in CSV row");
   assert.ok(row.includes("How to write a strong cover letter"), "SUMMARY content present in CSV row");
+});
+
+// ---------------------------------------------------------------------------
+// Regression (owner request #2 — every course must be reachable as a filter):
+// the filter UI used to hard-cap at the first 24 courses, so a ~38-course KB
+// left ~14 courses (e.g. the alphabetically-later ones) UNREACHABLE as a
+// course filter. kbFilterModel must return ALL courses (no silent truncation)
+// plus the years, so the filter UI can render a complete course selector.
+// This is a pure model function (no DOM) so it stays unit-testable.
+// ---------------------------------------------------------------------------
+test("kbFilterModel returns every course + year without truncating", () => {
+  assert.ok(typeof kbFilterModel === "function", "kbFilterModel is exported");
+  // 40 distinct courses — exceeds the old 24-chip cap that hid courses.
+  const courses = Array.from({ length: 40 }, (_, i) => `Course ${String(i).padStart(2, "0")}`);
+  const years = ["2023-24", "2024-25", "2025-26", "undated"];
+  const filters = { courses, years };
+  const model = kbFilterModel(filters);
+  // No truncation: all 40 courses must be present, not just the first 24.
+  assert.strictEqual(model.courses.length, 40, "all courses returned (no cap/truncation)");
+  assert.deepStrictEqual(model.years, years, "all years returned");
+  // Active state must round-trip so the UI can mark the selected chip.
+  const withActive = kbFilterModel(filters, { course: "Course 39", year: "2025-26" });
+  assert.strictEqual(withActive.activeCourse, "Course 39", "active course passed through");
+  assert.strictEqual(withActive.activeYear, "2025-26", "active year passed through");
+  // The last (alphabetically latest) course must be reachable.
+  assert.ok(model.courses.includes("Course 39"), "last course is reachable as a filter");
 });

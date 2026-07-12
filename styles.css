@@ -1369,7 +1369,9 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-msg-assistant { background: var(--card); border: 1px solid var(--border); }
 .ai-messages { flex: 1; overflow-y: auto; padding: 0.5rem; }
 
-.kb-filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; }
+.kb-filter-chips { display: flex; flex-wrap: nowrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; overflow-x: auto; padding-bottom: 0.35rem; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
+.kb-filter-chips::-webkit-scrollbar { height: 6px; }
+.kb-filter-chips::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
 .kb-chip-group-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.1rem; }
 .kb-chip {
   font: inherit; font-size: 0.82rem; cursor: pointer;

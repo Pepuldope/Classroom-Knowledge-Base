@@ -23,6 +23,23 @@ const KB_TOKEN_KEY = "cwa_kb_token";
 export { highlightSnippet, bundleToMarkdown, bundleToCsv };
 
 // ---------------------------------------------------------------------------
+// Pure filter model (no DOM): turn the raw facet lists from /api/kb-search
+// into a complete, untruncated list of courses + years with the active
+// selection passed through. The UI renders from this so EVERY course is
+// reachable as a filter (owner request #2) — no silent top-N truncation.
+// ---------------------------------------------------------------------------
+export function kbFilterModel(filters, active = {}) {
+  const courses = Array.isArray(filters?.courses) ? filters.courses : [];
+  const years = Array.isArray(filters?.years) ? filters.years : [];
+  return {
+    courses,
+    years,
+    activeCourse: active.course || "",
+    activeYear: active.year || "",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // View switching
 // ---------------------------------------------------------------------------
 export function showKbView() {
@@ -687,8 +704,11 @@ async function renderRelatedPreview(container, noteIndex) {
 function renderFilterChips(filters) {
   const chips = $("kbFilterChips");
   if (!chips) return;
-  const courses = (filters && filters.courses) || [];
-  const years = (filters && filters.years) || [];
+  // Pure model: returns ALL courses + years (no truncation) and the active
+  // selection, so every course is reachable as a filter (owner request #2).
+  const model = kbFilterModel(filters, { course: kbActiveCourse, year: kbActiveYear });
+  const courses = model.courses;
+  const years = model.years;
   if (courses.length === 0 && years.length === 0) { chips.hidden = true; chips.innerHTML = ""; return; }
   chips.hidden = false;
   chips.innerHTML = "";
@@ -698,6 +718,7 @@ function renderFilterChips(filters) {
     b.type = "button";
     b.className = "kb-chip" + (active ? " active" : "");
     b.textContent = label;
+    b.title = active ? `Remove filter: ${label}` : `Filter by ${label}`;
     b.addEventListener("click", () => {
       if (kind === "course") kbActiveCourse = active ? "" : value;
       else kbActiveYear = active ? "" : value;
@@ -712,15 +733,16 @@ function renderFilterChips(filters) {
     lbl.className = "kb-chip-group-label";
     lbl.textContent = "Year:";
     chips.appendChild(lbl);
-    years.forEach((y) => chips.appendChild(makeChip(y, "year", y, kbActiveYear === y)));
+    for (const y of years) chips.appendChild(makeChip(y, "year", y, model.activeYear === y));
   }
   if (courses.length) {
     const lbl = document.createElement("span");
     lbl.className = "kb-chip-group-label";
     lbl.textContent = "Course:";
     chips.appendChild(lbl);
-    // Cap to keep the UI tidy; most KBs have a manageable number.
-    courses.slice(0, 24).forEach((c) => chips.appendChild(makeChip(c, "course", c, kbActiveCourse === c)));
+    // Every course is rendered (no top-N cap) so none is unreachable.
+    // The .kb-filter-chips container scrolls horizontally if the row is long.
+    for (const c of courses) chips.appendChild(makeChip(c, "course", c, model.activeCourse === c));
   }
 
   // ROADMAP #55: a "Clear filters" control appears only when a facet is active,
