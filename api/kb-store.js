@@ -106,6 +106,43 @@ export async function getMeta() {
   };
 }
 
+/**
+ * Append notes from `incoming` into the existing shared bundle (or create it).
+ * Notes are deduped by their path `p`; an incoming note with a path that already
+ * exists REPLACES the stored one (so re-seeding a chunk updates in place rather
+ * than duplicating). Years/courses facets are recomputed from the merged set.
+ * Used by chunked vault ingestion (each POST adds a slice instead of overwriting).
+ */
+export async function appendBundle(incoming) {
+  const prev = (await getBundle()) || { version: 1, notes: [], years: [], courses: [], source: "vault" };
+  const byPath = new Map((prev.notes || []).map((n) => [n.p, n]));
+  for (const n of incoming.notes || []) {
+    if (n && n.p != null) byPath.set(n.p, n);
+    else byPath.set(`_${byPath.size}`, n); // safety for pathless notes
+  }
+  const notes = [...byPath.values()];
+  const years = [...new Set(notes.map((n) => n.y).filter(Boolean))].sort();
+  const courseNames = [...new Set(notes.map((n) => n.course).filter(Boolean))].sort();
+  const courses = courseNames.map((name) => ({
+    name,
+    y: null,
+    family: null,
+    noteCount: notes.filter((n) => n.course === name).length,
+  }));
+  const merged = {
+    version: 1,
+    source: "vault",
+    generatedAt: new Date().toISOString(),
+    years,
+    courses,
+    notes,
+    clusters: prev.clusters || [],
+    ...(incoming.metadata ? { metadata: incoming.metadata } : {}),
+  };
+  await saveBundle(merged);
+  return merged;
+}
+
 /** True when a shared knowledge base exists. */
 export async function hasBundle() {
   return (await getBundle()) != null;

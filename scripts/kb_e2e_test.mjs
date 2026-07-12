@@ -529,3 +529,26 @@ test("bundleFromVault accepts title/body aliases and missing course", () => {
   assert.equal(b.notes[0].course, "Uncategorized");
   assert.ok(b.notes[0].s.startsWith("Some content"), "summary from body");
 });
+
+// ---------------------------------------------------------------------------
+// appendBundle — chunked vault seeding must ACCUMULATE, not overwrite.
+// ---------------------------------------------------------------------------
+test("appendBundle merges notes across chunks and dedups by path", async () => {
+  await saveBundle({ version: 1, notes: [], years: [], courses: [] });
+  const { appendBundle } = await import("../api/kb-store.js");
+  await appendBundle(bundleFromVault([
+    { t: "A1", x: "body a", course: "Algebra", y: "2025-26", p: "2025-26/Algebra/A1" },
+  ]));
+  const mid = await getBundle();
+  assert.equal(mid.notes.length, 1, "first chunk -> 1 note");
+
+  await appendBundle(bundleFromVault([
+    { t: "A1", x: "updated body", course: "Algebra", y: "2025-26", p: "2025-26/Algebra/A1" },
+    { t: "G1", x: "body g", course: "Geometry", y: "2025-26", p: "2025-26/Geometry/G1" },
+  ]));
+  const fin = await getBundle();
+  assert.equal(fin.notes.length, 2, "second chunk appends (not overwrite) -> 2 notes");
+  const a1 = fin.notes.find((n) => n.p === "2025-26/Algebra/A1");
+  assert.equal(a1.x, "updated body", "same-path note replaced, not duplicated");
+  assert.equal(fin.courses.length, 2, "facets recomputed");
+});

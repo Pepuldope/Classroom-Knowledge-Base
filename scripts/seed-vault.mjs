@@ -69,20 +69,33 @@ for (const fp of files) {
   notes.push(parseObsidian(txt, path.relative(VAULT, fp)));
 }
 
-const res = await fetch(`${BASE}/api/kb-scrape`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    source: "vault",
-    notes,
-    meta: { seededFrom: VAULT, total: notes.length },
-  }),
-});
-const json = await res.json().catch(() => ({}));
-console.log("scrape status:", res.status);
-console.log("response:", JSON.stringify(json));
-if (res.ok) {
-  console.log(`Seeded ${notes.length} notes into ${BASE} (courses: ${json?.meta?.courses}, years: ${json?.meta?.years?.length}).`);
+// Vercel caps request bodies (~4.5MB / 413 when too large), so chunk the notes.
+const CHUNK = 250;
+let lastMeta = null;
+let seeded = 0;
+for (let i = 0; i < notes.length; i += CHUNK) {
+  const slice = notes.slice(i, i + CHUNK);
+  const res = await fetch(`${BASE}/api/kb-scrape`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      source: "vault",
+      notes: slice,
+      meta: { seededFrom: VAULT, chunk: Math.floor(i / CHUNK) + 1, total: notes.length },
+    }),
+  });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    console.error(`Seed FAILED at chunk ${Math.floor(i / CHUNK) + 1}: ${res.status}`, JSON.stringify(json));
+    process.exit(1);
+  }
+  lastMeta = json.meta;
+  seeded += slice.length;
+  console.log(`  chunk ${Math.floor(i / CHUNK) + 1}: +${slice.length} -> total ${lastMeta?.noteCount ?? "?"} notes`);
+}
+
+if (lastMeta) {
+  console.log(`Seeded ${seeded} notes into ${BASE} (courses: ${lastMeta.courses}, years: ${lastMeta.years?.length}).`);
 } else {
   console.error("Seed FAILED — KB still non-functional on", BASE);
   process.exit(1);

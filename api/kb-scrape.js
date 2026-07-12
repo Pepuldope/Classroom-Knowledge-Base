@@ -1,5 +1,5 @@
 import { jsonResponse, verifyUser } from "./_helpers.js";
-import { saveBundle, getBundle, getMeta } from "./kb-store.js";
+import { saveBundle, getBundle, getMeta, appendBundle } from "./kb-store.js";
 import { bundleFromRaw, bundleFromVault } from "../archive-builder.js";
 
 export const config = { runtime: "edge" };
@@ -41,24 +41,12 @@ export default async function handler(req) {
   // Vercel's Edge runtime forbids node:fs, so the filesystem walk happens in
   // scripts/seed-vault.mjs (on a machine with the vault). It POSTs the raw
   // notes; we synthesize the normalized KB bundle here (pure + testable).
+  // Uses appendBundle so chunked seeding accumulates instead of overwriting.
   if (body.source === "vault") {
     const rawNotes = Array.isArray(body.notes) ? body.notes : [];
     if (rawNotes.length === 0) return jsonResponse({ error: "vault needs notes:[]" }, 400);
     const bundle = bundleFromVault(rawNotes, body.meta || {});
-    await saveBundle(bundle);
-    const meta = await getMeta();
-    return jsonResponse({ ok: true, meta });
-  }
-
-  // ---- Path 3: a vault of raw notes (already walked offline) ----
-  // Vercel's Edge runtime forbids node:fs, so the filesystem walk happens in
-  // scripts/seed-vault.mjs (on a machine with the vault). It POSTs the raw
-  // notes; we synthesize the normalized KB bundle here (pure + testable).
-  if (body.source === "vault") {
-    const rawNotes = Array.isArray(body.notes) ? body.notes : [];
-    if (rawNotes.length === 0) return jsonResponse({ error: "vault needs notes:[]" }, 400);
-    const bundle = bundleFromVault(rawNotes, body.meta || {});
-    await saveBundle(bundle);
+    await appendBundle(bundle);
     const meta = await getMeta();
     return jsonResponse({ ok: true, meta });
   }
