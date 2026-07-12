@@ -552,3 +552,56 @@ test("appendBundle merges notes across chunks and dedups by path", async () => {
   assert.equal(a1.x, "updated body", "same-path note replaced, not duplicated");
   assert.equal(fin.courses.length, 2, "facets recomputed");
 });
+
+// ---------------------------------------------------------------------------
+// Auth guard — POST /api/kb-scrape must reject unauthenticated writes.
+// ---------------------------------------------------------------------------
+test("/api/kb-scrape rejects unauthenticated writes (401)", async () => {
+  const kbScrape = (await import("../api/kb-scrape.js")).default;
+  const before = process.env.KB_WRITE_TOKEN;
+  delete process.env.KB_WRITE_TOKEN; // simulate: no shared secret configured
+  try {
+    const res = await kbScrape(new Request("http://localhost/api/kb-scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "vault", notes: [{ t: "x", x: "y", course: "C", y: "2025", p: "p" }] }),
+    }));
+    assert.equal(res.status, 401, "no auth -> 401");
+  } finally {
+    if (before !== undefined) process.env.KB_WRITE_TOKEN = before;
+  }
+});
+
+test("/api/kb-scrape accepts a matching X-KB-Write-Token", async () => {
+  const kbScrape = (await import("../api/kb-scrape.js")).default;
+  const before = process.env.KB_WRITE_TOKEN;
+  process.env.KB_WRITE_TOKEN = "test-secret-123";
+  try {
+    const res = await kbScrape(new Request("http://localhost/api/kb-scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-KB-Write-Token": "test-secret-123" },
+      body: JSON.stringify({ source: "vault", notes: [{ t: "AuthOK", x: "body", course: "Auth", y: "2025", p: "auth/AuthOK" }] }),
+    }));
+    assert.equal(res.status, 200, "valid write token -> 200");
+  } finally {
+    delete process.env.KB_WRITE_TOKEN;
+    if (before !== undefined) process.env.KB_WRITE_TOKEN = before;
+  }
+});
+
+test("/api/kb-scrape rejects a WRONG X-KB-Write-Token (401)", async () => {
+  const kbScrape = (await import("../api/kb-scrape.js")).default;
+  const before = process.env.KB_WRITE_TOKEN;
+  process.env.KB_WRITE_TOKEN = "test-secret-123";
+  try {
+    const res = await kbScrape(new Request("http://localhost/api/kb-scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-KB-Write-Token": "wrong" },
+      body: JSON.stringify({ source: "vault", notes: [{ t: "x", x: "y", course: "C", y: "2025", p: "p" }] }),
+    }));
+    assert.equal(res.status, 401, "wrong token -> 401");
+  } finally {
+    delete process.env.KB_WRITE_TOKEN;
+    if (before !== undefined) process.env.KB_WRITE_TOKEN = before;
+  }
+});

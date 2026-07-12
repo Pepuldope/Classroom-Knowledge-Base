@@ -4,6 +4,27 @@ import { bundleFromRaw, bundleFromVault } from "../archive-builder.js";
 
 export const config = { runtime: "edge" };
 
+// Write-guard: the shared KB is overwritten wholesale by this endpoint, so it
+// MUST be authenticated. Two ways to prove write authority:
+//   1. A verified Google user (their OAuth token) — required for the
+//      user-facing `classroom` scrape path.
+//   2. A shared server secret (KB_WRITE_TOKEN) sent as `X-KB-Write-Token` —
+//      used by the autonomous loop + offline seed-vault.mjs, which have no
+//      Google login.
+// Either is sufficient. Without one, the write is rejected (HTTP 401).
+async function requireWriteAuth(req) {
+  // Path 2: shared server secret (loop / seed script).
+  const secret = process.env.KB_WRITE_TOKEN;
+  if (secret) {
+    const provided = req.headers.get("x-kb-write-token") || "";
+    if (provided && provided === secret) return { ok: true, via: "secret" };
+  }
+  // Path 1: verified Google user.
+  const sub = await verifyUser(req);
+  if (sub) return { ok: true, via: "google", sub };
+  return { ok: false };
+}
+
 /**
  * Persist a full Classroom scrape into the SHARED knowledge base (the safekeep).
  *
@@ -17,11 +38,21 @@ export const config = { runtime: "edge" };
  *      -> caller supplies an already-built bundle (e.g. the offline School
  *         Backup pipeline's archive.json, or a bundle built client-side by
  *         archive-builder.js). We validate and save it.
+ *   3. POST { source: "vault", notes: [...] }
+ *      -> offline seed script walked a vault and ships raw notes; we synthesize
+ *         the normalized KB bundle server-side (pure + testable). Uses
+ *         appendBundle so chunked seeding accumulates instead of overwriting.
  *
- * Only verified Google users may write. Anyone (no auth) may read via /api/kb-search.
+ * AUTH: every write requires EITHER a verified Google user (Bearer token) OR a
+ * shared server secret sent as `X-KB-Write-Token` (env KB_WRITE_TOKEN). The
+ * classic read paths (/api/kb-search, /api/kb-store export) remain public.
  */
 export default async function handler(req) {
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
+
+  // CRITICAL: this endpoint overwrites the shared KB — require write auth.
+  const auth = await requireWriteAuth(req);
+  if (!auth.ok) return jsonResponse({ error: "Unauthorized — write token or verified Google user required" }, 401);
 
   const body = await req.json().catch(() => null);
   if (!body) return jsonResponse({ error: "bad json" }, 400);

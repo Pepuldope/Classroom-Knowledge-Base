@@ -77,7 +77,7 @@ for (let i = 0; i < notes.length; i += CHUNK) {
   const slice = notes.slice(i, i + CHUNK);
   const res = await fetch(`${BASE}/api/kb-scrape`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-KB-Write-Token": process.env.KB_WRITE_TOKEN || "" },
     body: JSON.stringify({
       source: "vault",
       notes: slice,
