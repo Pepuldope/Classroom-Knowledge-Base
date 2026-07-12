@@ -18,6 +18,8 @@
 // .kb.local.json file, but node:fs is unsupported in the Edge runtime and
 // Vercel's build fails on it ("referencing unsupported modules: node:fs").
 
+import { jsonResponse } from "./_helpers.js";
+
 // Vercel's Upstash KV integration injects UPSTASH_REDIS_REST_URL / _TOKEN by
 // default, but some setups (or manual KV bindings) use KV_REST_API_URL / _TOKEN.
 // Support both so the shared DB persists regardless of how the store is bound.
