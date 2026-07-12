@@ -52,8 +52,12 @@ try {
     // note, etc.) instead of hardcoding brittle content.
     const meta = await (await page.request.fetch(LIVE + "/api/kb-search?q=__ping__")).json().catch(() => null);
     const courses = meta?.meta?.courseList || meta?.filters?.courses || [];
+    // courseList entries are objects {name,y,family,noteCount}; filters.courses
+    // are plain strings. Normalize to a course-name string either way.
+    const first = courses[0];
+    const firstName = typeof first === "string" ? first : (first && first.name) || "";
     // Prefer a course name token; else fall back to a generic probe.
-    const term = courses.length ? courses[0].split(/\s+/)[0] : "the";
+    const term = firstName ? firstName.split(/\s+/)[0] : "the";
     await page.fill("#kbSearchInput", term);
     await page.keyboard.press("Enter");
     // Either we get result cards, or (if the term matches nothing) the empty
