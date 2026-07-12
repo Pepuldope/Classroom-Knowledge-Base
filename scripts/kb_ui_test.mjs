@@ -238,6 +238,45 @@ try {
     if (main) main.hidden = false;
     });
 
+  // --- Onboarding button row must be HORIZONTALLY CENTERED (the "Scrape my
+  // Classroom" button was reported off-center). The card can be centered while
+  // the flex row inside sits left-aligned, so we assert the row's center aligns
+  // with the card's center. Also capture a dedicated screenshot for eyeballing.
+  await page.evaluate(() => {
+    const card = document.getElementById("kbOnboarding");
+    const main = document.getElementById("kbMain");
+    if (main) main.hidden = true;
+    if (card) card.hidden = false;
+  });
+  await page.screenshot({ path: SHOTS + "00-onboarding-button.png", fullPage: true });
+  await check("KB 'Scrape my Classroom' button row is horizontally centered", async () => {
+    const dims = await page.evaluate(() => {
+      const card = document.getElementById("kbOnboarding");
+      const row = document.querySelector("#kbOnboarding .kb-build-row");
+      if (!card || !row) return null;
+      const cr = card.getBoundingClientRect();
+      const rr = row.getBoundingClientRect();
+      return {
+        cardCenter: cr.left + cr.width / 2,
+        rowCenter: rr.left + rr.width / 2,
+        cardLeft: cr.left, rowLeft: rr.left, rowWidth: rr.width,
+      };
+    });
+    assert.ok(dims, "kbOnboarding + .kb-build-row must exist");
+    const delta = Math.abs(dims.cardCenter - dims.rowCenter);
+    assert.ok(
+      delta < 8,
+      `build-row button not horizontally centered (delta=${delta.toFixed(0)}px; card L=${dims.cardLeft.toFixed(0)}, row L=${dims.rowLeft.toFixed(0)}, rowW=${dims.rowWidth.toFixed(0)})`
+    );
+  });
+  // Restore populated state.
+  await page.evaluate(() => {
+    const card = document.getElementById("kbOnboarding");
+    const main = document.getElementById("kbMain");
+    if (card) card.hidden = true;
+    if (main) main.hidden = false;
+  });
+
   await page.screenshot({ path: SHOTS + "01-search-results.png", fullPage: true });
 
   // --- Click a result card -> detail modal ---

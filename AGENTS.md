@@ -38,8 +38,12 @@ views). They are DIFFERENT things and must stay separate.
      `node scripts/seed-vault.mjs live` (one-time fill of the live KV). Re-run it
      whenever the corpus should refresh.
    - Keep the live `{ source:"classroom", authToken }` path working for real users
-     who click "Scrape my Classroom".
-   - Tests live in `scripts/kb_e2e_test.mjs` (covers `bundleFromVault`).
+     who click "Scrape my Classroom". NOTE: Vercel Edge functions hard-timeout at
+     ~10s, so the classroom path is RESUMABLE + INCREMENTAL (client drives
+     `mode:"list"` then `mode:"course"` per course, each saved via appendBundle).
+     Never revert to a single-shot full scrape — it 504s on a real classroom.
+   - Tests live in `scripts/kb_e2e_test.mjs` (covers `bundleFromVault` + the
+     resumable classroom list/course flow with a mocked Classroom API).
 2. **SEARCH QUALITY.** Rank by **course AND topic** as weighted indexed fields
    (not only filters), so "Algebra quadratic" boosts Algebra notes. Derive a
    summary `s` per note so the ×3 summary weight fires. Guarantee every result

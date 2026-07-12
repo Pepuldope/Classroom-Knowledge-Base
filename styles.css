@@ -1340,7 +1340,7 @@ summary::-webkit-details-marker { color: var(--muted); }
    unaffected (it stays top-aligned and full-width). */
 #kbView { min-height: calc(100vh - 64px); display: flex; flex-direction: column; }
 #kbOnboarding { margin: auto; }
-.kb-build-row { display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
+.kb-build-row { display: flex; justify-content: center; gap: 0.75rem; align-items: center; flex-wrap: wrap; margin-top: 1rem; }
 .kb-search-bar { margin: 1.25rem 0 0.75rem; }
 .kb-search-bar input { width: 100%; padding: 0.7rem 0.9rem; font-size: 1rem; border: 1px solid var(--border); border-radius: 10px; }
 .kb-export-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.55rem 0.7rem; margin: 0.75rem 0 0; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 10px; }

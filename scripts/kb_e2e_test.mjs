@@ -605,3 +605,70 @@ test("/api/kb-scrape rejects a WRONG X-KB-Write-Token (401)", async () => {
     if (before !== undefined) process.env.KB_WRITE_TOKEN = before;
   }
 });
+
+// ---------------------------------------------------------------------------
+// Resumable Classroom scrape — list + per-course modes (no live Google token).
+// Stubs global fetch to emulate the Classroom API so we exercise the new
+// bounded, incremental path that avoids the Vercel Edge 10s 504 timeout.
+// ---------------------------------------------------------------------------
+test("classroom mode:'list' returns course ids, mode:'course' appends one course", async () => {
+  const kbScrape = (await import("../api/kb-scrape.js")).default;
+  const realFetch = globalThis.fetch;
+  const beforeTok = process.env.KB_WRITE_TOKEN;
+  process.env.KB_WRITE_TOKEN = "test-classroom-secret"; // simulate loop/seed secret
+  const FAKE = {
+    "/v1/courses": { courses: [
+      { id: "c1", name: "Algebra" },
+      { id: "c2", name: "Geometry" },
+    ] },
+    "/v1/courses/c1/courseWork": { courseWork: [{ id: "w1", title: "Quadratics" }] },
+    "/v1/courses/c2/courseWork": { courseWork: [{ id: "w2", title: "Triangles" }] },
+  };
+  globalThis.fetch = async (url) => {
+    const u = String(url);
+    // Match most-specific key first (courseWork URLs also contain "/v1/courses").
+    const keys = Object.keys(FAKE).sort((a, b) => b.length - a.length);
+    for (const key of keys) if (u.includes(key)) return { ok: true, json: async () => FAKE[key] };
+    return { ok: true, json: async () => ({ topic: [], courseWorkMaterials: [], announcements: [], studentSubmissions: [] }) };
+  };
+  try {
+    const authHdr = { "Content-Type": "application/json", "X-KB-Write-Token": "test-classroom-secret" };
+    // list
+    const listRes = await kbScrape(new Request("http://localhost/api/kb-scrape", {
+      method: "POST", headers: authHdr,
+      body: JSON.stringify({ source: "classroom", mode: "list", authToken: "fake" }),
+    }));
+    assert.equal(listRes.status, 200, "list mode -> 200");
+    const listJson = await listRes.json();
+    assert.equal(listJson.courses.length, 2, "should list 2 courses");
+
+    // per-course append (c1)
+    const c1Res = await kbScrape(new Request("http://localhost/api/kb-scrape", {
+      method: "POST", headers: authHdr,
+      body: JSON.stringify({ source: "classroom", mode: "course", courseId: "c1", authToken: "fake" }),
+    }));
+    assert.equal(c1Res.status, 200, "course c1 -> 200");
+    const c1Json = await c1Res.json();
+    assert.ok(c1Json.notes >= 1, "c1 should produce >=1 note");
+    assert.equal(c1Json.courseId, "c1", "echoes courseId");
+
+    // per-course append (c2)
+    const c2Res = await kbScrape(new Request("http://localhost/api/kb-scrape", {
+      method: "POST", headers: authHdr,
+      body: JSON.stringify({ source: "classroom", mode: "course", courseId: "c2", authToken: "fake" }),
+    }));
+    assert.equal(c2Res.status, 200, "course c2 -> 200");
+    const c2Json = await c2Res.json();
+    assert.ok(c2Json.notes >= 1, "c2 should produce >=1 note");
+
+    // the shared bundle should now hold both courses' notes (incremental)
+    const { getBundle } = await import("../api/kb-store.js");
+    const b = await getBundle();
+    assert.ok(b.notes.length >= 2, "bundle accumulated notes from both courses (incremental append)");
+    assert.ok(b.courses.length >= 2, "facets reflect both courses");
+  } finally {
+    globalThis.fetch = realFetch;
+    delete process.env.KB_WRITE_TOKEN;
+    if (beforeTok !== undefined) process.env.KB_WRITE_TOKEN = beforeTok;
+  }
+});

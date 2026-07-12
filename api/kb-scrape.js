@@ -83,6 +83,10 @@ export default async function handler(req) {
   }
 
   // ---- Path 1: fetch live from Classroom using the caller's token ----
+  // Resumable + incremental: Vercel Edge functions hard-timeout at ~10s, so we
+  // never scrape the whole Classroom in one shot. The client drives it in short
+  // steps (list -> per-course), each saved via appendBundle so partial progress
+  // is preserved and one slow course can't 504 the entire scrape.
   if (body.source === "classroom") {
     const authToken = body.authToken || "";
     if (!authToken) return jsonResponse({ error: "authToken (Google access token) required" }, 400);
@@ -93,49 +97,87 @@ export default async function handler(req) {
       return r.json();
     };
 
-    try {
-      const bundle = await bundleFromRawWithFetch(gFetch);
-      await saveBundle(bundle);
-      const meta = await getMeta();
-      return jsonResponse({ ok: true, meta });
-    } catch (e) {
-      return jsonResponse({ error: "scrape_failed", details: String(e.message || e) }, 502);
+    // mode "list": return the course list so the client can iterate.
+    if (body.mode === "list" || !body.mode) {
+      try {
+        const list = await listCourses(gFetch);
+        return jsonResponse({ ok: true, mode: "list", courses: list, total: list.length });
+      } catch (e) {
+        return jsonResponse({ error: "list_failed", details: String(e.message || e) }, 502);
+      }
     }
+
+    // mode "course": scrape ONE course, append it, return its note count.
+    if (body.mode === "course") {
+      const courseId = body.courseId;
+      if (!courseId) return jsonResponse({ error: "courseId required for mode:'course'" }, 400);
+      try {
+        const single = await scrapeOneCourse(gFetch, courseId);
+        const bundle = bundleFromRaw(single);
+        await appendBundle(bundle);
+        const meta = await getMeta();
+        return jsonResponse({
+          ok: true,
+          mode: "course",
+          courseId,
+          courseName: single.courses[0]?.name || courseId,
+          notes: bundle.notes.length,
+          meta,
+        });
+      } catch (e) {
+        return jsonResponse({ error: "course_failed", courseId, details: String(e.message || e) }, 502);
+      }
+    }
+
+    return jsonResponse({ error: "unknown classroom mode (use 'list' or 'course')" }, 400);
   }
 
   return jsonResponse({ error: "unknown source — send {source:'classroom'} or {source:'bundle', bundle}" }, 400);
 }
 
-// Same facet fetch logic as archive-builder.js's buildArchiveFromClassroom, but
-// takes a gFetch instead of needing app.js. Returns the synthesized bundle.
-async function bundleFromRawWithFetch(gFetch) {
-  const CLASSROOM_BASE = "https://classroom.googleapis.com/v1";
-  const PAGE_SIZE = 100;
-  const fetchAll = async (urlBuilder, listKey) => {
-    const items = [];
-    let pageToken;
-    do {
-      const resp = await gFetch(urlBuilder(pageToken));
-      const page = resp[listKey];
-      if (Array.isArray(page)) items.push(...page);
-      pageToken = resp.nextPageToken || null;
-    } while (pageToken);
-    return items;
-  };
+// --- Classroom helpers (resumable, per-call bounded) ---
+
+const CLASSROOM_BASE = "https://classroom.googleapis.com/v1";
+const PAGE_SIZE = 100;
+
+async function fetchAll(gFetch, urlBuilder, listKey) {
+  const items = [];
+  let pageToken;
+  do {
+    const resp = await gFetch(urlBuilder(pageToken));
+    const page = resp[listKey];
+    if (Array.isArray(page)) items.push(...page);
+    pageToken = resp.nextPageToken || null;
+  } while (pageToken);
+  return items;
+}
+
+// mode "list": just the course id+name list (one bounded call).
+async function listCourses(gFetch) {
   const courses = await fetchAll(
+    gFetch,
     (pt) => `${CLASSROOM_BASE}/courses?courseStates=ACTIVE&courseStates=ARCHIVED&pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`,
     "courses"
   );
-  const courseData = {};
-  for (const course of courses) {
-    const [topics, courseWork, courseWorkMaterials, announcements, submissions] = await Promise.all([
-      fetchAll((pt) => `${CLASSROOM_BASE}/courses/${course.id}/topics?pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`, "topic").catch(() => []),
-      fetchAll((pt) => `${CLASSROOM_BASE}/courses/${course.id}/courseWork?pageSize=${PAGE_SIZE}&courseWorkStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "courseWork").catch(() => []),
-      fetchAll((pt) => `${CLASSROOM_BASE}/courses/${course.id}/courseWorkMaterials?pageSize=${PAGE_SIZE}&courseWorkMaterialStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "courseWorkMaterial").catch(() => []),
-      fetchAll((pt) => `${CLASSROOM_BASE}/courses/${course.id}/announcements?pageSize=${PAGE_SIZE}&announcementStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "announcements").catch(() => []),
-      fetchAll((pt) => `${CLASSROOM_BASE}/courses/${course.id}/courseWork/-/studentSubmissions?userId=me&pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`, "studentSubmissions").catch(() => []),
-    ]);
-    courseData[course.id] = { topics, courseWork, courseWorkMaterials, announcements, submissions };
-  }
-  return bundleFromRaw({ courses, courseData });
+  return courses.map((c) => ({ id: c.id, name: c.name }));
+}
+
+// mode "course": fetch ONE course's facets (5 parallel calls), shaped just like
+// bundleFromRaw expects for a single course. Bounded to one course so a single
+// request stays well under the Edge 10s limit.
+async function scrapeOneCourse(gFetch, courseId) {
+  const [course] = await fetchAll(
+    gFetch,
+    (pt) => `${CLASSROOM_BASE}/courses?courseStates=ACTIVE&courseStates=ARCHIVED&pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`,
+    "courses"
+  ).then((list) => list.filter((c) => c.id === courseId));
+  if (!course) throw new Error(`course ${courseId} not found / not accessible`);
+  const [topics, courseWork, courseWorkMaterials, announcements, submissions] = await Promise.all([
+    fetchAll(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${courseId}/topics?pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`, "topic").catch(() => []),
+    fetchAll(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${courseId}/courseWork?pageSize=${PAGE_SIZE}&courseWorkStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "courseWork").catch(() => []),
+    fetchAll(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${courseId}/courseWorkMaterials?pageSize=${PAGE_SIZE}&courseWorkMaterialStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "courseWorkMaterial").catch(() => []),
+    fetchAll(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${courseId}/announcements?pageSize=${PAGE_SIZE}&announcementStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "announcements").catch(() => []),
+    fetchAll(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${courseId}/courseWork/-/studentSubmissions?userId=me&pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`, "studentSubmissions").catch(() => []),
+  ]);
+  return { courses: [course], courseData: { [courseId]: { topics, courseWork, courseWorkMaterials, announcements, submissions } } };
 }

@@ -308,24 +308,51 @@ async function doScrape(token) {
   const logEl = $("kbBuildLog");
   const progress = $("kbBuildProgressBar");
   if (panel) panel.hidden = false;
-  if (statusEl) statusEl.textContent = "Scraping your Classroom into the shared DB…";
+  if (statusEl) { statusEl.textContent = "Reading your courses…"; statusEl.classList.remove("error"); }
   if (logEl) logEl.innerHTML = "";
-  if (progress) progress.style.width = "10%";
+  if (progress) progress.style.width = "5%";
+  const log = (msg) => { if (logEl) { const li = document.createElement("div"); li.textContent = msg; logEl.appendChild(li); } };
 
+  const authHdr = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
   try {
-    const r = await fetch("/api/kb-scrape", {
+    // Step 1: list courses (bounded, fast).
+    const listRes = await fetch("/api/kb-scrape", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ source: "classroom", authToken: token }),
+      headers: authHdr,
+      body: JSON.stringify({ source: "classroom", mode: "list", authToken: token }),
     });
-    if (progress) progress.style.width = "100%";
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      setKbBuildError(err.error || r.status);
-      return;
+    if (!listRes.ok) { const e = await listRes.json().catch(() => ({})); setKbBuildError(e.error || listRes.status); return; }
+    const list = await listRes.json();
+    const courses = list.courses || [];
+    if (courses.length === 0) { if (statusEl) statusEl.textContent = "✅ No courses found to scrape."; return; }
+    if (statusEl) statusEl.textContent = `Scraping ${courses.length} course${courses.length === 1 ? "" : "s"} into the shared DB…`;
+
+    // Step 2: per-course, incremental save so a single slow/failed course can't
+    // 504 the whole scrape and partial progress is preserved.
+    let done = 0, failed = 0;
+    for (const c of courses) {
+      try {
+        const r = await fetch("/api/kb-scrape", {
+          method: "POST",
+          headers: authHdr,
+          body: JSON.stringify({ source: "classroom", mode: "course", courseId: c.id, authToken: token }),
+        });
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        const d = await r.json();
+        done++;
+        log(`✓ ${c.name || c.id} — ${d.notes} notes`);
+      } catch (err) {
+        failed++;
+        log(`✗ ${c.name || c.id} — ${err.message}`);
+      }
+      if (progress) progress.style.width = `${Math.round(((done + failed) / courses.length) * 100)}%`;
     }
-    const data = await r.json();
-    if (statusEl) statusEl.textContent = `✅ Saved ${data.meta?.noteCount?.toLocaleString()} notes to the shared knowledge base.`;
+
+    if (statusEl) {
+      statusEl.textContent = failed === 0
+        ? `✅ Saved ${done} course${done === 1 ? "" : "s"} to the shared knowledge base.`
+        : `⚠️ Saved ${done} course${done === 1 ? "" : "s"}; ${failed} failed (see log). The rest is searchable now.`;
+    }
     setTimeout(() => refreshKb(), 600);
   } catch (e) {
     setKbBuildError(e.message);
