@@ -14,12 +14,16 @@
 // capable models first and fails over, so quality is high by default.
 export const PROVIDERS = [
   // 1. NVIDIA — DeepSeek v4 Flash (strong, fast, reliable free tier; default workhorse)
+  //    HARD LIMIT (per Pepuldo): the whole NVIDIA API key must stay UNDER 48
+  //    requests/minute. We enforce a 46/min sliding-window throttle below so the
+  //    router skips NVIDIA (and fails over) rather than blowing the key-wide cap.
   {
     name: "nvidia",
     baseURL: "https://integrate.api.nvidia.com/v1/chat/completions",
     apiKey: process.env.NVIDIA_API_KEY,
     model: "deepseek-ai/deepseek-v4-flash",
     effort: 3,
+    rpmLimit: 46, // < 48 key-wide ceiling; enforced in routeChat
   },
   // 2. Google Gemini 2.5 Flash (OpenAI-compatible mode, fast + capable)
   {
@@ -108,6 +112,19 @@ function enabledProviders() {
  *    hard task won't land on a weak model unless nothing stronger is available.
  */
 let _rotate = 0;
+// Sliding-window request timestamps per provider name, used to enforce rpmLimit.
+const _rpmWindows = new Map();
+function underRpmLimit(p) {
+  if (!p.rpmLimit) return true;
+  const now = Date.now();
+  const windowMs = 60_000;
+  const stamps = (_rpmWindows.get(p.name) || []).filter((t) => now - t < windowMs);
+  _rpmWindows.set(p.name, stamps);
+  if (stamps.length >= p.rpmLimit) return false; // would exceed cap -> skip
+  stamps.push(now);
+  return true;
+}
+
 export async function routeChat(messages, opts = {}) {
   const {
     max_tokens,
@@ -138,6 +155,11 @@ export async function routeChat(messages, opts = {}) {
 
   let lastErr = null;
   for (const p of ordered) {
+    // Enforce per-provider RPM caps (e.g. NVIDIA <48/min key-wide limit).
+    if (!underRpmLimit(p)) {
+      lastErr = new Error(`${p.name} skipped: rpmLimit (${p.rpmLimit}/min) reached`);
+      continue; // fail over to the next provider
+    }
     try {
       const body = {
         model: p.model,

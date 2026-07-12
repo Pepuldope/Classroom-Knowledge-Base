@@ -51,6 +51,11 @@ views). They are DIFFERENT things and must stay separate.
    / Cerebras / GitHub / Qwen / FreeLLMAPI / OpenRouter and uses effort profiles
    (hard/tutor/quick). Do NOT pin the tutor to one model or provider. More models
    + more effort = better answers.
+   - **NVIDIA hard limit:** the whole NVIDIA API key must stay **under 48
+     requests/minute** (key-wide, not per-model). `api/ai-router.js` enforces this
+     with a 46/min sliding-window throttle on the `nvidia` provider — when the cap
+     is hit it fails over to the next provider instead of exhausting the key. Do
+     not raise `rpmLimit` above 47.
 
 ## COMMIT / DEPLOY DISCIPLINE (hard rules)
 - TDD only (software-development:test-driven-development). Red → green.
