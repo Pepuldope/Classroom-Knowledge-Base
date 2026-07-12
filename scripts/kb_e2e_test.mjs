@@ -25,6 +25,7 @@ import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
+import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList } from "../kb.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
@@ -485,4 +486,46 @@ test("/api/kb-browse on a missing DB returns an empty courses list", async () =>
   assert.equal(r.status, 200);
   const d = await r.json();
   assert.ok(Array.isArray(d.courses) && d.courses.length === 0, "no courses when DB empty");
+});
+
+// ---------------------------------------------------------------------------
+// Vault ingestion (source:'vault') — makes the KB functional without a live
+// Google token. Pure + Edge-safe; the fs walk happens in scripts/seed-vault.mjs.
+// ---------------------------------------------------------------------------
+test("bundleFromVault derives a summary `s` from the body (so search ×3 fires)", () => {
+  const b = bundleFromVault([
+    { t: "Mitochondria", x: "Mitochondria are the powerhouse of the cell. They produce ATP.", course: "Biology", y: "2025-26", topic: "Cells" },
+  ]);
+  assert.equal(b.notes.length, 1);
+  const n = b.notes[0];
+  assert.equal(n.s, "Mitochondria are the powerhouse of the cell.", "summary = first sentence");
+  assert.equal(n.course, "Biology");
+  assert.equal(n.y, "2025-26");
+  assert.equal(n.topic, "Cells");
+});
+
+test("bundleFromVault falls back to 'Course · Topic: Title' when body is short", () => {
+  const b = bundleFromVault([
+    { t: "Exam tips", x: "", course: "Math", y: "2025-26", topic: "Algebra" },
+  ]);
+  assert.equal(b.notes[0].s, "Math · Algebra: Exam tips");
+});
+
+test("bundleFromVault produces multiple courses + years for the filter facets", () => {
+  const b = bundleFromVault([
+    { t: "A1", x: "body one", course: "Algebra", y: "2025-26" },
+    { t: "G1", x: "body two", course: "Geometry", y: "2025-26" },
+    { t: "A2", x: "body three", course: "Algebra", y: "2024-25" },
+  ]);
+  assert.equal(b.courses.length, 2, "two distinct courses");
+  assert.equal(b.years.length, 2, "two distinct years");
+});
+
+test("bundleFromVault accepts title/body aliases and missing course", () => {
+  const b = bundleFromVault([
+    { title: "Untitled note", body: "Some content here about photosynthesis.", topicName: "Plants" },
+  ]);
+  assert.equal(b.notes[0].t, "Untitled note");
+  assert.equal(b.notes[0].course, "Uncategorized");
+  assert.ok(b.notes[0].s.startsWith("Some content"), "summary from body");
 });

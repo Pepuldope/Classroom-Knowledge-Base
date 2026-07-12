@@ -273,6 +273,81 @@ export function bundleFromRaw(raw) {
   };
 }
 
+/**
+ * Build a KB bundle from a directory of markdown notes (the "vault").
+ *
+ * This is the server-side, Edge-safe path used when the caller supplies a
+ * prebuilt vault bundle (source:'vault' in /api/kb-scrape). The filesystem walk
+ * itself happens offline (scripts/seed-vault.mjs) because Vercel's Edge runtime
+ * bans node:fs — the result is POSTed as a bundle. This function is pure so it
+ * is fully unit-testable without touching disk.
+ *
+ * Each raw note: { t, x, course, y, topic, path } (or {title,body,...} aliases).
+ * We normalize into the KB note shape, DERIVING a summary `s` from the body
+ * (first sentence / heading) so the search ×3 summary weight actually fires,
+ * and falling back to title when the body is empty.
+ */
+export function bundleFromVault(rawNotes, meta = {}) {
+  const notes = [];
+  const usedPaths = new Set();
+  for (const n of rawNotes || []) {
+    const title = (n.t || n.title || "Untitled").toString().trim();
+    const body = (n.x || n.body || "").toString();
+    const course = (n.course || n.courseName || "").toString().trim();
+    const year = (n.y || n.year || "").toString().trim();
+    const topic = (n.topic || n.topicName || "").toString().trim() || null;
+    const basePath = (
+      n.p ||
+      n.path ||
+      `${year || "vault"}/${course || "notes"}/${topic || "general"}/${slugify(title)}`
+    ).toString();
+    notes.push({
+      p: makeUniquePath(basePath, usedPaths),
+      t: title,
+      course: course || "Uncategorized",
+      y: year || "undated",
+      topic,
+      kind: "note",
+      s: deriveSummary(title, body, course, topic),
+      x: body,
+    });
+  }
+  const years = [...new Set(notes.map((n) => n.y))].sort();
+  const courses = [...new Set(notes.map((n) => n.course))].sort().map((name) => ({
+    name,
+    y: null,
+    family: null,
+    noteCount: notes.filter((n) => n.course === name).length,
+  }));
+  return {
+    version: 1,
+    source: "vault",
+    generatedAt: new Date().toISOString(),
+    years,
+    courses,
+    notes,
+    clusters: [],
+    ...(meta && Object.keys(meta).length ? { metadata: meta } : {}),
+  };
+}
+
+function deriveSummary(title, body, course, topic) {
+  const clean = body.replace(/^#.*$/gm, "").replace(/\s+/g, " ").trim();
+  const firstSentence = clean.split(/(?<=[.!?])\s/)[0] || "";
+  if (firstSentence.length >= 12) return firstSentence.slice(0, 280).trim();
+  // short/empty body -> "Course · Topic: Title"
+  const lead = [course, topic].filter(Boolean).join(" · ");
+  return (lead ? lead + ": " : "") + title;
+}
+
+function slugify(s) {
+  return (s || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80) || "note";
+}
+
 // ---------------------------------------------------------------------------
 // Live fetch from the Classroom API. Takes the app's own authenticated
 // `gFetch(url) -> Promise<json>` helper (see app.js) so auth/refresh/401
