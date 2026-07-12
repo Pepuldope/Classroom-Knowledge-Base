@@ -309,7 +309,10 @@ export function bundleFromVault(rawNotes, meta = {}) {
       topic,
       kind: "note",
       s: deriveSummary(title, body, course, topic),
-      x: body,
+      // Cap stored body. Search ranks on title/summary/body tokens and the
+      // snippet only needs the leading ~200 chars, so 1500 chars is plenty and
+      // keeps each KV shard comfortably under the per-value size limit.
+      x: body.length > 1500 ? body.slice(0, 1500) + "…" : body,
     });
   }
   const years = [...new Set(notes.map((n) => n.y))].sort();

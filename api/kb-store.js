@@ -27,6 +27,12 @@ const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const BUNDLE_KEY = "kb:bundle";
 const META_KEY = "kb:meta";
+// Sharding: split notes into <=SHARD_NOTES chunks (kb:shard:0..N) + a tiny
+// kb:shards index ({count}). Defeats the KV per-value size limit that a single
+// notes array would hit past ~2.5k notes. Reads reassemble the shards.
+const SHARD_NOTES = 400;
+const SHARDS_KEY = "kb:shards";
+const shardKey = (i) => `kb:shard:${i}`;
 
 // Process-memory fallback used only when KV is not configured.
 const mem = new Map();
@@ -63,29 +69,93 @@ async function kvSetJSON(key, value) {
   if (!r.ok) throw new Error(`KV set failed: ${r.status}`);
 }
 
+// ---- sharded read/write helpers ----
+async function writeSharded(notes, source) {
+  const shardCount = Math.max(1, Math.ceil(notes.length / SHARD_NOTES));
+  if (!kvAvailable()) {
+    for (let i = 0; i < shardCount; i++) {
+      mem.set(shardKey(i), notes.slice(i * SHARD_NOTES, (i + 1) * SHARD_NOTES));
+    }
+    mem.set(SHARDS_KEY, { count: shardCount });
+    mem.set("kb:src", source || "vault");
+    return;
+  }
+  for (let i = 0; i < shardCount; i++) {
+    await kvSetJSON(shardKey(i), notes.slice(i * SHARD_NOTES, (i + 1) * SHARD_NOTES));
+  }
+  const prev = await kvGetJSON(SHARDS_KEY);
+  const prevCount = prev?.count || 0;
+  for (let i = shardCount; i < prevCount; i++) {
+    await fetch(`${KV_URL}/del/${encodeURIComponent(shardKey(i))}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${KV_TOKEN}` },
+      cache: "no-store",
+    });
+  }
+  await kvSetJSON(SHARDS_KEY, { count: shardCount });
+}
+
+async function readShardedNotes() {
+  if (!kvAvailable()) {
+    const all = [];
+    const shards = mem.get(SHARDS_KEY)?.count || 0;
+    for (let i = 0; i < shards; i++) all.push(...(mem.get(shardKey(i)) || []));
+    return all;
+  }
+  const shards = (await kvGetJSON(SHARDS_KEY))?.count || 0;
+  const out = [];
+  for (let i = 0; i < shards; i++) {
+    const slice = await kvGetJSON(shardKey(i));
+    if (Array.isArray(slice)) out.push(...slice);
+  }
+  return out;
+}
+
+function bundleFromNotes(notes, extra = {}) {
+  const years = [...new Set(notes.map((n) => n.y).filter(Boolean))].sort();
+  const courseNames = [...new Set(notes.map((n) => n.course).filter(Boolean))].sort();
+  const courses = courseNames.map((name) => ({
+    name,
+    y: null,
+    family: null,
+    noteCount: notes.filter((n) => n.course === name).length,
+  }));
+  return {
+    version: 1,
+    source: extra.source || "vault",
+    generatedAt: new Date().toISOString(),
+    years,
+    courses,
+    notes,
+    clusters: extra.clusters || [],
+    ...(extra.metadata ? { metadata: extra.metadata } : {}),
+  };
+}
+
 /** Load the shared knowledge-base bundle, or null if none has been built yet. */
 export async function getBundle() {
-  if (kvAvailable()) return kvGetJSON(BUNDLE_KEY);
-  return mem.get(BUNDLE_KEY) || null;
+  const notes = await readShardedNotes();
+  const shardsPresent = kvAvailable() ? !!(await kvGetJSON(SHARDS_KEY)) : !!mem.get(SHARDS_KEY);
+  if (notes.length === 0 && !shardsPresent) return null;
+  const source = !kvAvailable() ? mem.get("kb:src") || "vault" : "vault";
+  return bundleFromNotes(notes, { source });
 }
 
 /** Persist the shared knowledge-base bundle (the safekeep). */
 export async function saveBundle(bundle) {
+  const notes = Array.isArray(bundle.notes) ? bundle.notes : [];
   const meta = {
-    noteCount: Array.isArray(bundle.notes) ? bundle.notes.length : 0,
+    noteCount: notes.length,
     years: Array.isArray(bundle.years) ? bundle.years : [],
     courses: Array.isArray(bundle.courses) ? bundle.courses.length : 0,
     courseList: Array.isArray(bundle.courses) ? bundle.courses : [],
     generatedAt: bundle.generatedAt || null,
     updatedAt: new Date().toISOString(),
+    shards: Math.max(1, Math.ceil(notes.length / SHARD_NOTES)),
   };
-  if (kvAvailable()) {
-    await kvSetJSON(BUNDLE_KEY, bundle);
-    await kvSetJSON(META_KEY, meta);
-    return;
-  }
-  mem.set(BUNDLE_KEY, bundle);
-  mem.set(META_KEY, meta);
+  await writeSharded(notes, bundle.source);
+  if (kvAvailable()) await kvSetJSON(META_KEY, meta);
+  else mem.set(META_KEY, meta);
 }
 
 /** Read-only metadata about the current safekeep (counts, dates). */
@@ -150,7 +220,7 @@ export async function hasBundle() {
 
 // ---------------------------------------------------------------------------
 // HTTP route: GET /api/kb-store?action=export
-// Returns the full shared knowledge-base bundle (kb:bundle) as JSON.
+// Returns the full shared knowledge-base bundle (reassembled from shards) as JSON.
 // Public (no auth): the shared DB is readable by anyone.
 // ---------------------------------------------------------------------------
 export const config = { runtime: "edge" };
