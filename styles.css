@@ -359,6 +359,25 @@ summary::-webkit-details-marker { color: var(--muted); }
 
 .empty { color: var(--muted); font-style: italic; padding: 0.5rem 0; }
 
+/* KB search in-flight loading state (owner #7) — intentional, not blank. */
+.kb-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.25rem 0.5rem;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+.kb-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent, #2563eb);
+  border-radius: 999px;
+  animation: dot-spin 0.8s linear infinite;
+  flex: none;
+}
+
 #ai {
   position: fixed;
   top: 0; right: 0; bottom: 0;

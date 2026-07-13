@@ -363,6 +363,19 @@ function debounce(fn, ms) {
   let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); };
 }
 
+// In-flight "searching" affordance (owner #7 — loading state must look
+// intentional, never a blank/stale panel). Cleared by the next render which
+// replaces #kbResults content.
+function showKbLoading() {
+  const results = $("kbResults");
+  if (!results) return;
+  results.hidden = false;
+  results.innerHTML =
+    '<div class="kb-loading" role="status" aria-live="polite">' +
+    '<span class="kb-spinner" aria-hidden="true"></span>' +
+    "<span>Searching the knowledge base…</span></div>";
+}
+
 // accessToken lives in app.js's module scope; read it via the window mirror it
 // exposes (window.__cwaAccessToken). Fall back to our own cached token.
 function currentAccessToken() {
@@ -509,6 +522,9 @@ async function runKbSearch(query) {
   }
   // A real query supersedes browse; hide the browse panel.
   hideBrowsePanel();
+  // Intentional IN-FLIGHT state: show a spinner so the brief fetch round-trip
+  // (the KB reassembles 13 KV shards) never looks like a frozen/blank panel.
+  showKbLoading();
   try {
     const params = new URLSearchParams({ q: query, limit: "8" });
     if (kbActiveCourse) params.set("course", kbActiveCourse);

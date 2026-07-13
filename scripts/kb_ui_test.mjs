@@ -465,10 +465,17 @@ try {
   // properties via computed styles + layout geometry — no screenshot analysis
   // required — so the "aesthetic" gate keeps firing even without vision.
   await check("course accordion renders styled (border-radius + pointer cursor)", async () => {
-    // Open a course to reveal its note accordion.
+    // Explicitly reset to the browse-by-course surface (mirrors the empty-query
+    // path) so this check is deterministic and not dependent on prior steps'
+    // search state. Force-hide results + reveal the browse panel, then clear
+    // the input so the production path is the one that renders the course grid.
     await page.evaluate(() => {
       const input = document.getElementById("kbSearchInput");
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
+      const results = document.getElementById("kbResults");
+      if (results) { results.hidden = true; results.innerHTML = ""; }
+      const browse = document.getElementById("kbBrowse");
+      if (browse) browse.hidden = false;
     });
     await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 8000 });
     await page.locator("#kbBrowseCourses .kb-course-card").first().click();
