@@ -40,6 +40,66 @@ export function kbFilterModel(filters, active = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Fold a course's notes into an ordered list of collapsible sprint/topic
+// groups (owner request #11). Opening a course used to spill ALL notes (e.g.
+// 343 for "Matematika 1") in one flat list — overwhelming. This groups by the
+// note `topic`, detects "Šprint N …" sprint topics, and orders them:
+//   1. sprints first, in NUMERIC order (so "Šprint 10" sorts after "Šprint 5",
+//      not lexically before "Šprint 2"),
+//   2. then all other named topics (stable, first-seen order),
+//   3. then a single trailing "Other" group for untopiced notes.
+// Each group is { key, label, isSprint, sprintNum, count, notes } so the UI can
+// render a Course > Sprint/Topic accordion, collapsed by default. Pure (no DOM).
+// ---------------------------------------------------------------------------
+const OTHER_GROUP_LABEL = "Other";
+export function groupCourseNotesBySprint(notes) {
+  const list = Array.isArray(notes) ? notes : [];
+  const groups = new Map(); // key -> group
+  let order = 0;
+  for (const n of list) {
+    const rawTopic = (n && n.topic != null ? String(n.topic).trim() : "");
+    const key = rawTopic || OTHER_GROUP_LABEL;
+    let g = groups.get(key);
+    if (!g) {
+      // Detect "Šprint N …" / "Sprint N …" (accent- and case-insensitive).
+      const m = rawTopic.match(/^(?:š|s)print\s+(\d+)/i);
+      g = {
+        key,
+        label: key,
+        isSprint: !!m,
+        sprintNum: m ? Number(m[1]) : null,
+        seen: order++,
+        notes: [],
+      };
+      groups.set(key, g);
+    }
+    g.notes.push(n);
+  }
+  const arr = [...groups.values()];
+  arr.sort((a, b) => {
+    // Sprints first, ordered numerically.
+    if (a.isSprint && b.isSprint) return a.sprintNum - b.sprintNum;
+    if (a.isSprint) return -1;
+    if (b.isSprint) return 1;
+    // "Other" (untopiced) always sinks to the very bottom.
+    const aOther = a.key === OTHER_GROUP_LABEL;
+    const bOther = b.key === OTHER_GROUP_LABEL;
+    if (aOther && !bOther) return 1;
+    if (bOther && !aOther) return -1;
+    // Remaining named topics keep first-seen (stable) order.
+    return a.seen - b.seen;
+  });
+  return arr.map(({ key, label, isSprint, sprintNum, notes }) => ({
+    key,
+    label,
+    isSprint,
+    sprintNum,
+    count: notes.length,
+    notes,
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // View switching
 // ---------------------------------------------------------------------------
 export function showKbView() {
@@ -632,36 +692,63 @@ async function openCourse(course) {
     if (!notes.length) { if (notesEl) notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`; return; }
     if (notesEl) {
       notesEl.innerHTML = "";
-      for (const note of notes) {
-        const row = document.createElement("div");
-        row.className = "assignment kb-result-card";
-        row.tabIndex = 0;
-        row.setAttribute("role", "button");
-        row.dataset.noteIndex = String(note.noteIndex ?? "");
-        row.setAttribute("aria-label", `Open note: ${note.t || "(untitled)"}`);
-        const body = document.createElement("div");
-        body.className = "assignment-body";
-        const title = document.createElement("div");
-        title.className = "title";
-        title.textContent = note.t || "(untitled)";
-        body.appendChild(title);
-        const meta = document.createElement("div");
-        meta.className = "meta";
-        meta.textContent = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
-        body.appendChild(meta);
-        if (note._snippet) {
-          const snip = document.createElement("div");
-          snip.className = "summary archive-snippet";
-          // Browse snippets have no query to highlight; show plain text.
-          snip.textContent = note._snippet;
-          body.appendChild(snip);
+      // Owner request #11 — fold the (often 100+) notes into collapsible
+      // sprint/topic groups instead of one flat dump. Groups are collapsed by
+      // default so the class view opens as a tidy sprint/topic tree.
+      const groups = groupCourseNotesBySprint(notes);
+      const header = document.createElement("div");
+      header.className = "kb-course-groups-head";
+      header.textContent = `${notes.length} note${notes.length === 1 ? "" : "s"} in ${groups.length} group${groups.length === 1 ? "" : "s"}`;
+      notesEl.appendChild(header);
+      // Expand the first group by default so the view isn't fully collapsed on
+      // open; the rest stay closed to keep the tree tidy.
+      groups.forEach((g, gi) => {
+        const details = document.createElement("details");
+        details.className = "kb-sprint-group" + (g.isSprint ? " is-sprint" : "");
+        if (gi === 0) details.open = true;
+        const summary = document.createElement("summary");
+        summary.className = "kb-sprint-summary";
+        const gLabel = document.createElement("span");
+        gLabel.className = "kb-sprint-label";
+        gLabel.textContent = g.label;
+        const gCount = document.createElement("span");
+        gCount.className = "kb-sprint-count";
+        gCount.textContent = `${g.count}`;
+        summary.appendChild(gLabel);
+        summary.appendChild(gCount);
+        details.appendChild(summary);
+        for (const note of g.notes) {
+          const row = document.createElement("div");
+          row.className = "assignment kb-result-card";
+          row.tabIndex = 0;
+          row.setAttribute("role", "button");
+          row.dataset.noteIndex = String(note.noteIndex ?? "");
+          row.setAttribute("aria-label", `Open note: ${note.t || "(untitled)"}`);
+          const body = document.createElement("div");
+          body.className = "assignment-body";
+          const title = document.createElement("div");
+          title.className = "title";
+          title.textContent = note.t || "(untitled)";
+          body.appendChild(title);
+          const meta = document.createElement("div");
+          meta.className = "meta";
+          meta.textContent = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
+          body.appendChild(meta);
+          if (note._snippet) {
+            const snip = document.createElement("div");
+            snip.className = "summary archive-snippet";
+            // Browse snippets have no query to highlight; show plain text.
+            snip.textContent = note._snippet;
+            body.appendChild(snip);
+          }
+          const open = () => { if (row.dataset.noteIndex !== "") openKbNote(Number(row.dataset.noteIndex)); };
+          row.appendChild(body);
+          row.addEventListener("click", open);
+          row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
+          details.appendChild(row);
         }
-        const open = () => { if (row.dataset.noteIndex !== "") openKbNote(Number(row.dataset.noteIndex)); };
-        row.appendChild(body);
-        row.addEventListener("click", open);
-        row.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); open(); } });
-        notesEl.appendChild(row);
-      }
+        notesEl.appendChild(details);
+      });
     }
   } catch (e) {
     if (notesEl) notesEl.innerHTML = `<div class="empty">Couldn't load this course (${e.message}).</div>`;

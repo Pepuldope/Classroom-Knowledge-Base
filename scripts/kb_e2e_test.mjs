@@ -26,7 +26,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, kbFilterModel } from "../kb.js";
+import { highlightSnippet, tutorSourceList, kbFilterModel, groupCourseNotesBySprint } from "../kb.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -871,4 +871,44 @@ test("kbFilterModel returns every course + year without truncating", () => {
   assert.strictEqual(withActive.activeYear, "2025-26", "active year passed through");
   // The last (alphabetically latest) course must be reachable.
   assert.ok(model.courses.includes("Course 39"), "last course is reachable as a filter");
+});
+
+// ---------------------------------------------------------------------------
+// Regression (owner request #11 — fold class materials into sprints/topics):
+// opening a course used to dump ALL notes (e.g. 343 for "Matematika 1") in one
+// flat list, which is overwhelming. groupCourseNotesBySprint groups the notes
+// by their `topic` field, detects "Šprint N …" sprint topics, and returns an
+// ORDERED list of collapsible groups (sprints first, in numeric order; other
+// topics after; untopiced notes last). Each group carries its notes so the UI
+// can render a Course > Sprint/Topic accordion instead of a 100+ item dump.
+// Pure function (no DOM) so it stays unit-testable.
+// ---------------------------------------------------------------------------
+test("groupCourseNotesBySprint folds notes into ordered sprint/topic groups", () => {
+  assert.ok(typeof groupCourseNotesBySprint === "function", "groupCourseNotesBySprint is exported");
+  const notes = [
+    { t: "N1", topic: "Šprint 2 - Výrazy, percentá" },
+    { t: "N2", topic: "Description" },
+    { t: "N3", topic: "Šprint 5 - geometria" },
+    { t: "N4", topic: "Šprint 2 - Výrazy, percentá" },
+    { t: "N5", topic: null },            // untopiced -> "Other" group
+    { t: "N6", topic: "Šprint 10 - later" }, // numeric order: 10 after 5, not lexical
+    { t: "N7", topic: "Notes" },
+  ];
+  const groups = groupCourseNotesBySprint(notes);
+  // Every note must be accounted for (nothing silently dropped).
+  const total = groups.reduce((n, g) => n + g.notes.length, 0);
+  assert.strictEqual(total, notes.length, "all notes land in exactly one group");
+  // Group counts must match the note tallies.
+  const byKey = Object.fromEntries(groups.map((g) => [g.label, g]));
+  assert.strictEqual(byKey["Šprint 2 - Výrazy, percentá"].count, 2, "sprint 2 has 2 notes");
+  // Sprints come first, in NUMERIC order (2, 5, 10) — not lexical (10 < 2).
+  const sprintLabels = groups.filter((g) => g.isSprint).map((g) => g.sprintNum);
+  assert.deepStrictEqual(sprintLabels, [2, 5, 10], "sprints ordered numerically, not lexically");
+  // Sprints must precede non-sprint topics in the ordered output.
+  const firstNonSprint = groups.findIndex((g) => !g.isSprint);
+  const lastSprint = groups.reduce((idx, g, i) => (g.isSprint ? i : idx), -1);
+  assert.ok(lastSprint < firstNonSprint, "all sprint groups come before non-sprint groups");
+  // Untopiced notes are collected into a single trailing "Other" group.
+  const other = groups.find((g) => g.notes.some((n) => n.t === "N5"));
+  assert.ok(other && !other.isSprint, "untopiced note lands in a non-sprint group");
 });

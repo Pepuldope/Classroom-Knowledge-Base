@@ -1039,6 +1039,75 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-bottom: 1px solid var(--border, #eee);
 }
 
+/* Owner request #11 — course view folds notes into collapsible sprint/topic
+   groups (see groupCourseNotesBySprint in kb.js) instead of a flat 100+ dump. */
+.kb-course-groups-head {
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin: 0 0 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.kb-sprint-group {
+  margin-bottom: 0.5rem;
+  border: 1px solid var(--border, #eee);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: var(--card, #fff);
+}
+.kb-sprint-group[open] {
+  border-color: var(--accent, #2563eb);
+}
+.kb-sprint-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.6rem 0.85rem;
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+  user-select: none;
+  transition: background .12s ease;
+}
+.kb-sprint-summary::-webkit-details-marker { display: none; }
+.kb-sprint-summary::before {
+  content: "▸";
+  color: var(--muted);
+  font-size: 0.8rem;
+  transition: transform .12s ease;
+  flex: 0 0 auto;
+}
+.kb-sprint-group[open] > .kb-sprint-summary::before { transform: rotate(90deg); }
+.kb-sprint-summary:hover { background: var(--accent-bg, #eff6ff); }
+.kb-sprint-group.is-sprint > .kb-sprint-summary {
+  border-left: 3px solid var(--accent, #2563eb);
+}
+.kb-sprint-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.kb-sprint-count {
+  flex: 0 0 auto;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--accent-bg, #eff6ff);
+  border-radius: 999px;
+  padding: 0.1rem 0.55rem;
+  min-width: 1.4rem;
+  text-align: center;
+}
+.kb-sprint-group > .kb-result-card {
+  border-top: 1px solid var(--border, #eee);
+  border-radius: 0;
+  margin: 0;
+}
+
 /* Feature A: "Related notes" panel inside the note-detail modal. */
 .kb-related { margin-top: 1rem; border-top: 1px solid var(--border, #eee); padding-top: 0.75rem; }
 .kb-related-title { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
