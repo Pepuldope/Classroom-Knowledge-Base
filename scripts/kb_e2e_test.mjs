@@ -978,3 +978,64 @@ test("renderRichMarkdown stays XSS-safe (escapes raw HTML)", () => {
   assert.ok(html.includes("&lt;img"), "angle brackets escaped to entities");
   assert.ok(html.includes("<strong>bold</strong>"), "legitimate markdown still renders");
 });
+
+// ---------------------------------------------------------------------------
+// Regression (owner request #10, evidence-driven): the REAL corpus is Obsidian
+// markdown. An export scan of the live bundle (3990 notes) shows the dominant
+// constructs are `[[wikilinks]]` (2940 notes) and `> [!callout]` blocks like
+// `> [!summary]` (2731 notes) — NOT GitHub tables (12 notes). Before this fix
+// renderRichMarkdown leaked `[[path|label]]` and `[!summary]` as literal visible
+// text, which is exactly the "raw markup as visible text" the owner reported.
+// ---------------------------------------------------------------------------
+test("renderRichMarkdown renders [[wikilinks]] as readable labels (no literal [[ ]])", () => {
+  // Piped form: label after the |. Plain form: the path tail is the label.
+  const md = [
+    "See [[2025-26/vault/Business/Zadania/08_Zadanie|Analyza Lego]] for details.",
+    "Also [[Simple Note]] and [[a/b/c/Deep Note]].",
+  ].join("\n");
+  const html = renderRichMarkdown(md);
+  assert.ok(!html.includes("[["), "no literal opening [[ should leak");
+  assert.ok(!html.includes("]]"), "no literal closing ]] should leak");
+  assert.ok(html.includes("Analyza Lego"), "piped wikilink shows its label");
+  assert.ok(html.includes("Simple Note"), "plain wikilink shows its name");
+  assert.ok(html.includes("Deep Note") && !html.includes("a/b/c/Deep Note"),
+    "plain wikilink with a path shows only the tail as label");
+});
+
+test("renderRichMarkdown renders Obsidian > [!callout] blocks without leaking [!type]", () => {
+  const md = [
+    "> [!summary]",
+    "> Record revenue of 74.3 billion DKK with **13% growth**.",
+    "> Second summary line.",
+  ].join("\n");
+  const html = renderRichMarkdown(md);
+  assert.ok(!html.includes("[!summary]"), "the [!summary] marker must not leak as literal text");
+  assert.ok(html.includes("Record revenue"), "callout body content is preserved");
+  assert.ok(html.includes("<strong>13% growth</strong>"), "inline markdown inside a callout still renders");
+  assert.ok(/callout|blockquote/.test(html), "callout wrapped in a styled container");
+});
+
+// XSS safety: a wikilink label/path containing HTML must NEVER decode back to
+// raw, executable markup. renderLightMarkdown escapes source first; our
+// transform re-escapes the extracted label, so even "<script>" becomes inert
+// entities (double-escaped), never a live tag.
+test("renderRichMarkdown [[wikilinks]] cannot inject raw HTML (XSS-safe)", () => {
+  const html = renderRichMarkdown('See [[Note|<img src=x onerror=alert(1)>]] end');
+  assert.ok(!html.includes("<img"), "no live <img> tag from a wikilink label");
+  assert.ok(!html.includes("<script>"), "no live <script> from a wikilink");
+  assert.ok(html.includes("&lt;img"), "label HTML is escaped to entities");
+});
+
+// Callout structure: the title must appear exactly once (in .callout-title,
+// not duplicated into the body) and multi-line bodies must not leave dangling
+// </p><p> artifacts.
+test("renderRichMarkdown callout has a single title and clean body (no dangling tags)", () => {
+  const md = ["> [!info]", "> Link to [[Foo/Bar|Baz]] inside callout.", "> **bold** text."].join("\n");
+  const html = renderRichMarkdown(md);
+  assert.ok(!html.includes("[!info]"), "callout marker stripped");
+  const titleCount = (html.match(/Info/g) || []).length;
+  assert.equal(titleCount, 1, "title appears exactly once (no duplication)");
+  assert.ok(!/callout-body\">[^<]*<\/p>/.test(html), "no dangling </p> inside callout body");
+  assert.ok(html.includes("Baz"), "wikilink inside callout still renders");
+  assert.ok(html.includes("<strong>bold</strong>"), "inline markdown inside callout renders");
+});

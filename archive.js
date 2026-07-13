@@ -219,12 +219,32 @@ function safeHref(url) {
 }
 
 function inlineMd(s) {
+  // Obsidian [[wikilinks]] -> safe <a class="wikilink">. Two forms:
+  //   [[path|Label]]  -> shows Label (Label may itself contain a "|")
+  //   [[a/b/c/Name]]  -> shows only the tail "Name" (the note name)
+  // Source reaching inlineMd is ALREADY HTML-escaped by renderLightMarkdown
+  // (a real "<" arrives as "&lt;"). To produce ONE correct level of escaping
+  // (so the browser shows "<" as inert literal text, not a live tag, and not
+  // the ugly double-escaped "&amp;lt;"), we decode the upstream entities back
+  // to raw chars and re-escape once. This stays XSS-safe: any injected markup
+  // becomes inert entities, and it is robust even if upstream escaping changes.
+  let out = s.replace(/\[\[([^\]]+?)\]\]/g, (m, inner) => {
+    const decode = (v) => String(v)
+      .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+    const esc = (v) => String(v).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+    const sep = inner.indexOf("|");
+    const rawPath = (sep >= 0 ? inner.slice(0, sep) : inner).trim();
+    const rawLabel = sep >= 0 ? inner.slice(sep + 1).trim() : rawPath.split("/").pop().trim();
+    const disp = esc(decode(rawLabel || rawPath.split("/").pop().trim() || rawPath));
+    return `<a class="wikilink" data-note="${disp}">${disp}</a>`;
+  });
   // Markdown links [text](url) -> safe <a>. Must run BEFORE emphasis so the
   // URL's characters aren't mangled. The label may itself contain a bracketed
   // token (real teacher materials look like "[[Template] Worksheet](url)"), so
   // the label matcher tolerates ONE level of inner [brackets] — otherwise the
   // link fails to match and leaks as raw literal markdown text (owner #8/#10).
-  let out = s.replace(/\[((?:[^\[\]]|\[[^\]]*\])+)\]\(([^)\s]+)\)/g, (m, text, url) => {
+  out = out.replace(/\[((?:[^\]\[]|\[[^\]]*\])+)\]\(([^)\s]+)\)/g, (m, text, url) => {
     const href = safeHref(url);
     const label = text.replace(/</g, "&lt;");
     // title attribute = lightweight "preview" of where the link goes (no
@@ -313,16 +333,46 @@ export function renderRichMarkdown(text) {
     l.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
       .split("|").map((c) => `<th>${inlineMd(c.trim())}</th>`).join("");
 
-  // Apply the inline transforms (strikethrough + blockquote) to a slice of the
-  // source. Each slice goes through renderLightMarkdown first, so it is HTML-
-  // escaped (XSS-safe); we only upgrade the escaped output. Consecutive
-  // non-table lines are batched so list runs stay contiguous (one <ul>), not
-  // one list per line.
+  // Obsidian callout: a blockquote whose first line is "> [!type]". The marker
+  // itself (`[!type]`) must not leak as literal text — we strip it and wrap the
+  // block in a styled <div class="callout callout-<type>"> with a small heading.
+  const CALLOUT_RE = /^\s*>\s*\[!(\w[\w-]*)\]\s*(.*)$/;
+  const isCalloutStart = (l) => CALLOUT_RE.test(l);
+
+  // Apply the inline transforms (strikethrough + blockquote + callouts) to a
+  // slice of the source. Each slice goes through renderLightMarkdown first, so
+  // it is HTML-escaped (XSS-safe); we only upgrade the escaped output.
+  // Consecutive non-table lines are batched so list runs stay contiguous
+  // (one <ul>), not one list per line.
   const rich = (slice) => {
     const base = renderLightMarkdown(slice.join("\n"));
     return base
       .replace(/~~([^~]+)~~/g, "<del>$1</del>")
       .replace(/<p>&gt;\s?(.*?)<\/p>/g, "<blockquote>$1</blockquote>");
+  };
+
+  // Build a single callout block from its Obsidian source lines (the raw ">"
+  // markers). Returns HTML. The block's body lines (after the [!type] marker
+  // line) are re-rendered through `rich` so inline markdown inside the callout
+  // still formats (<strong>, lists, etc.). The stylized title comes from the
+  // marker's optional suffix ("> [!info] My title") or falls back to the
+  // capitalized type — it is NOT duplicated into the body.
+  const renderCallout = (calloutLines) => {
+    const first = calloutLines.shift();
+    const m = first.match(/^\s*>\s*\[!(\w[\w-]*)\]\s*(.*)$/);
+    const type = (m && m[1]) || "note";
+    const titleText = (m && m[2] && m[2].trim()) || type.charAt(0).toUpperCase() + type.slice(1);
+    const bodySource = calloutLines.map((l) => l.replace(/^\s*>\s?/, ""));
+    // rich() wraps EACH line in <p>…</p>; flatten to a single flow inside
+    // .callout-body by joining paragraph breaks with <br> and dropping the
+    // outer wrapper (avoids dangling </p><p> for multi-line callouts).
+    const bodyHtml = rich(bodySource)
+      .replace(/^<p>/, "")
+      .replace(/<\/p>$/, "")
+      .replace(/<\/p><p>/g, "<br>");
+    return `<div class="callout callout-${type.toLowerCase()}">` +
+      `<div class="callout-title">${titleText}</div>` +
+      `<div class="callout-body">${bodyHtml}</div></div>`;
   };
 
   const out = [];
@@ -343,6 +393,19 @@ export function renderRichMarkdown(text) {
         i++;
       }
       out.push("</tbody></table>");
+      continue;
+    }
+    // Obsidian callout block: starts at a "> [!type]" line and continues across
+    // consecutive "> ..." lines. Each line's leading "> " (escaped to "&gt; ")
+    // is consumed by renderCallout; a blank line or a non-quote line ends it.
+    if (isCalloutStart(l)) {
+      const block = [l];
+      i++;
+      while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
+        block.push(lines[i]);
+        i++;
+      }
+      out.push(renderCallout(block));
       continue;
     }
     // Non-table line (or a lone "| ..." that isn't a real table): render it
