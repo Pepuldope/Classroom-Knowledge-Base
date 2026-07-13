@@ -27,6 +27,7 @@ import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, kbFilterModel, groupCourseNotesBySprint } from "../kb.js";
+import { renderRichMarkdown } from "../archive.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -911,4 +912,69 @@ test("groupCourseNotesBySprint folds notes into ordered sprint/topic groups", ()
   // Untopiced notes are collected into a single trailing "Other" group.
   const other = groups.find((g) => g.notes.some((n) => n.t === "N5"));
   assert.ok(other && !other.isSprint, "untopiced note lands in a non-sprint group");
+});
+
+// ---------------------------------------------------------------------------
+// Regression (owner request #8): full body preserved, not truncated.
+// bundleFromVault used to cap each note body at 1500 chars, silently chopping
+// ~63% of the real vault (avg 3278 chars; some 100k+). The cap was removed so
+// every note — even the long 1/100 ones — loads completely in the detail view.
+// KV sharding (kb-store.js planShards) keeps each value under the per-value
+// size limit instead, so removing the cap is safe.
+// ---------------------------------------------------------------------------
+test("bundleFromVault preserves the FULL body (no 1500-char truncation)", () => {
+  const longBody = "A".repeat(5000) + "\n\nSecond paragraph with **bold** and a [link](https://example.com).";
+  const bundle = bundleFromVault([
+    { t: "Long Assignment", x: longBody, course: "Math", y: "2025", topic: "Algebra" },
+  ]);
+  assert.strictEqual(bundle.notes.length, 1, "one note built");
+  const note = bundle.notes[0];
+  // The body must be stored in full — length must equal the original, NOT 1500.
+  assert.strictEqual(note.x.length, longBody.length, "body length must match the source (no truncation)");
+  assert.ok(note.x.startsWith("A".repeat(5000)), "leading content preserved");
+  assert.ok(note.x.includes("Second paragraph"), "trailing content preserved");
+  assert.ok(!note.x.endsWith("…"), "must not be truncated with an ellipsis");
+});
+
+test("saveBundle shards large bodies without losing content", async () => {
+  // Build a bundle whose total body size far exceeds a single 1MB KV value.
+  const notes = [];
+  for (let i = 0; i < 300; i++) {
+    notes.push({ t: `Note ${i}`, x: "B".repeat(8000), course: "C", y: "2025", topic: "T" });
+  }
+  await saveBundle({ version: 1, source: "vault", generatedAt: new Date().toISOString(), years: ["2025"], courses: [{ name: "C" }], notes });
+  const reloaded = await getBundle();
+  assert.strictEqual(reloaded.notes.length, 300, "all notes survive a shard round-trip");
+  assert.ok(reloaded.notes.every((n) => n.x.length === 8000), "no body lost in sharding");
+});
+
+// ---------------------------------------------------------------------------
+// Regression (owner request #10): richer markdown renders correctly and safely.
+// renderRichMarkdown adds blockquotes, strikethrough, and GitHub tables on top
+// of the safe light pass. It must NEVER reintroduce raw, unescaped user HTML
+// (XSS-safe) and must render the common constructs instead of leaking raw text.
+// ---------------------------------------------------------------------------
+test("renderRichMarkdown renders blockquotes, strikethrough, and tables", () => {
+  const md = [
+    "> A wise note",
+    "This is ~~wrong~~ corrected.",
+    "",
+    "| Name | Score |",
+    "| --- | --- |",
+    "| Ada | 95 |",
+    "| Bob | 80 |",
+  ].join("\n");
+  const html = renderRichMarkdown(md);
+  assert.ok(html.includes("<blockquote>A wise note</blockquote>"), "blockquote rendered");
+  assert.ok(html.includes("<del>wrong</del>"), "strikethrough rendered");
+  assert.ok(html.includes("<table class=\"md-table\">"), "table wrapper rendered");
+  assert.ok(html.includes("<th>Name</th>") && html.includes("<td>Ada</td>"), "table cells rendered");
+});
+
+test("renderRichMarkdown stays XSS-safe (escapes raw HTML)", () => {
+  const evil = "<img src=x onerror=alert(1)> **bold**";
+  const html = renderRichMarkdown(evil);
+  assert.ok(!html.includes("<img src=x"), "raw img tag must be escaped, not injected");
+  assert.ok(html.includes("&lt;img"), "angle brackets escaped to entities");
+  assert.ok(html.includes("<strong>bold</strong>"), "legitimate markdown still renders");
 });

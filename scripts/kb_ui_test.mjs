@@ -459,6 +459,47 @@ try {
     await page.screenshot({ path: SHOTS + "07-result-count.png", fullPage: true });
   });
 
+  // --- Vision-independent visual gate (owner #7 / ROADMAP #7) ---
+  // When the multimodal vision endpoint is down (500s), the loop must not
+  // silently skip the aesthetic pass. These assertions verify the key visual
+  // properties via computed styles + layout geometry — no screenshot analysis
+  // required — so the "aesthetic" gate keeps firing even without vision.
+  await check("course accordion renders styled (border-radius + pointer cursor)", async () => {
+    // Open a course to reveal its note accordion.
+    await page.evaluate(() => {
+      const input = document.getElementById("kbSearchInput");
+      if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
+    });
+    await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 8000 });
+    await page.locator("#kbBrowseCourses .kb-course-card").first().click();
+    await page.waitForSelector("#kbBrowseNotes .kb-result-card", { timeout: 8000 });
+    // The result cards' container is the styled accordion surface.
+    const card = page.locator("#kbBrowseNotes .kb-result-card").first();
+    await card.waitFor({ timeout: 8000 });
+    const style = await card.evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { radius: cs.borderTopLeftRadius, cursor: cs.cursor, display: cs.display };
+    });
+    assert.ok(parseFloat(style.radius) > 0, `expected rounded accordion, got radius ${style.radius}`);
+    assert.ok(style.cursor === "pointer", `expected pointer cursor, got ${style.cursor}`);
+  });
+
+  await check("search results are horizontally centered (onboarding not lopsided)", async () => {
+    // Empty query -> browse panel should be centered in the viewport.
+    await page.evaluate(() => {
+      const input = document.getElementById("kbSearchInput");
+      if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
+    });
+    await page.waitForSelector("#kbBrowse:not([hidden])", { timeout: 8000 });
+    const box = await page.locator("#kbBrowse").boundingBox();
+    assert.ok(box, "browse panel should be visible");
+    const vw = page.viewportSize().width;
+    const margin = (vw - box.width) / 2;
+    // Allow a tolerant band; the panel must be roughly centered, not flush left.
+    assert.ok(Math.abs(box.x - margin) < vw * 0.15,
+      `browse panel x=${box.x.toFixed(0)} expected ~${margin.toFixed(0)} (viewport ${vw})`);
+  });
+
   // --- No uncaught page errors throughout ---
   await check("no uncaught page errors during the run", async () => {
     assert.equal(pageErrors.length, 0, "page errors: " + pageErrors.join(" | "));

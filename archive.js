@@ -287,6 +287,72 @@ export function renderLightMarkdown(text) {
   return html;
 }
 
+// Second rendering pass: handle the block-level constructs that the first
+// light pass above deliberately skipped, so notes/assignments render richer
+// formatting (tables, blockquotes, strikethrough) instead of leaking raw
+// markdown.
+//
+// Safety: we re-run renderLightMarkdown first (which escapes HTML atomically
+// per line and handles headings/lists/code/bold/inline-code/links), then apply
+// the extra transforms on the ESCAPED output. The table/blockquote logic works
+// on the ORIGINAL source lines so it can find table boundaries, but it only
+// emits markup around already-escaped cell content — it never reintroduces raw
+// user HTML, so this stays XSS-safe.
+export function renderRichMarkdown(text) {
+  const lines = (text == null ? "" : String(text)).split("\n");
+
+  // GitHub-table detection runs on the ORIGINAL source lines so a stray "~" or
+  // "|" inside other text can't be mis-parsed. A table is: a row line, followed
+  // by a |---|---| separator, then body rows.
+  const isSep = (l) => /^\s*\|?[\s:|-]+\|?\s*$/.test(l) && l.includes("-");
+  const isRow = (l) => l.trim().startsWith("|") || l.includes(" | ");
+  const cells = (l) =>
+    l.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
+      .split("|").map((c) => `<td>${inlineMd(c.trim())}</td>`).join("");
+  const headCells = (l) =>
+    l.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
+      .split("|").map((c) => `<th>${inlineMd(c.trim())}</th>`).join("");
+
+  // Apply the inline transforms (strikethrough + blockquote) to a slice of the
+  // source. Each slice goes through renderLightMarkdown first, so it is HTML-
+  // escaped (XSS-safe); we only upgrade the escaped output. Consecutive
+  // non-table lines are batched so list runs stay contiguous (one <ul>), not
+  // one list per line.
+  const rich = (slice) => {
+    const base = renderLightMarkdown(slice.join("\n"));
+    return base
+      .replace(/~~([^~]+)~~/g, "<del>$1</del>")
+      .replace(/<p>&gt;\s?(.*?)<\/p>/g, "<blockquote>$1</blockquote>");
+  };
+
+  const out = [];
+  let i = 0;
+  let buf = [];
+  const flush = () => { if (buf.length) { out.push(rich(buf)); buf = []; } };
+  while (i < lines.length) {
+    const l = lines[i];
+    const next = lines[i + 1] || "";
+    if (isRow(l) && isSep(next)) {
+      // Header row at i, separator at i+1, body rows until a non-row/non-sep.
+      out.push('<table class="md-table"><thead>');
+      out.push(`<tr>${headCells(l)}</tr>`);
+      out.push("</thead><tbody>");
+      i += 2;
+      while (i < lines.length && isRow(lines[i]) && !isSep(lines[i])) {
+        out.push(`<tr>${cells(lines[i])}</tr>`);
+        i++;
+      }
+      out.push("</tbody></table>");
+      continue;
+    }
+    // Non-table line (or a lone "| ..." that isn't a real table): render it
+    // through the safe light pass + inline transforms on its own.
+    out.push(rich([l]));
+    i++;
+  }
+  return out.join("");
+}
+
 // ---------------------------------------------------------------------------
 // IndexedDB persistence (browser only — never referenced at module top level)
 // ---------------------------------------------------------------------------

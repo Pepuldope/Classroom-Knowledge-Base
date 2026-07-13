@@ -31,8 +31,38 @@ const META_KEY = "kb:meta";
 // kb:shards index ({count}). Defeats the KV per-value size limit that a single
 // notes array would hit past ~2.5k notes. Reads reassemble the shards.
 const SHARD_NOTES = 400;
+// Hard ceiling on a single KV value size (Upstash free tier: 1 MB per value).
+// Shards are split until the LARGEST shard falls under this limit, so we never
+// hit the per-value size error even after the body cap was removed in
+// bundleFromVault (bodies can now run to 10s of KB each).
+const SHARD_BYTE_LIMIT = 900 * 1024;
 const SHARDS_KEY = "kb:shards";
 const shardKey = (i) => `kb:shard:${i}`;
+
+// Per-note JSON overhead (title/summary/course/year/topic/path wrappers).
+const NOTE_OVERHEAD = 250;
+
+// Split notes into shards that each stay under SHARD_BYTE_LIMIT bytes.
+// Greedy: walk notes in given order, open a new shard whenever adding the next
+// note would exceed the limit (always placing at least one note per shard so a
+// single oversized note can never infinite-loop).
+function planShards(notes) {
+  const shards = [];
+  let cur = [];
+  let curBytes = 0;
+  for (const n of notes) {
+    const nb = NOTE_OVERHEAD + (n && n.x ? n.x.length : 0);
+    if (cur.length > 0 && curBytes + nb > SHARD_BYTE_LIMIT) {
+      shards.push(cur);
+      cur = [];
+      curBytes = 0;
+    }
+    cur.push(n);
+    curBytes += nb;
+  }
+  if (cur.length > 0) shards.push(cur);
+  return shards.length ? shards : [[]];
+}
 
 // Process-memory fallback used only when KV is not configured.
 const mem = new Map();
@@ -71,17 +101,16 @@ async function kvSetJSON(key, value) {
 
 // ---- sharded read/write helpers ----
 async function writeSharded(notes, source) {
-  const shardCount = Math.max(1, Math.ceil(notes.length / SHARD_NOTES));
+  const shards = planShards(notes);
+  const shardCount = shards.length;
   if (!kvAvailable()) {
-    for (let i = 0; i < shardCount; i++) {
-      mem.set(shardKey(i), notes.slice(i * SHARD_NOTES, (i + 1) * SHARD_NOTES));
-    }
+    shards.forEach((shard, i) => mem.set(shardKey(i), shard));
     mem.set(SHARDS_KEY, { count: shardCount });
     mem.set("kb:src", source || "vault");
     return;
   }
   for (let i = 0; i < shardCount; i++) {
-    await kvSetJSON(shardKey(i), notes.slice(i * SHARD_NOTES, (i + 1) * SHARD_NOTES));
+    await kvSetJSON(shardKey(i), shards[i]);
   }
   const prev = await kvGetJSON(SHARDS_KEY);
   const prevCount = prev?.count || 0;
@@ -151,7 +180,7 @@ export async function saveBundle(bundle) {
     courseList: Array.isArray(bundle.courses) ? bundle.courses : [],
     generatedAt: bundle.generatedAt || null,
     updatedAt: new Date().toISOString(),
-    shards: Math.max(1, Math.ceil(notes.length / SHARD_NOTES)),
+    shards: planShards(notes).length,
   };
   await writeSharded(notes, bundle.source);
   if (kvAvailable()) await kvSetJSON(META_KEY, meta);

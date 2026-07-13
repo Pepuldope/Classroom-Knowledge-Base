@@ -8,6 +8,7 @@ import {
   findRelated,
   foldText,
   renderLightMarkdown,
+  renderRichMarkdown,
 } from "./archive.js";
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 
@@ -573,7 +574,9 @@ function renderArchiveResults(query) {
     if (note._snippet) {
       const snip = document.createElement("div");
       snip.className = "summary archive-snippet";
-      snip.textContent = note._snippet;
+      // Render the snippet as rich markdown so assignment formatting (bold,
+      // lists, links, tables) shows correctly instead of raw markdown text.
+      snip.innerHTML = renderRichMarkdown(note._snippet);
       body.appendChild(snip);
     }
     row.appendChild(body);
@@ -634,7 +637,7 @@ function renderArchiveBrowse() {
         for (const ov of overviewNotes) {
           const box = document.createElement("div");
           box.className = "archive-callout";
-          box.innerHTML = renderLightMarkdown(ov.x || ov.s || "");
+          box.innerHTML = renderRichMarkdown(ov.x || ov.s || "");
           infoWrap.appendChild(box);
         }
         cDetails.appendChild(infoWrap);
@@ -832,7 +835,7 @@ function openArchiveNote(note) {
   const metaLine = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
   const parts = [`<div class="archive-note-meta">${escapeHtml(metaLine)}</div>`];
   if (note.s) parts.push(`<div class="archive-callout">${escapeHtml(note.s)}</div>`);
-  parts.push(`<div class="archive-note-content">${renderLightMarkdown(note.x || "")}</div>`);
+  parts.push(`<div class="archive-note-content">${renderRichMarkdown(note.x || "")}</div>`);
 
   const related = findRelatedTopicsForNote(note);
   if (related.length > 0) {

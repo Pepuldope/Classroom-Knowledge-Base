@@ -15,3 +15,8 @@ HANDOFF.md
 scripts/screenshots/
 .pw-browsers/
 .env*
+
+# Local scratch/debug artifacts (never committed)
+_*.json
+_*.mjs
+_*.py

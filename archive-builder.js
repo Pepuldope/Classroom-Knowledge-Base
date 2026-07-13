@@ -316,7 +316,12 @@ export function bundleFromVault(rawNotes, meta = {}) {
       // Cap stored body. Search ranks on title/summary/body tokens and the
       // snippet only needs the leading ~200 chars, so 1500 chars is plenty and
       // keeps each KV shard comfortably under the per-value size limit.
-      x: body.length > 1500 ? body.slice(0, 1500) + "…" : body,
+      // Store the full body so every note — even the long 1/100 ones — loads
+      // completely in the detail view. The 1500-char cap was silently
+      // truncating ~63% of the vault (avg 3278 chars). Sharding in kb-store.js
+      // keeps each KV value safely under the per-value size limit, so there is
+      // no need to cap the body here.
+      x: body,
     });
   }
   const years = [...new Set(notes.map((n) => n.y))].sort();
