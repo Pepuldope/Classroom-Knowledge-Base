@@ -738,6 +738,29 @@ test("renderLightMarkdown turns [text](url) into clickable, safe <a>", async () 
 });
 
 // ---------------------------------------------------------------------------
+// Regression (owner requests #8/#10 — assignment/material readability): real
+// teacher-material links carry a bracketed filename in the label, e.g.
+//   [[Template] Domáca úloha - zhodnosť](https://docs.google.com/…)
+// The old link regex used [^\]]+ for the label, which stopped at the FIRST ']'
+// inside "[Template]" — so the whole link failed to match and rendered as raw
+// literal markdown text (visible "[[Template] …](https://…)"), exactly the
+// "raw markup shows as text" bug the owner reported. The label matcher must
+// tolerate inner brackets so the link becomes a real clickable <a>.
+// ---------------------------------------------------------------------------
+test("renderLightMarkdown renders links whose label contains [brackets]", async () => {
+  const { renderLightMarkdown } = await import("../archive.js");
+  const url = "https://docs.google.com/document/d/1teHw9/edit";
+  const md = `Teacher materials:\n- [[Template] Domáca úloha - zhodnosť](${url})`;
+  const html = renderLightMarkdown(md);
+  // The link must become a real anchor with the real href…
+  assert.ok(html.includes(`href="${url}"`), "bracketed-label link becomes an <a> with real href");
+  // …and its human label (including the [Template] part) is shown as text.
+  assert.ok(html.includes("[Template] Domáca úloha - zhodnosť"), "bracketed label text preserved inside the <a>");
+  // No raw markdown link syntax should leak through as visible text.
+  assert.ok(!html.includes(`](${url})`), "no raw markdown link syntax leaks into the output");
+});
+
+// ---------------------------------------------------------------------------
 // KB EXPORT fitness — the owner-requested export must carry the actual note
 // CONTENT (body `x` and summary `s`), not just an index of metadata. A
 // "knowledge base" export that omits the bodies is worthless to a student.

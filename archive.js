@@ -220,8 +220,11 @@ function safeHref(url) {
 
 function inlineMd(s) {
   // Markdown links [text](url) -> safe <a>. Must run BEFORE emphasis so the
-  // URL's characters aren't mangled.
-  let out = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) => {
+  // URL's characters aren't mangled. The label may itself contain a bracketed
+  // token (real teacher materials look like "[[Template] Worksheet](url)"), so
+  // the label matcher tolerates ONE level of inner [brackets] — otherwise the
+  // link fails to match and leaks as raw literal markdown text (owner #8/#10).
+  let out = s.replace(/\[((?:[^\[\]]|\[[^\]]*\])+)\]\(([^)\s]+)\)/g, (m, text, url) => {
     const href = safeHref(url);
     const label = text.replace(/</g, "&lt;");
     // title attribute = lightweight "preview" of where the link goes (no
