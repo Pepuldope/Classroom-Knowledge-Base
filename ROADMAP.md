@@ -17,6 +17,39 @@ then builds it. Keep items concrete and student-facing where possible.
 - [x] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
+## 🐛 Reported by Pepuldo (2026-07-13) — fix before new features
+These came straight from user feedback. The "DB empty → scrape onboarding" branch
+ALREADY EXISTS (`refreshKb()` gates on `meta.noteCount` in kb.js:137-141), so the
+new work is the loading state + new-content detection + the obsidian replacement.
+- [ ] KB load: show a LOADING ANIMATION (spinner/skeleton) immediately on
+  `showKbView()` while the DB is read, THEN show content if `noteCount > 0` OR the
+  existing scrape onboarding if empty. Today the populated path renders `kbMain`
+  blank during the meta fetch — on a fresh deploy (Vercel + Upstash KV cold start)
+  that blank window reads as "~30s of nothing". Spinner must appear synchronously
+  (before any await) and be removed the instant meta + first content paint.
+- [ ] Detect NEW Classroom content on every load and offer/auto re-scrape. After
+  sign-in, on each KB view call a lightweight bounded check (new `mode:"changed"` in
+  kb-scrape.js, or `/api/kb-changes`) that compares stored `meta` (generatedAt /
+  per-course note counts) against the live Classroom course list — one bounded call,
+  stays under the Edge 10s limit. If new coursework/announcements exist, show a
+  non-blocking "X new items — Update now" banner AND/OR fire the existing
+  resumable list→course background scrape. Must run AFTER the KB shell paints so
+  the view never blocks on it.
+- [ ] Cut KB load time. Likely root cause: Vercel fn cold-start + Upstash KV
+  cold-start on every redeploy (session is dropped → cold path each time).
+  Implement + MEASURE: (a) add `Cache-Control: s-maxage` to the tiny meta call so
+  repeat loads are served from the CDN edge; (b) lazy-render the browse panel after
+  the shell; (c) add a meta-only endpoint that does NOT reassemble all shards;
+  (d) add real timing marks (performance.now) around load so improvement is proven
+  not guessed. Acceptance: populated KB view paints <3s warm, <8s cold.
+- [ ] Replace the Obsidian-only "open" action with a UNIVERSAL external-open. Most
+  users don't have Obsidian, and for vault notes the `obsidian://open?path=...` link
+  points at a local file they can't reach. Change kb.js:1015 + app.js:858 so the
+  button: if the note has a real source URL (courseWork material / announcement /
+  submission link) → "Open original" in a new tab; else "Download note (.md)" /
+  "Copy text" fallback. Keep Obsidian as a clearly-labelled secondary opt-in for
+  users who have it. School-backup vault notes (local `p` only) get download/copy.
+
 ## 🧠 Soon
 - [x] KB: "Did you mean" typo-tolerance — suggest a corrected spelling when a search returns nothing (query-side fuzzy spelling).
 - [ ] Tutor: conversation memory across messages within a session (already in place) + a "new topic" reset.
