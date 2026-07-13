@@ -36,6 +36,11 @@ echo "==> Browser UI e2e (local)"
 BASE_URL="http://localhost:$PORT" node scripts/kb_ui_test.mjs
 UI_OK=$?
 
+echo "==> KB loading-state e2e (local)"
+BASE_URL="http://localhost:$PORT" node scripts/kb_loading_test.mjs
+LOAD_OK=$?
+if [ "$LOAD_OK" -ne 0 ]; then echo "loading e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 kill "$SRV" 2>/dev/null
 
 if [ "$UI_OK" -ne 0 ]; then echo "UI e2e FAILED"; exit 1; fi
