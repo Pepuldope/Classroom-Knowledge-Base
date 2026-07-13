@@ -29,8 +29,9 @@ export const PROVIDERS = [
   //    "ResourceExhausted: All workers are busy" intermittently on NVIDIA's
   //    free tier (verified ~25% of calls, 7-20s latency) — see investigation
   //    2026-07-12. Nemotron-Super-49B is fast (sub-second) and stable on the
-  //    same key, so it's the primary effort-3 slot. DeepSeek-v4-PRO is still
-  //    in the loop via OpenRouter (slot 9) as escalation + parallel checker.
+  //    same key, so it's the primary effort-3 slot. The OpenRouter slot (9) now
+  //    uses the FREE openai/gpt-oss-120b:free as escalation + parallel checker
+  //    (replaces paid deepseek-v4-pro, which is not free on OpenRouter).
   //    HARD LIMIT (per Pepuldo): the whole NVIDIA API key must stay UNDER 48
   //    requests/minute. We enforce a 46/min sliding-window throttle below so the
   //    router skips NVIDIA (and fails over) rather than blowing the key-wide cap.
@@ -107,13 +108,16 @@ export const PROVIDERS = [
     effort: 2,
     capabilities: ["json"], // tool-use depends on the proxied model; don't assume.
   },
-  // 9. OpenRouter — DeepSeek v4 Pro for very-high-intelligence tasks (NVIDIA hosted pro throttles/hangs on free tier, so route via OpenRouter);
-  //    not the default (so we don't lean on a single provider / weak model).
+  // 9. OpenRouter — gpt-oss-120b:free for very-high-intelligence (effort-3) tasks.
+  //    Replaces deepseek/deepseek-v4-pro, which is NOT free on OpenRouter (Pepuldo:
+  //    "on openrouter it is not free"). gpt-oss-120b:free is a strong open MoE with
+  //    131K context, $0 pricing — a genuine free effort-3 slot. Not the default, so
+  //    we don't lean on a single provider / weak model.
   {
     name: "openrouter",
     baseURL: "https://openrouter.ai/api/v1/chat/completions",
     apiKey: process.env.OPENROUTER_API_KEY,
-    model: "deepseek/deepseek-v4-pro",
+    model: "openai/gpt-oss-120b:free",
     effort: 3,
     capabilities: ["json", "long_context"],
     headers: { "HTTP-Referer": "https://classroom-knowledge-base.vercel.app", "X-Title": "Classroom KB" },
@@ -449,9 +453,9 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream }
 }
 
 /**
- * Shadow checker — keeps DeepSeek in the loop as an INDEPENDENT PARALLEL
- * second opinion on hard/effort-3 calls. Nemotron (NVIDIA) is the authoritative
- * answer; DeepSeek-v4-pro (OpenRouter) fires the same request concurrently and
+ * Shadow checker — keeps an INDEPENDENT PARALLEL second opinion on hard/effort-3
+ * calls. Nemotron (NVIDIA) is the authoritative answer; the OpenRouter slot
+ * (openai/gpt-oss-120b:free, free) fires the same request concurrently and
  * never blocks the primary path. Used only as a cross-check / confidence signal
  * + telemetry, NOT as the served answer. Failures are swallowed (it must never
  * degrade the primary response).
@@ -462,11 +466,13 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream }
  * @returns {Promise<Object>} { model, text, agreement, ok, error }
  */
 export async function shadowCheckDeepSeek(messages, opts, getPrimary) {
-  // Only run for effort-3 (hard) calls, and only if OpenRouter/DeepSeek is up
+  // Only run for effort-3 (hard) calls, and only if the OpenRouter slot is up
   // and not the one that already served the answer (avoid double-counting).
+  // The OpenRouter slot is now openai/gpt-oss-120b:free (free, effort-3) — used
+  // as an independent parallel second-opinion on hard tasks.
   const deepseek = PROVIDERS.find((p) => p.name === "openrouter");
   if (!deepseek || !deepseek.apiKey || !deepseek.baseURL) {
-    return { ok: false, error: "deepseek/openrouter not configured", model: null, text: null, agreement: null };
+    return { ok: false, error: "openrouter not configured", model: null, text: null, agreement: null };
   }
   const primary = typeof getPrimary === "function" ? getPrimary() : getPrimary;
   if (primary === "openrouter") {
@@ -681,10 +687,10 @@ export async function routeChat(messages, opts = {}) {
         fallbackReason: tried.length ? reason : null,
         latencyMs: latency,
       };
-      // ---- Parallel DeepSeek shadow check (hard/effort-3 only, non-stream) ----
-      // Nemotron (or whichever provider answered) is authoritative; DeepSeek-v4-pro
-      // (OpenRouter) runs the SAME request concurrently as an independent second
-      // opinion. It never blocks the primary response. Result is attached for
+      // ---- Parallel OpenRouter shadow check (hard/effort-3 only, non-stream) ----
+      // Nemotron (or whichever provider answered) is authoritative; the OpenRouter
+      // gpt-oss-120b:free slot runs the SAME request concurrently as an independent
+      // second opinion. It never blocks the primary response. Result is attached for
       // telemetry / confidence — not used as the served text.
       let shadow = null;
       if (tier === 3 && !stream) {
@@ -698,7 +704,7 @@ export async function routeChat(messages, opts = {}) {
             }
             return s;
           })
-          .catch((e) => ({ ok: false, error: String(e), model: "deepseek-v4-pro", text: null, agreement: null }));
+          .catch((e) => ({ ok: false, error: String(e), model: "openai/gpt-oss-120b:free", text: null, agreement: null }));
       }
       return { ...r, meta, shadow };
     } catch (e) {

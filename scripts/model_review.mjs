@@ -3,10 +3,10 @@
 // then have the NVIDIA flash model author a consolidated report.
 //
 // Reviewers:
-//   1. deepseek/deepseek-v4-pro  (OpenRouter)  -> high-intelligence critique
+//   1. openai/gpt-oss-120b:free  (OpenRouter)  -> high-intelligence critique (FREE; replaces paid deepseek-v4-pro)
 //   2. tencent/hy3               (OpenRouter)  -> second opinion
 //   3. gemini-2.5-flash          (Google)      -> third opinion
-// Report author: deepseek-ai/deepseek-v4-flash (NVIDIA) -> consolidated summary
+// Report author: nvidia/llama-3.3-nemotron-super-49b-v1 (NVIDIA) -> consolidated summary (FREE/stable; replaces deepseek-v4-flash)
 //
 // Edge-safe fetch only; reads files from repo root. Usage:
 //   node scripts/model_review.mjs            # review the loop, write docs/
@@ -55,7 +55,8 @@ const REVIEW_PROMPT = `You are a senior software engineer reviewing the autonomo
 Context:
 - This is an autonomous cron loop (runs every 3h) that ingests notes into a shared knowledge base, improves search quality, and occasionally does light UI polish. It must follow AGENTS.md (functional-first, KB != archive).
 - The KB is stored in Upstash KV (Vercel Edge, no node:fs). We recently sharded storage (kb:shard:0..N + kb:shards index) to defeat a per-value size limit, and capped note bodies at 1500 chars.
-- The AI router now leads with NVIDIA deepseek-v4-flash and uses OpenRouter deepseek/deepseek-v4-pro for hard tasks.
+// The AI router now leads with NVIDIA Nemotron-Super-49B and uses OpenRouter
+// openai/gpt-oss-120b:free (free) for hard tasks.
 
 Review the following files for: (1) correctness/bugs, (2) Edge-runtime safety (no node:fs/path), (3) KV storage/sharding correctness, (4) autonomous-loop robustness (the loop must not get stuck or do cosmetic work on an empty KB), (5) any security issues (auth, token handling). Be concrete: cite file + line-range, severity (critical/high/med/low), and a fix suggestion. End with a short "VERDICT: SHIP / SHIP-WITH-FIXES / BLOCK" and the top 3 things to address.
 
@@ -85,11 +86,11 @@ async function callOpenAICompatible({ baseURL, apiKey, model, system, user, max_
 
 const REVIEWERS = [
   {
-    key: "deepseek-v4-pro",
-    label: "DeepSeek v4 Pro (OpenRouter)",
+    key: "gpt-oss-120b",
+    label: "GPT-OSS 120B (OpenRouter, free)",
     baseURL: "https://openrouter.ai/api/v1/chat/completions",
     apiKey: env.OPENROUTER_API_KEY,
-    model: "deepseek/deepseek-v4-pro",
+    model: "openai/gpt-oss-120b:free",
     max_tokens: 8000,
   },
   {
@@ -114,7 +115,7 @@ const REPORT_AUTHOR = {
   key: "flash-report",
   baseURL: "https://integrate.api.nvidia.com/v1/chat/completions",
   apiKey: env.NVIDIA_API_KEY,
-  model: "deepseek-ai/deepseek-v4-flash",
+  model: "nvidia/llama-3.3-nemotron-super-49b-v1",
   max_tokens: 4000,
 };
 
@@ -156,7 +157,7 @@ Keep it actionable and under ~600 words. Do not repeat full critiques verbatim.
 
 ${combined}`;
 
-  console.log("[report] authoring consolidated report with NVIDIA flash ...");
+  console.log("[report] authoring consolidated report with NVIDIA Nemotron-Super-49B ...");
   try {
     const report = await callOpenAICompatible({
       ...REPORT_AUTHOR,
@@ -164,7 +165,7 @@ ${combined}`;
       max_tokens: REPORT_AUTHOR.max_tokens,
     });
     const out = join(docsDir, "model_review_REPORT.md");
-    writeFileSync(out, `# Consolidated Code-Review Report (authored by NVIDIA DeepSeek-v4-Flash)\n\n${report}\n`);
+    writeFileSync(out, `# Consolidated Code-Review Report (authored by NVIDIA Llama-3.3-Nemotron-Super-49B)\n\n${report}\n`);
     console.log(`-> wrote ${out}`);
   } catch (e) {
     console.error(`!! report authoring failed: ${e.message}`);
