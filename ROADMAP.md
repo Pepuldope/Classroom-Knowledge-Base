@@ -49,6 +49,17 @@ new work is the loading state + new-content detection + the obsidian replacement
   submission link) → "Open original" in a new tab; else "Download note (.md)" /
   "Copy text" fallback. Keep Obsidian as a clearly-labelled secondary opt-in for
   users who have it. School-backup vault notes (local `p` only) get download/copy.
+- [ ] Visual styles / theme switching in Settings. A Settings modal + "Display"
+  tab ALREADY EXISTS (index.html:264-296) and styles.css is built on CSS
+  variables (`:root { --bg, --fg, --card, --border, --muted, --accent... }`), so
+  theming is plumbing, not a rewrite. Add a theme selector (Light / Dark / System)
+  to the Display pane: (a) define a `[data-theme="dark"]` (and maybe "sepia"/
+  "high-contrast") block that overrides the existing CSS vars; (b) apply it by
+  setting `document.documentElement.dataset.theme` on load from localStorage
+  (default System = follow `prefers-color-scheme`); (c) persist the choice;
+  (d) flip it live from the settings UI without reload. Avoid hard-coded colors in
+  components that would ignore the vars. Acceptance: Dark mode renders every
+  surface (header, KB, tutor, modals) readable, toggle persists across reloads.
 
 ## 🧠 Soon
 - [x] KB: "Did you mean" typo-tolerance — suggest a corrected spelling when a search returns nothing (query-side fuzzy spelling).
