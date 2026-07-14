@@ -875,6 +875,128 @@ test("kbFilterModel returns every course + year without truncating", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Focus area 7 — KB sorting & filtering by kind / year / class / class-type
+// (family) + an explicit sort order. The filter model must carry the new
+// facets (kinds, families) and a default sort so the UI can render a complete
+// type + class-type selector and a sort dropdown, and round-trip active state.
+// ---------------------------------------------------------------------------
+test("kbFilterModel returns kinds + families + default sort and round-trips active state", () => {
+  assert.ok(typeof kbFilterModel === "function", "kbFilterModel is exported");
+  const filters = {
+    courses: ["ELA 1", "BEng Y1"],
+    years: ["2023-24", "2025-26"],
+    kinds: ["note", "announcements"],
+    families: ["Language", "Engineering"],
+  };
+  const m = kbFilterModel(filters);
+  assert.deepStrictEqual(m.kinds, ["note", "announcements"], "kinds facet returned");
+  assert.deepStrictEqual(m.families, ["Language", "Engineering"], "families facet returned");
+  assert.strictEqual(m.sort, "relevance", "default sort is relevance");
+  const active = kbFilterModel(filters, {
+    kind: "announcements",
+    family: "Engineering",
+    sort: "recency",
+  });
+  assert.strictEqual(active.activeKind, "announcements", "active kind passed through");
+  assert.strictEqual(active.activeFamily, "Engineering", "active family passed through");
+  assert.strictEqual(active.sort, "recency", "active sort passed through");
+});
+
+// /api/kb-search must surface kind + family facets and narrow by `kind`.
+test("/api/kb-search filters by kind and returns the kind facet", async () => {
+  await saveBundle({
+    version: 1,
+    source: "bundle",
+    notes: [
+      { t: "Shared note", kind: "note", course: "C1", y: "2025-26", s: "", x: "shared body" },
+      { t: "Shared announcement", kind: "announcements", course: "C1", y: "2025-26", s: "", x: "shared body" },
+    ],
+  });
+  const r = await kbSearch(makeReq("/api/kb-search?q=shared&kind=announcements"));
+  const d = await r.json();
+  assert.strictEqual(d.results.length, 1, "only the matching kind is returned");
+  assert.strictEqual(d.results[0].t, "Shared announcement", "the announcement note is returned");
+  assert.ok(d.filters.kinds.includes("announcements"), "announcements kind facet surfaced");
+  assert.ok(d.filters.kinds.includes("note"), "note kind facet surfaced");
+});
+
+// /api/kb-search must narrow by `family` when notes carry a family.
+test("/api/kb-search filters by family and returns the family facet", async () => {
+  await saveBundle({
+    version: 1,
+    source: "bundle",
+    notes: [
+      { t: "Lang note", kind: "note", course: "ELA 1", family: "Language", y: "2025-26", s: "", x: "common term" },
+      { t: "Eng note", kind: "note", course: "BEng Y1", family: "Engineering", y: "2025-26", s: "", x: "common term" },
+    ],
+  });
+  const r = await kbSearch(makeReq("/api/kb-search?q=common&family=Engineering"));
+  const d = await r.json();
+  assert.strictEqual(d.results.length, 1, "only the matching family is returned");
+  assert.strictEqual(d.results[0].t, "Eng note", "the engineering note is returned");
+  assert.ok(d.filters.families.includes("Engineering"), "Engineering family facet surfaced");
+  assert.ok(d.filters.families.includes("Language"), "Language family facet surfaced");
+});
+
+// /api/kb-search must honour an explicit sort order on the matched set.
+test("/api/kb-search honour sort=recency (newest year first)", async () => {
+  await saveBundle({
+    version: 1,
+    source: "bundle",
+    notes: [
+      { t: "Old note", kind: "note", course: "C", y: "2022-23", s: "", x: "alpha beta keyword" },
+      { t: "New note", kind: "note", course: "C", y: "2025-26", s: "", x: "alpha beta keyword" },
+    ],
+  });
+  const r = await kbSearch(makeReq("/api/kb-search?q=keyword&sort=recency"));
+  const d = await r.json();
+  assert.strictEqual(d.results.length, 2, "both matched notes returned");
+  assert.strictEqual(d.results[0].t, "New note", "recency sort puts the newest year first");
+});
+
+test("/api/kb-search honour sort=title (alphabetical)", async () => {
+  await saveBundle({
+    version: 1,
+    source: "bundle",
+    notes: [
+      { t: "Zebra note", kind: "note", course: "C", y: "2025-26", s: "", x: "cat dog keyword" },
+      { t: "Apple note", kind: "note", course: "C", y: "2025-26", s: "", x: "cat dog keyword" },
+    ],
+  });
+  const r = await kbSearch(makeReq("/api/kb-search?q=keyword&sort=title"));
+  const d = await r.json();
+  assert.strictEqual(d.results[0].t, "Apple note", "title sort is alphabetical");
+});
+
+test("/api/kb-search honour sort=course (grouped by class)", async () => {
+  await saveBundle({
+    version: 1,
+    source: "bundle",
+    notes: [
+      { t: "Zeta note", kind: "note", course: "Zeta", y: "2025-26", s: "", x: "fish keyword" },
+      { t: "Alpha note", kind: "note", course: "Alpha", y: "2025-26", s: "", x: "fish keyword" },
+    ],
+  });
+  const r = await kbSearch(makeReq("/api/kb-search?q=keyword&sort=course"));
+  const d = await r.json();
+  assert.strictEqual(d.results[0].course, "Alpha", "course sort groups by class name");
+});
+
+// appendBundle must derive a `family` for each note from its course name so the
+// family facet is populated on the live corpus (notes arrive without family).
+test("appendBundle derives a family per note from its course name", async () => {
+  const { appendBundle } = await import("../api/kb-store.js");
+  await appendBundle({
+    source: "vault",
+    notes: [{ t: "X", kind: "note", course: "BEng Y1", y: "2025-26", s: "", x: "" }],
+  });
+  const b = await getBundle();
+  const n = b.notes.find((nn) => nn.t === "X");
+  assert.ok(n, "note ingested");
+  assert.strictEqual(n.family, "Engineering", "family derived from 'BEng' course prefix");
+});
+
+// ---------------------------------------------------------------------------
 // Regression (owner request #11 — fold class materials into sprints/topics):
 // opening a course used to dump ALL notes (e.g. 343 for "Matematika 1") in one
 // flat list, which is overwhelming. groupCourseNotesBySprint groups the notes

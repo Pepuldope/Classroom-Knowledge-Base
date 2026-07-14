@@ -19,6 +19,7 @@
 // Vercel's build fails on it ("referencing unsupported modules: node:fs").
 
 import { jsonResponse } from "./_helpers.js";
+import { deriveFamily } from "./kb-family.js";
 
 // Vercel's Upstash KV integration injects UPSTASH_REDIS_REST_URL / _TOKEN by
 // default, but some setups (or manual KV bindings) use KV_REST_API_URL / _TOKEN.
@@ -216,8 +217,12 @@ export async function appendBundle(incoming) {
   const prev = (await getBundle()) || { version: 1, notes: [], years: [], courses: [], source: "vault" };
   const byPath = new Map((prev.notes || []).map((n) => [n.p, n]));
   for (const n of incoming.notes || []) {
-    if (n && n.p != null) byPath.set(n.p, n);
-    else byPath.set(`_${byPath.size}`, n); // safety for pathless notes
+    // Focus area 7: derive a coarse `family` from the course name when the
+    // note doesn't already carry one, so the class-type facet is populated
+    // across the whole corpus. Never overwrites a real imported family.
+    const enriched = n && n.family ? n : { ...(n || {}), family: n ? deriveFamily(n.course) : "" };
+    if (n && n.p != null) byPath.set(n.p, enriched);
+    else byPath.set(`_${byPath.size}`, enriched); // safety for pathless notes
   }
   const notes = [...byPath.values()];
   const years = [...new Set(notes.map((n) => n.y).filter(Boolean))].sort();

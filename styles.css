@@ -1561,6 +1561,19 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-chip.kb-clear-filters:hover { border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
 .kb-result-count { font-size: 0.82rem; color: var(--muted); margin: 0.25rem 0 0.5rem; }
 
+/* Focus area 7: explicit sort order control. Sits between the filter chips
+   and the result count; compact on mobile (wraps, full-width select). */
+.kb-sort-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; }
+.kb-sort-label { font-size: 0.8rem; color: var(--muted); }
+.kb-sort-select {
+  font: inherit; font-size: 0.82rem; cursor: pointer;
+  padding: 0.28rem 0.5rem; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--surface, #fff); color: var(--fg);
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+.kb-sort-select:hover { border-color: var(--accent); }
+.kb-sort-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+
 /* Browse-by-course discovery panel + example search chips. */
 .kb-examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; }
 .kb-examples-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.1rem; }

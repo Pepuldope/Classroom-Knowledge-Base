@@ -136,10 +136,54 @@ try {
     assert.ok(!stray, "result cards present but a stray 'No matches' empty state was also rendered");
   });
 
+  // Regression guard for the 2026-07-14 focus-area-7 rendering crash
+  // ("Search failed: kinds is not defined"): a search that returns real
+  // results must never also render a JS-error empty state. A render-time
+  // exception in renderFilterChips used to abort result painting entirely,
+  // leaving only a "Search failed: …" div, so we assert it is absent.
+  await check("search never renders a 'Search failed' JS-error empty state", async () => {
+    await page.click("#kbSearchInput");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
+    const empties = await page.locator("#kbResults .empty").allTextContents();
+    const crashed = empties.some((t) => /search failed/i.test(t || ""));
+    assert.ok(!crashed, "a render-time JS error produced a 'Search failed' empty state");
+  });
+
   await check("filter chips render after search", async () => {
     await page.waitForSelector("#kbFilterChips:not([hidden]) .kb-chip", { timeout: 10000 });
     const chips = await page.locator("#kbFilterChips .kb-chip").count();
     assert.ok(chips > 0, "expected at least one filter chip");
+  });
+
+  // Focus area 7: the filter bar must expose Type + Class-type facets AND a
+  // sort dropdown, so a student can narrow/search the KB by kind / family and
+  // reorder results. These are reachable from the search response facets.
+  await check("Type + Class-type filter facets and sort dropdown render", async () => {
+    // Labels for the new facets must be present in the chip bar.
+    const labels = await page.locator("#kbFilterChips .kb-chip-group-label").allTextContents();
+    const joined = labels.join(" | ").toLowerCase();
+    assert.ok(joined.includes("type"), "Type facet label present");
+    // Class-type only appears when notes carry a family; the seeded dev vault
+    // may not, so only require it when the facet exists in the search response.
+    const r = await page.request.fetch(BASE + "/api/kb-search?q=cover%20letter");
+    const data = await r.json().catch(() => null);
+    if (Array.isArray(data?.filters?.families) && data.filters.families.length) {
+      assert.ok(joined.includes("class type"), "Class-type facet label present when families exist");
+    }
+    // Sort dropdown must be present and offer the four orderings.
+    await page.waitForSelector("#kbSort", { timeout: 5000 });
+    const opts = await page.locator("#kbSort option").allTextContents();
+    assert.ok(opts.length >= 4, "sort dropdown has at least 4 orderings");
+  });
+
+  await check("changing sort dropdown re-runs the search", async () => {
+    await page.selectOption("#kbSort", "recency");
+    // A real search with sort should still return result cards (not error out).
+    await page.waitForSelector("#kbResults .kb-result-card, #kbResults .empty", { timeout: 8000 });
+    const cards = await page.locator("#kbResults .kb-result-card").count();
+    const empty = await page.locator("#kbResults .empty").count();
+    assert.ok(cards > 0 || empty > 0, "sort change produces results or an empty state");
   });
 
   await check("matched terms are highlighted in results", async () => {

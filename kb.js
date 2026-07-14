@@ -31,11 +31,18 @@ export { highlightSnippet, bundleToMarkdown, bundleToCsv };
 export function kbFilterModel(filters, active = {}) {
   const courses = Array.isArray(filters?.courses) ? filters.courses : [];
   const years = Array.isArray(filters?.years) ? filters.years : [];
+  const kinds = Array.isArray(filters?.kinds) ? filters.kinds : [];
+  const families = Array.isArray(filters?.families) ? filters.families : [];
   return {
     courses,
     years,
+    kinds,
+    families,
     activeCourse: active.course || "",
     activeYear: active.year || "",
+    activeKind: active.kind || "",
+    activeFamily: active.family || "",
+    sort: active.sort || "relevance",
   };
 }
 
@@ -336,6 +343,15 @@ export function wireKbEvents() {
   const search = $("kbSearchInput");
   search?.addEventListener("input", debounce(() => runKbSearch(search.value), 200));
 
+  // Focus area 7: explicit sort order. Changing the dropdown re-runs the search
+  // with the chosen sort (default relevance, which is omitted server-side).
+  const sortSel = $("kbSort");
+  sortSel?.addEventListener("change", () => {
+    kbActiveSort = sortSel.value || "relevance";
+    const input = $("kbSearchInput");
+    runKbSearch(input ? input.value : "");
+  });
+
   // Browse-by-course: "back to all courses" returns to the course grid.
   $("kbBrowseBack")?.addEventListener("click", () => {
     const notesEl = $("kbBrowseNotes");
@@ -511,6 +527,9 @@ async function handleKbFile(e) {
 // ---------------------------------------------------------------------------
 let kbActiveCourse = "";
 let kbActiveYear = "";
+let kbActiveKind = "";
+let kbActiveFamily = "";
+let kbActiveSort = "relevance";
 
 async function runKbSearch(query) {
   const results = $("kbResults");
@@ -536,6 +555,9 @@ async function runKbSearch(query) {
     const params = new URLSearchParams({ q: query, limit: "8" });
     if (kbActiveCourse) params.set("course", kbActiveCourse);
     if (kbActiveYear) params.set("year", kbActiveYear);
+    if (kbActiveKind) params.set("kind", kbActiveKind);
+    if (kbActiveFamily) params.set("family", kbActiveFamily);
+    if (kbActiveSort && kbActiveSort !== "relevance") params.set("sort", kbActiveSort);
     const r = await fetch("/api/kb-search?" + params.toString());
     const d = await r.json();
     results.hidden = false;
@@ -822,12 +844,23 @@ async function renderRelatedPreview(container, noteIndex) {
 function renderFilterChips(filters) {
   const chips = $("kbFilterChips");
   if (!chips) return;
-  // Pure model: returns ALL courses + years (no truncation) and the active
-  // selection, so every course is reachable as a filter (owner request #2).
-  const model = kbFilterModel(filters, { course: kbActiveCourse, year: kbActiveYear });
+  // Pure model: returns ALL courses + years + kinds + families (no truncation)
+  // and the active selection, so every facet is reachable as a filter
+  // (owner request #2 + focus area 7).
+  const model = kbFilterModel(filters, {
+    course: kbActiveCourse,
+    year: kbActiveYear,
+    kind: kbActiveKind,
+    family: kbActiveFamily,
+    sort: kbActiveSort,
+  });
   const courses = model.courses;
   const years = model.years;
-  if (courses.length === 0 && years.length === 0) { chips.hidden = true; chips.innerHTML = ""; return; }
+  const kinds = model.kinds;
+  const families = model.families;
+  if (courses.length === 0 && years.length === 0 && kinds.length === 0 && families.length === 0) {
+    chips.hidden = true; chips.innerHTML = ""; return;
+  }
   chips.hidden = false;
   chips.innerHTML = "";
 
@@ -839,7 +872,9 @@ function renderFilterChips(filters) {
     b.title = active ? `Remove filter: ${label}` : `Filter by ${label}`;
     b.addEventListener("click", () => {
       if (kind === "course") kbActiveCourse = active ? "" : value;
-      else kbActiveYear = active ? "" : value;
+      else if (kind === "year") kbActiveYear = active ? "" : value;
+      else if (kind === "kind") kbActiveKind = active ? "" : value;
+      else if (kind === "family") kbActiveFamily = active ? "" : value;
       const input = $("kbSearchInput");
       runKbSearch(input ? input.value : "");
     });
@@ -862,18 +897,41 @@ function renderFilterChips(filters) {
     // The .kb-filter-chips container scrolls horizontally if the row is long.
     for (const c of courses) chips.appendChild(makeChip(c, "course", c, model.activeCourse === c));
   }
+  // Focus area 7: Type + Class-type facets join course + year.
+  if (kinds.length) {
+    const lbl = document.createElement("span");
+    lbl.className = "kb-chip-group-label";
+    lbl.textContent = "Type:";
+    chips.appendChild(lbl);
+    for (const k of kinds) chips.appendChild(makeChip(k, "kind", k, model.activeKind === k));
+  }
+  if (families.length) {
+    const lbl = document.createElement("span");
+    lbl.className = "kb-chip-group-label";
+    lbl.textContent = "Class type:";
+    chips.appendChild(lbl);
+    for (const f of families) chips.appendChild(makeChip(f, "family", f, model.activeFamily === f));
+  }
 
   // ROADMAP #55: a "Clear filters" control appears only when a facet is active,
   // so the student can reset the course/year selection without retyping.
-  if (kbActiveCourse || kbActiveYear) {
+  if (kbActiveCourse || kbActiveYear || kbActiveKind || kbActiveFamily || kbActiveSort !== "relevance") {
     const clear = document.createElement("button");
     clear.type = "button";
     clear.className = "kb-chip kb-clear-filters";
     clear.textContent = "✕ Clear filters";
-    clear.title = "Remove the active course/year filter";
+    clear.title = "Remove the active filters and sort";
     clear.addEventListener("click", () => {
       kbActiveCourse = "";
       kbActiveYear = "";
+      kbActiveKind = "";
+      kbActiveFamily = "";
+      // Also reset the explicit sort so the control disappears and the dropdown
+      // stays in sync (a persistent non-default sort would otherwise keep the
+      // clear button visible even with no facet active).
+      kbActiveSort = "relevance";
+      const sortSel = $("kbSort");
+      if (sortSel) sortSel.value = "relevance";
       const input = $("kbSearchInput");
       runKbSearch(input ? input.value : "");
     });

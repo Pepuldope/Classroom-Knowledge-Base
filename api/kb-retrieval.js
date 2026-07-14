@@ -83,12 +83,41 @@ function buildSnippet(note, qTokens) {
   return snippet;
 }
 
+// Sort strategies for the KB result set (focus area 7). `relevance` (default)
+// keeps the existing score ordering. The others reorder the MATCHED notes by a
+// stable secondary key. Exported + pure for unit testing.
+export function makeSortFn(sort) {
+  switch (sort) {
+    case "recency":
+      // Newest year first (string year sorts lexicographically — already works
+      // for "2025-26" > "2024-25" > "2023-24"; "undated" sinks). Ties broken by
+      // the relevance score so a newer-year tie still ranks by match quality.
+      return (a, b) =>
+        String((b.y || "0")).localeCompare(String((a.y || "0"))) ||
+        (b._score || 0) - (a._score || 0);
+    case "title":
+      return (a, b) => String(a.t || "").localeCompare(String(b.t || ""));
+    case "course":
+      return (a, b) =>
+        String(a.course || "").localeCompare(String(b.course || "")) ||
+        String(a.t || "").localeCompare(String(b.t || ""));
+    case "relevance":
+    default:
+      // Relevance: by score desc (searchNotes already sorts, but we keep a
+      // deterministic tiebreak by course then title for stable output).
+      return (a, b) =>
+        (b._score || 0) - (a._score || 0) ||
+        String(a.course || "").localeCompare(String(b.course || "")) ||
+        String(a.t || "").localeCompare(String(b.t || ""));
+  }
+}
+
 /**
  * Search the shared KB. Returns top `limit` notes with _score and _snippet.
  * Each returned note also carries t/s/course/y/topic/p so the frontend and
  * the tutor can cite the source.
  */
-export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = false } = {}) {
+export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = false, sortFn = null } = {}) {
   if (!Array.isArray(notes) || notes.length === 0) return [];
   const qTokens = tokenize(query);
   if (qTokens.length === 0) return [];
@@ -114,6 +143,10 @@ export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = f
     });
     if (out.length >= limit) break;
   }
+  // Explicit sort order (focus area 7): when a sortFn is supplied it reorders
+  // the matched notes (e.g. recency / title / course). When omitted the
+  // relevance ranking from scoreNotes is preserved (default behaviour).
+  if (typeof sortFn === "function") out.sort(sortFn);
   return out;
 }
 
