@@ -102,6 +102,20 @@ order and report on each in the status message.
    the user is never shown a redundant "scrape" action over content that is
    already present and loading.
 
+7. **Knowledge-base sorting & filtering.** Add a sort/filter surface so students
+   can organize the KB by its real dimensions: **type** (`kind` — assignment,
+   note, exam, etc.), **year** (`y`), **class** (`course`), and **class type**
+   (`family` — the course-category facet already present in `meta.courseList`,
+   e.g. an engineering vs language grouping). Also provide an explicit **sort
+   order**: by recency, by course, by title, by relevance. Reuse the existing
+   `filters.courses` / `filters.years` machinery and `/api/kb-browse` (which
+   already returns courses + note counts and accepts `?course=`) — extend both
+   to cover `kind` + `family` + a `sort` param rather than inventing a new
+   endpoint. The control must live in the KB view, and focus area 1's Settings
+   should let a student pin a default sort/scope. Default: relevance for active
+   queries, recency otherwise. Confirm the filter chips + sort actually narrow
+   and reorder results (add/extend e2e coverage).
+
 ## WHAT THE KB IS (vs the archive)
 - **Archive** = raw Classroom export (full dump, planner/archive views). Source data.
 - **Knowledge Base** = a CURATED, SEARCHABLE study layer built FROM Classroom
