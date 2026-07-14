@@ -39,6 +39,52 @@ Migration plan (in priority order — do these on the next run, then keep improv
 Until the pivot lands, the existing server routes still back the live site — do not
 delete them until the client path is live and verified, or the KB goes dark.
 
+## EXTENDED FOCUS AREAS (owner addendum 2026-07-14)
+
+Beyond the per-user/private pivot, the next runs must also invest in these four
+areas. They are standing priorities, not one-offs — fold them into every run's work
+order and report on each in the status message.
+
+1. **KB → Settings integration.** The knowledge base should be fully configurable
+   from the site's existing **Settings** page, not buried in code/in-code constants.
+   Move KB controls into Settings: AI-tutor on/off + effort, default search scope
+   (all courses vs current course vs a pinned set), related-notes count, compact vs
+   comfortable density, auto-build-on-Classroom-sign-in toggle, and bundle
+   export / clear-local-data actions. Reuse the existing Settings UI/state (do not
+   build a second settings surface). Persist choices in the user's browser, never
+   server-side.
+
+2. **Continuity across the WHOLE site.** Past runs over-focused on the KB and let
+   the rest of the app drift. Every change must keep the full app coherent: shared
+   CSS, the nav/routing shell, theme, onboarding, and the Archive/Planner views
+   must all still work after a KB change. Before reporting "done", open the other
+   views (archive, planner, settings, home) and confirm nothing regressed. Treat
+   the KB as ONE feature of a multi-view app, not the whole app.
+
+3. **General performance / load times.** Make the whole site feel instant. Concrete
+   levers: the per-user/private pivot already removes the multi-shard KV fetch on
+   first paint; additionally lazy-load non-critical panels (build panel, tutor,
+   related-notes preview), debounce search input, code-split heavy modules, and
+   cache the bundle in IndexedDB so repeat visits are instant. Track regressions
+   with `scripts/kb_loading_test.mjs` — first paint must show the "Loading your
+   knowledge base…" state then populate, with NO multi-second blank wait, and the
+   loading e2e must keep passing.
+
+4. **Student privacy (hard requirement).** The KB is per-user/private by design
+   (no shared server DB, no public read API, no public export). Extend that
+   posture site-wide:
+   - No third-party trackers/analytics that see student content.
+   - Tutor context leaves the browser ONLY for the model call, and ONLY the
+     retrieved notes needed to answer — never the whole bundle, never other
+     students' data.
+   - The server must NOT log student note content. Log only minimal,
+     non-identifying request metadata.
+   - Classroom OAuth token is read-only and clearly scoped; surface a plain-language
+     consent + a "what gets stored, where" note in Settings.
+   - Local-only storage is the default; nothing is uploaded unless the student
+     explicitly triggers it.
+   Add a short privacy summary to Settings so students can see the stance.
+
 ## WHAT THE KB IS (vs the archive)
 - **Archive** = raw Classroom export (full dump, planner/archive views). Source data.
 - **Knowledge Base** = a CURATED, SEARCHABLE study layer built FROM Classroom
