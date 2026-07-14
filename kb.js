@@ -578,11 +578,6 @@ async function runKbSearch(query) {
       dym.appendChild(document.createTextNode(" ?"));
       results.appendChild(dym);
     }
-    const empty2 = document.createElement("div");
-    empty2.className = "empty";
-    empty2.textContent = "No matches in your knowledge base.";
-    results.appendChild(empty2);
-    return;
   for (const note of d.results) {
       const row = document.createElement("div");
       row.className = "assignment kb-result-card";

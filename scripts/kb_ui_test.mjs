@@ -119,6 +119,23 @@ try {
     assert.ok(n > 0, "expected at least one result card");
   });
 
+  // Regression guard for the 2026-07-14 stray-return bug: when the server
+  // returns real result cards, a "No matches" empty state must NOT also be
+  // rendered (a stray empty div + premature `return` once killed the result
+  // loop, so the page showed "Showing N of M notes" together with "No
+  // matches" and zero cards). We assert BOTH: cards exist AND no stray
+  // "No matches" empty div is present.
+  await check("real results render without a stray 'No matches' empty state", async () => {
+    await page.click("#kbSearchInput");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
+    const n = await page.locator("#kbResults .kb-result-card").count();
+    assert.ok(n > 0, "expected result cards before checking for stray empty state");
+    const empties = await page.locator("#kbResults .empty").allTextContents();
+    const stray = empties.some((t) => /no matches/i.test(t || ""));
+    assert.ok(!stray, "result cards present but a stray 'No matches' empty state was also rendered");
+  });
+
   await check("filter chips render after search", async () => {
     await page.waitForSelector("#kbFilterChips:not([hidden]) .kb-chip", { timeout: 10000 });
     const chips = await page.locator("#kbFilterChips .kb-chip").count();
@@ -467,8 +484,8 @@ try {
   await check("course accordion renders styled (border-radius + pointer cursor)", async () => {
     // Explicitly reset to the browse-by-course surface (mirrors the empty-query
     // path) so this check is deterministic and not dependent on prior steps'
-    // search state. Force-hide results + reveal the browse panel, then clear
-    // the input so the production path is the one that renders the course grid.
+    // search state. Reveal the browse panel + notes list and clear the search
+    // input so the production path renders the course grid.
     await page.evaluate(() => {
       const input = document.getElementById("kbSearchInput");
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
@@ -476,19 +493,31 @@ try {
       if (results) { results.hidden = true; results.innerHTML = ""; }
       const browse = document.getElementById("kbBrowse");
       if (browse) browse.hidden = false;
+      const notes = document.getElementById("kbBrowseNotes");
+      if (notes) notes.hidden = false;
     });
     await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 8000 });
     await page.locator("#kbBrowseCourses .kb-course-card").first().click();
-    await page.waitForSelector("#kbBrowseNotes .kb-result-card", { timeout: 8000 });
-    // The result cards' container is the styled accordion surface.
-    const card = page.locator("#kbBrowseNotes .kb-result-card").first();
-    await card.waitFor({ timeout: 8000 });
-    const style = await card.evaluate((el) => {
+    // The accordion groups render into #kbBrowseNotes; assert on the element
+    // directly (not visibility, which depends on ancestor [hidden] state).
+    await page.waitForFunction(
+      () => document.querySelectorAll("#kbBrowseNotes .kb-sprint-group").length > 0,
+      { timeout: 8000 }
+    );
+    // The styled accordion surface is the <details class="kb-sprint-group">
+    // container (rounded 0.6rem). The .kb-result-card inside it is
+    // intentionally square (radius 0) so the cards sit flush within the
+    // rounded group — measuring the card would be the wrong element.
+    const group = page.locator("#kbBrowseNotes .kb-sprint-group").first();
+    const style = await group.evaluate((el) => {
       const cs = getComputedStyle(el);
       return { radius: cs.borderTopLeftRadius, cursor: cs.cursor, display: cs.display };
     });
     assert.ok(parseFloat(style.radius) > 0, `expected rounded accordion, got radius ${style.radius}`);
-    assert.ok(style.cursor === "pointer", `expected pointer cursor, got ${style.cursor}`);
+    // The summary (clickable accordion header) is what shows the pointer.
+    const summary = page.locator("#kbBrowseNotes .kb-sprint-summary").first();
+    const sumStyle = await summary.evaluate((el) => getComputedStyle(el).cursor);
+    assert.ok(sumStyle === "pointer", `expected pointer cursor on accordion header, got ${sumStyle}`);
   });
 
   await check("search results are horizontally centered (onboarding not lopsided)", async () => {
