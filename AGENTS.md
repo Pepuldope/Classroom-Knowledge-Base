@@ -83,7 +83,24 @@ order and report on each in the status message.
      consent + a "what gets stored, where" note in Settings.
    - Local-only storage is the default; nothing is uploaded unless the student
      explicitly triggers it.
-   Add a short privacy summary to Settings so students can see the stance.
+   - Add a short privacy summary to Settings so students can see the stance.
+
+5. **Persistent Google sign-in.** The user should NOT have to re-authenticate
+   with Google Classroom every time the site opens. Persist the Classroom OAuth
+   session (access token + refresh token where the provider grants one) in the
+   browser (IndexedDB, consistent with the local-only privacy posture) and
+   silently rehydrate the session on page load. Surface a clear "Signed in as
+   <email> · Sign out" state in Settings; sign-out wipes local creds. Never
+   store the token server-side. Keep the read-only Classroom scope + consent
+   notice from focus area 4.
+
+6. **Hide the build card once a bundle already exists.** When the KB is already
+   built/loaded — a local IndexedDB bundle post-pivot, or a populated server DB
+   pre-pivot — the entire "Scrape my Classroom" onboarding card (button + build
+   panel + hint) must be hidden; show only the search / study surface. Only
+   reveal the build card when there is genuinely no bundle yet (empty state), so
+   the user is never shown a redundant "scrape" action over content that is
+   already present and loading.
 
 ## WHAT THE KB IS (vs the archive)
 - **Archive** = raw Classroom export (full dump, planner/archive views). Source data.
