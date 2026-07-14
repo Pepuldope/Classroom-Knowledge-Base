@@ -116,6 +116,23 @@ order and report on each in the status message.
    queries, recency otherwise. Confirm the filter chips + sort actually narrow
    and reorder results (add/extend e2e coverage).
 
+8. **AI tutor → a real in-app chatbot.** Level the tutor up from a single
+   fire-and-forget box into a proper mini chatbot inside the KB view. Must-haves:
+   - **Clear chat** button (wipe the current conversation, keep grounding scope).
+   - **New chat** button (start a fresh thread; optionally keep a short list of
+     past threads to switch between — if added, persist threads locally only).
+   - **Multi-turn memory:** the conversation history is sent back with each turn
+     so the tutor remembers context within a thread (still grounded only on the
+     user's retrieved notes — never other students' data, per focus area 4).
+   - **Streaming / typing indicator** so long answers don't look like a hang.
+   - **Per-message copy** + a visible "answers only from your notes" grounding
+     note, and graceful error/retry if a provider fails over.
+   - Keep routing through `api/ai-router.js` with `task:"tutor"` and the
+     existing provider rotation + NVIDIA 46/min throttle (do NOT pin one model).
+   Thread state is local-only (privacy posture); nothing is uploaded except the
+   notes needed to answer. Reuse the existing tutor UI/state, don't fork a
+   second chat surface. Add/extend e2e for clear + new-chat + multi-turn.
+
 ## WHAT THE KB IS (vs the archive)
 - **Archive** = raw Classroom export (full dump, planner/archive views). Source data.
 - **Knowledge Base** = a CURATED, SEARCHABLE study layer built FROM Classroom
