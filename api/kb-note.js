@@ -5,7 +5,7 @@ export const config = { runtime: "edge" };
 
 /**
  * GET /api/kb-note?id=<index>
- * Public (no auth) full-note lookup by its stable index in the shared bundle.
+ * Full-note lookup by its stable index in the knowledge-base bundle.
  * The index comes from /api/kb-search results (noteIndex field), so a clicked
  * search result can open the entire note, not just its snippet.
  *

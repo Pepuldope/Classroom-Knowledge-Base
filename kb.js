@@ -129,6 +129,12 @@ async function refreshKb() {
   const onboarding = $("kbOnboarding");
   const main = $("kbMain");
   const buildPanel = $("kbBuildPanel");
+  const metaBar = $("kbMetaBar");
+  // Explicit loading state (owner #1/#2): show that the KB is FETCHING, not
+  // empty, so the user can always tell "still loading" from "nothing there".
+  // Cleared once we know whether a DB exists (renderKbMeta overwrites it).
+  if (metaBar) metaBar.innerHTML = '<span class="kb-loading-inline">Loading your knowledge base…</span>';
+  if (main) main.hidden = false;
   let meta = null;
   try {
     const r = await fetch("/api/kb-search?q=" + encodeURIComponent("__ping__"));
@@ -174,7 +180,8 @@ export function buildResultSummary({ shown, total, course = "", year = "" }) {
 }
 
 // ---------------------------------------------------------------------------
-// Export (public — the shared DB is readable by anyone, no login required)
+// Export (private — the bundle lives in the user's own browser, exported
+// only to their device; nothing is read from or written to a shared server DB)
 // ---------------------------------------------------------------------------
 function downloadFile(filename, text, mime) {
   const blob = new Blob([text], { type: mime });
@@ -536,34 +543,47 @@ async function runKbSearch(query) {
     renderFilterChips(d.filters);
     renderResultCount(d, { course: kbActiveCourse, year: kbActiveYear });
     if (!d.results || d.results.length === 0) {
-      // "Did you mean" — when a typo returned nothing but a confident
-      // correction exists in the corpus, offer a one-click retry.
-      if (d.didYouMean) {
-        const dym = document.createElement("div");
-        dym.className = "kb-didyoumean";
-        const label = document.createElement("span");
-        label.textContent = "Did you mean ";
-        dym.appendChild(label);
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "kb-didyoumean-btn";
-        btn.textContent = d.didYouMean;
-        btn.addEventListener("click", () => {
-          const input = $("kbSearchInput");
-          if (input) input.value = d.didYouMean;
-          runKbSearch(d.didYouMean);
-        });
-        dym.appendChild(btn);
-        dym.appendChild(document.createTextNode(" ?"));
-        results.appendChild(dym);
-      }
+      const meta = d.meta || {};
       const empty = document.createElement("div");
       empty.className = "empty";
-      empty.textContent = "No matches in the knowledge base.";
+      // Two DISTINCT empty states (owner #1): the KB genuinely has no notes
+      // yet vs a real query that simply matched nothing. Never let a slow
+      // fetch be mistaken for "empty" — the spinner covered that case above.
+      if (!meta.noteCount) {
+        empty.textContent = "Your knowledge base is empty — build it from Google Classroom (or upload an archive.json) to start searching.";
+      } else {
+        empty.textContent = "No matches in your knowledge base.";
+      }
       results.appendChild(empty);
       return;
     }
-    for (const note of d.results) {
+    // "Did you mean" — when a typo returned nothing but a confident
+    // correction exists in the corpus, offer a one-click retry.
+    if (d.didYouMean) {
+      const dym = document.createElement("div");
+      dym.className = "kb-didyoumean";
+      const label = document.createElement("span");
+      label.textContent = "Did you mean ";
+      dym.appendChild(label);
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "kb-didyoumean-btn";
+      btn.textContent = d.didYouMean;
+      btn.addEventListener("click", () => {
+        const input = $("kbSearchInput");
+        if (input) input.value = d.didYouMean;
+        runKbSearch(d.didYouMean);
+      });
+      dym.appendChild(btn);
+      dym.appendChild(document.createTextNode(" ?"));
+      results.appendChild(dym);
+    }
+    const empty2 = document.createElement("div");
+    empty2.className = "empty";
+    empty2.textContent = "No matches in your knowledge base.";
+    results.appendChild(empty2);
+    return;
+  for (const note of d.results) {
       const row = document.createElement("div");
       row.className = "assignment kb-result-card";
       row.tabIndex = 0;
@@ -1045,10 +1065,11 @@ async function renderRelatedNotes(index) {
   wrap.hidden = true;
   list.innerHTML = "";
   try {
-    const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=5");
+    const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=3");
     if (!r.ok) return;
     const d = await r.json();
-    const related = d.related || [];
+    // owner #6: cap the rendered panel to 3 items so it stays compact.
+    const related = (d.related || []).slice(0, 3);
     if (!related.length) return;
     for (const rel of related) {
       const item = document.createElement("button");

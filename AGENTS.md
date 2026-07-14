@@ -4,15 +4,40 @@
 > run and OVERRIDES the standing cron prompt. If this file and the cron prompt
 > disagree, follow this file.
 
-## THE CORE PROBLEM (verified, do not re-derive)
-The live Knowledge Base is **non-functional**: it holds ONLY the 1-note "Demo"
-seed (`noteCount:1`, `courses:["Demo"]`), so `/api/kb-search` returns nothing
-useful. The loop's past runs kept adding UI polish (centering, browse panels,
-tutor chips) on top of an EMPTY room. That is the wrong priority. A pretty, empty
-KB is useless. **Functionality before polish.**
+## ARCHITECTURE PIVOT (owner decision 2026-07-14) — per-user / PRIVATE, not shared server DB
 
-Also: the KB is being confused with the "archive" (the raw Classroom dump / planner
-views). They are DIFFERENT things and must stay separate.
+The owner rejected the "shared school safekeep" concept (it was a public, server-side
+KV database everyone could read and even export). **The knowledge base is now
+PER-USER and PRIVATE**, mirroring how the existing Archive feature works: the bundle
+lives in the user's OWN browser (IndexedDB), built from their Google Classroom via
+their own read-only token. There is NO shared server database, NO public read API, and
+NO public export. This also fixes the slow-load complaint: there is no network
+round-trip to a 13-shard KV store on first paint — data is local and instant.
+
+Migration plan (in priority order — do these on the next run, then keep improving):
+
+1. **Move the KB bundle from server KV to the client.** Replace the `/api/kb-store`,
+   `/api/kb-scrape`, `/api/kb-search`, `/api/kb-browse`, `/api/kb-related`,
+   `/api/kb-note` server routes with client-side equivalents that read/write the
+   bundle in IndexedDB (reuse `archive.js`'s `idbGet`/`idbPut`/`loadArchiveFromDisk`
+   pattern — do NOT invent a new storage layer). Search/related/browse run over the
+   in-memory bundle (the same `searchNotes`/`relatedNotes` functions already exist
+   in `kb-retrieval.js`, pure + DOM-free).
+2. **Keep the AI tutor server-side** (it needs the model router + rate limit), but
+   send the user's retrieved notes along with the query instead of having the server
+   read a shared DB. The tutor route should accept `{ messages, notes }` where the
+   client does the retrieval and ships the grounded context.
+3. **Rename everywhere:** "safekeep" → "your knowledge base"; "shared DB" → removed;
+   "Scrape my Classroom into the shared DB" → "Build my knowledge base". The
+   onboarding + build-hint copy in `index.html` and `kb.js` are already updated —
+   finish the rest (README, ROADMAP, api/* comments, docs/).
+4. **Verification after pivot:** `/api/kb-search` (now client-side) must return
+   results over a few-thousand-note local bundle in well under 1s (no shard fetch);
+   the first paint must show the new "Loading your knowledge base…" state, then the
+   populated surface, with NO multi-second blank wait.
+
+Until the pivot lands, the existing server routes still back the live site — do not
+delete them until the client path is live and verified, or the KB goes dark.
 
 ## WHAT THE KB IS (vs the archive)
 - **Archive** = raw Classroom export (full dump, planner/archive views). Source data.

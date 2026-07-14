@@ -1127,20 +1127,28 @@ summary::-webkit-details-marker { color: var(--muted); }
   margin: 0;
 }
 
-/* Feature A: "Related notes" panel inside the note-detail modal. */
-.kb-related { margin-top: 1rem; border-top: 1px solid var(--border, #eee); padding-top: 0.75rem; }
-.kb-related-title { margin: 0 0 0.5rem; font-size: 0.9rem; color: var(--muted); font-weight: 600; }
-.kb-related-list { display: flex; flex-direction: column; gap: 0.4rem; }
+/* Feature A: "Related notes" panel inside the note-detail modal.
+   Kept COMPACT (owner #6): capped to 3 items, smaller type, and a bounded
+   height with scroll so it never dwarfs the note body it sits under. */
+.kb-related { margin-top: 0.75rem; border-top: 1px solid var(--border, #eee); padding-top: 0.6rem; max-height: 32vh; overflow-y: auto; }
+.kb-related-title { margin: 0 0 0.4rem; font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+.kb-related-list { display: flex; flex-direction: column; gap: 0.3rem; }
 .kb-related-item {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
-  text-align: left; width: 100%; padding: 0.5rem 0.7rem; cursor: pointer;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.05rem;
+  text-align: left; width: 100%; padding: 0.4rem 0.6rem; cursor: pointer;
   background: var(--accent-bg, #eff6ff); border: 1px solid var(--border, #eee);
   border-radius: 0.5rem; transition: border-color .12s ease, transform .12s ease;
 }
 .kb-related-item:hover,
 .kb-related-item:focus-visible { border-color: var(--accent, #2563eb); transform: translateY(-1px); outline: none; }
-.kb-related-item-title { font-weight: 600; font-size: 0.9rem; color: var(--fg, #1a1a1a); }
-.kb-related-item-meta { font-size: 0.78rem; color: var(--muted); }
+.kb-related-item-title { font-weight: 600; font-size: 0.85rem; color: var(--fg, #1a1a1a); }
+.kb-related-item-meta { font-size: 0.75rem; color: var(--muted); }
+
+/* Inline "loading your knowledge base" state on the KB view's initial fetch
+   (owner #1/#2): distinguishes "still fetching" from "empty / no results". */
+.kb-loading-inline { color: var(--muted); font-size: 0.9rem; display: inline-flex; align-items: center; gap: 0.4rem; }
+.kb-loading-inline::before { content: ""; width: 0.85rem; height: 0.85rem; border: 2px solid var(--muted); border-top-color: transparent; border-radius: 50%; animation: kb-spin 0.7s linear infinite; }
+@keyframes kb-spin { to { transform: rotate(360deg); } }
 
 /* Related-notes preview chips under each search-result card. */
 .kb-related-preview {
