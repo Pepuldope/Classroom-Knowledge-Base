@@ -359,6 +359,11 @@ async function initGis() {
       client_id: CLIENT_ID,
       scope: SCOPES,
       ux_mode: "popup",
+      // Always show the account chooser so the user can pick their SCHOOL
+      // Google account (not a cached/family/main account). Without this, Google
+      // silently reuses the last-approved account and the user gets a 400 when
+      // that account isn't in a Classroom domain (see handleClassroomAuthError).
+      prompt: "select_account",
       callback: async (resp) => {
         if (!resp || !resp.code) {
           setStatus(`Auth failed: ${resp?.error || "no code"}`, true);
@@ -1183,6 +1188,7 @@ $("loginBtn").addEventListener("click", () => {
   tokenClient.requestAccessToken({ prompt: "select_account" });
 });
 
+$("switchBtn").addEventListener("click", () => { closeMenu(); switchAccount(); });
 $("logoutBtn").addEventListener("click", () => {
   closeMenu();
   clearToken();
@@ -1256,11 +1262,45 @@ async function gFetch(url) {
     }
     if (r.status === 401) {
       clearToken();
-      throw new Error("Session expired — sign in again.");
+      const err = new Error("Session expired — sign in again.");
+      err.status = 401;
+      throw err;
     }
   }
-  if (!r.ok) throw new Error(`Classroom API ${r.status}: ${await r.text()}`);
+  if (!r.ok) {
+    const err = new Error(`Classroom API ${r.status}: ${await r.text().catch(() => "")}`);
+    err.status = r.status;
+    throw err;
+  }
   return r.json();
+}
+
+function handleWrongAccount() {
+  // The cached/auto-restored Google account is not a Classroom account
+  // (e.g. a personal account). Clear it so we don't loop on the 400, and
+  // drop back to the welcome screen with a clear, actionable message.
+  clearToken();
+  sessionEpoch++;
+  prefsLoadedFromServer = false;
+  try { localStorage.removeItem(USER_HINT_KEY); } catch {}
+  try { localStorage.removeItem(USER_PROFILE_KEY); } catch {}
+  const mw = $("menuWrap"); if (mw) mw.hidden = true;
+  const sb = $("sidebar"); if (sb) sb.hidden = true;
+  $("userInfo").hidden = true;
+  $("userInfo").textContent = "";
+  $("userInfo").setAttribute("aria-hidden", "true");
+  $("welcome").hidden = false;
+  setStatus("That Google account isn't a Classroom account. Sign in with your school Google account to continue.", true);
+  updateArchiveHeaderToggle();
+  updateArchiveSettingsUi();
+}
+
+function switchAccount() {
+  const mw = $("menuWrap"); if (mw) mw.hidden = true;
+  // Force the account chooser so the user can pick their school account.
+  if (codeClient) { codeClient.requestCode({ prompt: "select_account" }); return; }
+  if (!tokenClient) { setStatus("Google client not loaded yet, try again.", true); return; }
+  tokenClient.requestAccessToken({ prompt: "select_account" });
 }
 
 async function onSignedIn() {
@@ -1338,7 +1378,21 @@ function isInScope(a) {
 
 async function loadReport(epoch) {
   lazyEnrichTriggered = false;
-  const coursesResp = await gFetch("https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=100");
+  let coursesResp;
+  try {
+    coursesResp = await gFetch("https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&pageSize=100");
+  } catch (e) {
+    // 400/403 from Classroom almost always means the signed-in Google account
+    // is NOT a school/Classroom account (e.g. a cached personal account).
+    // Don't stay stuck on the wrong account — clear it, bounce to the welcome
+    // screen, and let the user pick their school account from the chooser.
+    if (e && (e.status === 400 || e.status === 403)) {
+      handleWrongAccount();
+      return;
+    }
+    if (epoch === sessionEpoch) setStatus(e.message, true);
+    return;
+  }
   if (epoch !== sessionEpoch) return;
   allCourses = coursesResp.courses || [];
   const courses = allCourses.filter((c) => !hiddenCourseIds.has(c.id));

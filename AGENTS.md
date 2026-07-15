@@ -133,6 +133,17 @@ order and report on each in the status message.
    notes needed to answer. Reuse the existing tutor UI/state, don't fork a
    second chat surface. Add/extend e2e for clear + new-chat + multi-turn.
 
+9. **Unify the planner AI with the KB tutor.** The planner view currently has its
+   OWN separate AI (a different prompt/provider path than the KB tutor). Make them
+   the SAME assistant: one shared grounding + chat engine, so a student gets
+   consistent behavior, the same model rotation (`api/ai-router.js` `task:"tutor"`),
+   and the same privacy posture (grounded only on their notes/Classroom data, never
+   other students'). Concretely: the planner's "ask about this assignment" AI should
+   route through the SAME tutor pipeline as the KB chatbot (focus area 8) — reuse
+   the tutor module + UI rather than maintaining two AI implementations that can
+   drift. They may differ only in the input context (planner = the current
+   assignment; KB = the whole bundle / a selected note), not in the engine.
+
 ## WHAT THE KB IS (vs the archive)
 - **Archive** = raw Classroom export (full dump, planner/archive views). Source data.
 - **Knowledge Base** = a CURATED, SEARCHABLE study layer built FROM Classroom

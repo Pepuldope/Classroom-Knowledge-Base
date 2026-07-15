@@ -665,6 +665,11 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-radius: 12px;
   max-width: 460px;
   width: 100%;
+  /* Defect fix: flex items default to min-width:auto, which prevents the card
+     from shrinking below its content's min-content size. Long unbreakable text
+     (URLs, code, note bodies) then blows the card out to its max-width even on
+     a narrow phone, pushing the close (×) button off-screen. Allow shrinking. */
+  min-width: 0;
   max-height: 80vh;
   display: flex;
   flex-direction: column;
@@ -678,8 +683,22 @@ summary::-webkit-details-marker { color: var(--muted); }
   justify-content: space-between;
   align-items: center;
 }
-.modal-card header h3 { margin: 0; font-size: 1rem; }
+.modal-card header h3 {
+  margin: 0;
+  font-size: 1rem;
+  /* Defect fix: a long note title must never push the close (×) button off
+     the header or overlap it. Constrain the title's flex slot and ellipsize
+     so the button keeps a stable, clickable area on the right.
+     (The × previously intercepted pointer events — could not be clicked.) */
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 0.5rem;
+}
 .modal-card header button {
+  flex: 0 0 auto;
   border: none;
   background: transparent;
   font-size: 1.5rem;
@@ -1224,7 +1243,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   color: #1e3a8a;
 }
 
-.archive-note-body { padding: 1rem 1.25rem; overflow-y: auto; }
+.archive-note-body { padding: 1rem 1.25rem; overflow-y: auto; min-width: 0; }
 .archive-note-meta { color: var(--muted); font-size: 0.82rem; margin-bottom: 0.65rem; }
 .archive-note-content { margin-top: 0.85rem; font-size: 0.92rem; line-height: 1.6; }
 .archive-note-content h1,
@@ -1517,6 +1536,13 @@ summary::-webkit-details-marker { color: var(--muted); }
   .archive-course,
   .archive-topic { margin-left: 0.6rem; padding-left: 0.55rem; }
   .curriculum-row { grid-template-columns: 120px repeat(var(--curriculum-cols, 3), minmax(140px, 1fr)); }
+  /* Defect fix: never let a modal exceed the phone viewport (with breathing
+     room). The .modal-card-tall (560px) and any min-content blowout would
+     otherwise push the close button off-screen on narrow devices. */
+  .modal { padding: 0.5rem; }
+  .modal-card,
+  .modal-card-tall { max-width: 100%; max-height: 90vh; }
+  .modal-card header { padding: 0.85rem 1rem; }
 }
 
 /* ---- Knowledge Base view ---- */

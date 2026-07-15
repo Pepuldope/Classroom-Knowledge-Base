@@ -39,14 +39,19 @@ const oauthConfig = (await import("../api/oauth-config.js")).default;
 const tutor = (await import("../api/tutor.js")).default;
 
 const STATIC = {
-  "/": "../index.html",
-  "/index.html": "../index.html",
-  "/kb-test-harness.html": "../kb-test-harness.html",
-  "/app.js": "../app.js",
-  "/kb.js": "../kb.js",
-  "/archive.js": "../archive.js",
-  "/kb-highlight.js": "../kb-highlight.js",
-  "/styles.css": "../styles.css",
+  "/": "index.html",
+  "/index.html": "index.html",
+  "/kb-test-harness.html": "kb-test-harness.html",
+  "/app.js": "app.js",
+  "/kb.js": "kb.js",
+  "/archive.js": "archive.js",
+  "/archive-builder.js": "archive-builder.js",
+  "/kb-highlight.js": "kb-highlight.js",
+  "/kb-retrieval.js": "kb-retrieval.js",
+  "/kb-family.js": "kb-family.js",
+  "/_helpers.js": "_helpers.js",
+  "/ai-router.js": "ai-router.js",
+  "/styles.css": "styles.css",
 };
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml" };
 
@@ -69,10 +74,15 @@ const server = http.createServer(async (req, res) => {
   }
 
   // --- Static ---
+  // Serve an explicit allowlist (index.html, app modules, styles) plus any
+  // repo-root .js/.css/.html under the same origin so the full frontend
+  // module graph resolves in the harness. Suffix-guarded.
   const rel = STATIC[p] || (p.startsWith("/api") ? null : p.replace(/^\//, ""));
   if (!rel) { res.writeHead(404); return res.end("not found"); }
-  const fp = path.join(__dirname, rel);
-  if (!existsSync(fp)) { res.writeHead(404); return res.end("not found"); }
+  const fp = path.join(__dirname, "..", rel);
+  if (!existsSync(fp) || !/\.(js|css|html|svg|json|map)$/.test(fp)) {
+    res.writeHead(404); return res.end("not found");
+  }
   const buf = await readFile(fp);
   res.writeHead(200, { "Content-Type": MIME[path.extname(fp)] || "application/octet-stream" });
   res.end(buf);
