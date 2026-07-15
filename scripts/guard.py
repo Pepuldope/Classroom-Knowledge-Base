@@ -65,6 +65,32 @@ def main():
                     print(f"GUARD WARN: risky pattern '{p}' in {f} (review before push)")
                     # warn, don't hard-fail (legitimate refs exist)
 
+    # 6. AUTH LOCKOUT BACKSTOP.
+    # A silent auto-login must NEVER be able to trap the user on the wrong
+    # (non-Classroom) account. If a change removes any of these escape hatches
+    # from the auth path, the commit is blocked. This is a regression guard for
+    # the 2026-07 bug where the server refresh token re-logged the user in as
+    # their personal account on every page load with no way to switch.
+    AUTH_MARKERS = [
+        "select_account",          # forces the account chooser on every sign-in
+        "oauth-revoke",            # server endpoint that drops the stored refresh token
+        "handleWrongAccount",      # recovery when Classroom returns 400/403
+    ]
+    if "app.js" in files:
+        before = run(["git", "show", "HEAD:app.js"]).stdout
+        after = run(["git", "show", ":app.js"]).stdout  # staged content
+        for marker in AUTH_MARKERS:
+            if marker in before and marker not in after:
+                print(f"GUARD FAIL: auth escape hatch '{marker}' removed from app.js "
+                      f"— this reintroduces the account-lockout bug. Aborting.")
+                return 1
+    if "api/oauth-revoke.js" in files:
+        # the revoke endpoint must keep deleting the refresh token
+        after = run(["git", "show", ":api/oauth-revoke.js"]).stdout
+        if "kvDel" not in after or "refresh:" not in after:
+            print("GUARD FAIL: oauth-revoke.js no longer deletes the refresh token. Aborting.")
+            return 1
+
     print("guard: OK — safe to commit")
     return 0
 

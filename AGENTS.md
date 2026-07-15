@@ -94,6 +94,17 @@ order and report on each in the status message.
    store the token server-side. Keep the read-only Classroom scope + consent
    notice from focus area 4.
 
+   **CRITICAL — do NOT reintroduce the account-lockout bug (see LOOP-GUARDRAILS.md
+   §7).** Implementing persistent sign-in MUST NOT break these escape hatches:
+   (a) every interactive sign-in keeps `prompt: "select_account"` so the account
+   chooser is always shown; (b) `Switch account` and `Sign out` keep calling
+   `/api/oauth-revoke` so the server refresh token is deleted; (c) `handleWrongAccount()`
+   stays — a 400/403 from Classroom clears + revokes + returns to welcome. In
+   2026-07 a run strengthened silent re-login and trapped the user on their
+   personal account with no way to switch. The guard (`scripts/guard.py` rule #6)
+   will BLOCK any commit that removes `select_account` / `oauth-revoke` /
+   `handleWrongAccount`. Build persistence around them, never over them.
+
 6. **Hide the build card once a bundle already exists.** When the KB is already
    built/loaded — a local IndexedDB bundle post-pivot, or a populated server DB
    pre-pivot — the entire "Scrape my Classroom" onboarding card (button + build
