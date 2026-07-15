@@ -332,10 +332,10 @@ export function renderRichMarkdown(text) {
   const isRow = (l) => l.trim().startsWith("|") || l.includes(" | ");
   const cells = (l) =>
     l.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
-      .split("|").map((c) => `<td>${inlineMd(c.trim())}</td>`).join("");
+      .split("|").map((c) => `<td>${inlineMd(escapeHtml(c.trim()))}</td>`).join("");
   const headCells = (l) =>
     l.replace(/^\s*\|/, "").replace(/\|\s*$/, "")
-      .split("|").map((c) => `<th>${inlineMd(c.trim())}</th>`).join("");
+      .split("|").map((c) => `<th>${inlineMd(escapeHtml(c.trim()))}</th>`).join("");
 
   // Obsidian callout: a blockquote whose first line is "> [!type]". The marker
   // itself (`[!type]`) must not leak as literal text — we strip it and wrap the
@@ -375,7 +375,7 @@ export function renderRichMarkdown(text) {
       .replace(/<\/p>$/, "")
       .replace(/<\/p><p>/g, "<br>");
     return `<div class="callout callout-${type.toLowerCase()}">` +
-      `<div class="callout-title">${titleText}</div>` +
+      `<div class="callout-title">${escapeHtml(titleText)}</div>` +
       `<div class="callout-body">${bodyHtml}</div></div>`;
   };
 

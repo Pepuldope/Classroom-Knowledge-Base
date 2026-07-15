@@ -1171,3 +1171,15 @@ test("renderAssignmentDescription preserves full markdown assignment content", (
   assert.ok(html.includes(tail), "the full description tail must be rendered");
   assert.ok(!html.includes("**Submit"), "markdown markers must not leak into visible HTML");
 });
+
+test("renderAssignmentDescription escapes HTML in callout titles", () => {
+  const html = renderAssignmentDescription("> [!warning] <img src=x onerror=alert(1)>\n> Safe body");
+  assert.ok(!html.includes("<img"), "callout titles must not create live HTML elements");
+  assert.ok(html.includes("&lt;img"), "escaped callout title text should remain visible");
+});
+
+test("renderAssignmentDescription escapes HTML in table cells", () => {
+  const html = renderAssignmentDescription("| Item | Value |\n| --- | --- |\n| Safe | <img src=x onerror=alert(1)> |");
+  assert.ok(!html.includes("<img"), "table cells must not create live HTML elements");
+  assert.ok(html.includes("&lt;img"), "escaped table-cell text should remain visible");
+});
