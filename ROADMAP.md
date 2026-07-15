@@ -42,13 +42,12 @@ new work is the loading state + new-content detection + the obsidian replacement
   the shell; (c) add a meta-only endpoint that does NOT reassemble all shards;
   (d) add real timing marks (performance.now) around load so improvement is proven
   not guessed. Acceptance: populated KB view paints <3s warm, <8s cold.
-- [ ] Replace the Obsidian-only "open" action with a UNIVERSAL external-open. Most
+- [x] Replace the Obsidian-only "open" action with a UNIVERSAL external-open. Most
   users don't have Obsidian, and for vault notes the `obsidian://open?path=...` link
-  points at a local file they can't reach. Change kb.js:1015 + app.js:858 so the
-  button: if the note has a real source URL (courseWork material / announcement /
-  submission link) → "Open original" in a new tab; else "Download note (.md)" /
-  "Copy text" fallback. Keep Obsidian as a clearly-labelled secondary opt-in for
-  users who have it. School-backup vault notes (local `p` only) get download/copy.
+  points at a local file they can't reach. Fixed 2026-07-15: note modal now resolves
+  the best primary action — a real source URL -> "Open original" (new tab); else a
+  vault/local path -> "Download note (.md)"; Obsidian is a secondary, clearly-labelled
+  opt-in. Pure resolver `resolveNoteOpenAction()` in kb.js + 5 unit tests + browser e2e.
 - [ ] Visual styles / theme switching in Settings. A Settings modal + "Display"
   tab ALREADY EXISTS (index.html:264-296) and styles.css is built on CSS
   variables (`:root { --bg, --fg, --card, --border, --muted, --accent... }`), so

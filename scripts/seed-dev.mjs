@@ -76,7 +76,7 @@ for (const fp of files) {
   // Sanitize: course must look like a folder, not a loose .md file or index.
   if (!course || course.endsWith(".md") || /^00 /.test(course)) course = "";
   notes.push({
-    t: title, s: body, x: body, f: rel, w: body.split(/\s+/).length,
+    t: title, s: body, x: body, f: rel, p: rel, w: body.split(/\s+/).length,
     topic: topics[0] || "", course, y: year, sec: sections,
   });
 }

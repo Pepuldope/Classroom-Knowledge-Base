@@ -190,6 +190,30 @@ export function buildResultSummary({ shown, total, course = "", year = "" }) {
 // Export (private — the bundle lives in the user's own browser, exported
 // only to their device; nothing is read from or written to a shared server DB)
 // ---------------------------------------------------------------------------
+
+// Client-side note download (ROADMAP §Reported #5): for a vault/local note
+// with no web URL, let the student save the note as a .md file. Pure-ish:
+// builds from the already-loaded note object, triggers a Blob download.
+function downloadNoteAsMarkdown(note) {
+  if (!note) return;
+  const title = (note.t || "note").toString().replace(/[\\/\\?%*:\\|"<>]/g, "-");
+  const front = [`# ${note.t || "Untitled"}`];
+  if (note.course) front.push(`\nCourse: ${note.course}`);
+  if (note.y) front.push(`Year: ${note.y}`);
+  if (note.topic) front.push(`Topic: ${note.topic}`);
+  if (note.p) front.push(`Source: ${note.p}`);
+  const body = (note.x || note.s || "").trim();
+  const md = front.join("\n") + "\n\n" + body + "\n";
+  const blob = new Blob([md], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${title}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 function downloadFile(filename, text, mime) {
   const blob = new Blob([text], { type: mime });
   const url = URL.createObjectURL(blob);
@@ -1073,12 +1097,14 @@ async function openKbNote(index) {
   const titleEl = $("kbNoteTitle");
   const metaEl = $("kbNoteMeta");
   const bodyEl = $("kbNoteBody");
-  const linkEl = $("kbNoteObsidianLink");
+  const linkEl = $("kbNoteOpenLink");      // PRIMARY universal-open action
+  const obsLink = $("kbNoteObsidianLink"); // SECONDARY obsidian opt-in
   if (!modal || !bodyEl) return;
   bodyEl.innerHTML = `<div class="empty">Loading…</div>`;
   if (metaEl) metaEl.textContent = "";
   if (titleEl) titleEl.textContent = "Loading…";
   if (linkEl) linkEl.hidden = true;
+  if (obsLink) obsLink.hidden = true;
   modal.hidden = false;
   try {
     const r = await fetch("/api/kb-note?id=" + encodeURIComponent(index));
@@ -1100,9 +1126,36 @@ async function openKbNote(index) {
     } else {
       bodyEl.innerHTML = `<div class="empty">This note has no body text.</div>`;
     }
+    // ROADMAP §Reported #5: a UNIVERSAL external-open. Resolve the most useful
+    // primary action (real source URL -> "Open original"; else a vault/local
+    // path -> "Download note (.md)"). Obsidian is a secondary, clearly-labelled
+    // opt-in shown only when a local path exists — never the lone action.
+    const openAction = resolveNoteOpenAction(note);
     if (linkEl) {
-      if (note.p) { linkEl.href = "obsidian://open?path=" + encodeURIComponent(note.p); linkEl.hidden = false; }
-      else linkEl.hidden = true;
+      if (openAction.kind === "external") {
+        linkEl.textContent = openAction.label;
+        linkEl.href = openAction.href;
+        linkEl.target = "_blank";
+        linkEl.rel = "noopener";
+        linkEl.hidden = false;
+      } else if (openAction.kind === "download") {
+        linkEl.textContent = openAction.label;
+        linkEl.removeAttribute("href");
+        linkEl.onclick = (e) => { e.preventDefault(); downloadNoteAsMarkdown(note); };
+        linkEl.hidden = false;
+      } else {
+        linkEl.hidden = true;
+      }
+    }
+    // Secondary Obsidian deep-link (opt-in only) when a local path exists.
+    if (obsLink) {
+      if (note.p) {
+        obsLink.href = "obsidian://open?path=" + encodeURIComponent(note.p);
+        obsLink.textContent = "Open in Obsidian";
+        obsLink.hidden = false;
+      } else {
+        obsLink.hidden = true;
+      }
     }
     // Feature A: cross-link related notes.
     await renderRelatedNotes(index);
@@ -1146,6 +1199,32 @@ async function renderRelatedNotes(index) {
 function closeKbNote() {
   const modal = $("kbNoteModal");
   if (modal) modal.hidden = true;
+}
+
+// ---------------------------------------------------------------------------
+// Universal note "open" action (ROADMAP §Reported #5).
+//
+// The old UI offered ONLY an Obsidian deep link (obsidian://open?path=...).
+// For the school-backup vault notes — which carry a LOCAL filesystem path `p`
+// but no web URL — that link points at a file the student can't reach and
+// demands Obsidian. This resolver picks the most useful primary action:
+//   - a real http(s) source URL  -> "Open original" (new tab)
+//   - else a local/vault path `p`  -> "Download note (.md)" (client-side)
+//   - else nothing to open         -> { kind: "none" }
+// Obsidian stays available only as a SECONDARY, clearly-labelled opt-in for
+// users who have it (never the default for a vault note). Pure (no DOM), so it
+// is unit-testable and shared by the detail-modal renderer.
+// ---------------------------------------------------------------------------
+export function resolveNoteOpenAction(note) {
+  const url = note && (note.sourceUrl || note.url);
+  if (typeof url === "string" && /^https?:\/\//i.test(url.trim())) {
+    return { kind: "external", label: "Open original", href: url.trim() };
+  }
+  const p = note && note.p;
+  if (typeof p === "string" && p.trim()) {
+    return { kind: "download", label: "Download note (.md)", path: p.trim() };
+  }
+  return { kind: "none" };
 }
 
 // Allow Esc / backdrop click to close both KB modals.

@@ -877,6 +877,13 @@ summary::-webkit-details-marker { color: var(--muted); }
   font-size: 0.85rem;
 }
 .classroom-link:hover { text-decoration: underline; }
+/* Secondary, opt-in action (e.g. Obsidian) — visually quieter than primary */
+.classroom-link.ghost-link {
+  color: var(--muted);
+  font-weight: 400;
+  opacity: 0.85;
+}
+.classroom-link.ghost-link:hover { color: var(--accent); }
 
 .materials-loading { color: var(--muted); font-style: italic; margin-top: 0.5rem; }
 .materials-strip {
