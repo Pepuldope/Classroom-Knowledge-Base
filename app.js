@@ -104,6 +104,22 @@ function storeUserSub(sub) {
   if (!sub) return;
   try { localStorage.setItem(USER_SUB_KEY, sub); } catch {}
 }
+
+// Tell the server to forget this account's stored refresh token. Without this,
+// oauth-refresh.js silently re-grants a token for the old account on every page
+// load, so the user stays locked into the wrong (e.g. non-Classroom) account.
+async function revokeServerToken() {
+  const sub = loadUserSub();
+  if (!sub) return;
+  try { localStorage.removeItem(USER_SUB_KEY); } catch {}
+  try {
+    fetch("/api/oauth-revoke", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sub }),
+    }).catch(() => {});
+  } catch {}
+}
 const ENRICH_KEY = "cwa_enrich_v12";
 const DISMISSED_KEY = "cwa_dismissed";
 const PINNED_KEY = "cwa_pinned";
@@ -1178,7 +1194,9 @@ function applySort(items) {
 
 $("loginBtn").addEventListener("click", () => {
   if (codeClient) {
-    codeClient.requestCode();
+    // Always show the account chooser so the user picks their SCHOOL account
+    // (never silently reuse a cached personal account that 400s on Classroom).
+    codeClient.requestCode({ prompt: "select_account" });
     return;
   }
   if (!tokenClient) {
@@ -1188,10 +1206,11 @@ $("loginBtn").addEventListener("click", () => {
   tokenClient.requestAccessToken({ prompt: "select_account" });
 });
 
-$("switchBtn").addEventListener("click", () => { closeMenu(); switchAccount(); });
+$("switchBtn").addEventListener("click", () => { closeMenu(); revokeServerToken().then(switchAccount); });
 $("logoutBtn").addEventListener("click", () => {
   closeMenu();
   clearToken();
+  revokeServerToken();
   try { localStorage.removeItem(USER_HINT_KEY); } catch {}
   try { localStorage.removeItem(USER_PROFILE_KEY); } catch {}
   sessionEpoch++;
@@ -1280,6 +1299,7 @@ function handleWrongAccount() {
   // (e.g. a personal account). Clear it so we don't loop on the 400, and
   // drop back to the welcome screen with a clear, actionable message.
   clearToken();
+  revokeServerToken();
   sessionEpoch++;
   prefsLoadedFromServer = false;
   try { localStorage.removeItem(USER_HINT_KEY); } catch {}
