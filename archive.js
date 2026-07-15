@@ -259,6 +259,10 @@ function inlineMd(s) {
   return out;
 }
 
+export function renderAssignmentDescription(text) {
+  return renderRichMarkdown(text);
+}
+
 /** Render a small safe markdown subset of `text` to an HTML string. */
 export function renderLightMarkdown(text) {
   const lines = escapeHtml(text == null ? "" : text).split("\n");

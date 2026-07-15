@@ -9,6 +9,7 @@ import {
   foldText,
   renderLightMarkdown,
   renderRichMarkdown,
+  renderAssignmentDescription,
 } from "./archive.js";
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 
@@ -2128,7 +2129,7 @@ async function openAi(a) {
   activeMaterials = loadMaterialsFor(a);
   ctxParts.push(renderMaterialsList(activeMaterials));
   if (a.description) {
-    ctxParts.push(`<details class="original-desc"><summary>Original from Classroom</summary><div class="original-desc-body">${escapeHtml(a.description)}</div></details>`);
+    ctxParts.push(`<details class="original-desc"><summary>Original from Classroom</summary><div class="original-desc-body">${renderAssignmentDescription(a.description)}</div></details>`);
   }
   $("aiContext").innerHTML = ctxParts.join("<br>");
   renderArchiveStrip(a);

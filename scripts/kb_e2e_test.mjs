@@ -27,7 +27,7 @@ import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, kbFilterModel, groupCourseNotesBySprint } from "../kb.js";
-import { renderRichMarkdown } from "../archive.js";
+import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -1160,4 +1160,14 @@ test("renderRichMarkdown callout has a single title and clean body (no dangling 
   assert.ok(!/callout-body\">[^<]*<\/p>/.test(html), "no dangling </p> inside callout body");
   assert.ok(html.includes("Baz"), "wikilink inside callout still renders");
   assert.ok(html.includes("<strong>bold</strong>"), "inline markdown inside callout renders");
+});
+
+test("renderAssignmentDescription preserves full markdown assignment content", () => {
+  const tail = "This final paragraph must remain reachable after the opening section.";
+  const md = `# Assignment\n\n**Submit the complete draft.**\n\n${"Details that must not be clipped. ".repeat(80)}\n\n${tail}`;
+  const html = renderAssignmentDescription(md);
+  assert.match(html, /<h1>Assignment<\/h1>/);
+  assert.match(html, /<strong>Submit the complete draft\.<\/strong>/);
+  assert.ok(html.includes(tail), "the full description tail must be rendered");
+  assert.ok(!html.includes("**Submit"), "markdown markers must not leak into visible HTML");
 });
