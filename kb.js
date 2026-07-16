@@ -18,6 +18,7 @@
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
+import { searchNotes, makeSortFn, deriveFamily } from "./kb-client-search.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -45,6 +46,39 @@ export function kbFilterModel(filters, active = {}) {
     activeKind: active.kind || "",
     activeFamily: active.family || "",
     sort: active.sort || "relevance",
+  };
+}
+
+/** Search a cached private bundle without a network round-trip. */
+export function buildLocalSearchResponse(bundle, query, {
+  course = "", year = "", kind = "", family = "", sort = "relevance", limit = 8,
+} = {}) {
+  const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
+  const withFamilies = notes.map((note) => note?.family ? note : ({ ...note, family: deriveFamily(note?.course) || "" }));
+  const filtered = withFamilies.filter((note) =>
+    (!course || (note.course || "") === course) &&
+    (!year || (note.y || "") === year) &&
+    (!kind || (note.kind || "") === kind) &&
+    (!family || (note.family || "") === family)
+  );
+  const collect = (field) => [...new Set(withFamilies.map((note) => note?.[field]).filter(Boolean))]
+    .sort((a, b) => String(a).localeCompare(String(b)));
+  return {
+    meta: {
+      noteCount: notes.length,
+      years: Array.isArray(bundle?.years) ? bundle.years : collect("y"),
+      courses: collect("course").length,
+      generatedAt: bundle?.generatedAt || null,
+      updatedAt: bundle?.generatedAt || null,
+    },
+    results: searchNotes(filtered, query, { limit, sortFn: makeSortFn(sort) }),
+    filteredCount: filtered.length,
+    filters: {
+      courses: collect("course"),
+      years: collect("y"),
+      kinds: collect("kind"),
+      families: collect("family"),
+    },
   };
 }
 
@@ -642,8 +676,20 @@ async function runKbSearch(query) {
     if (kbActiveKind) params.set("kind", kbActiveKind);
     if (kbActiveFamily) params.set("family", kbActiveFamily);
     if (kbActiveSort && kbActiveSort !== "relevance") params.set("sort", kbActiveSort);
-    const r = await fetch("/api/kb-search?" + params.toString());
-    const d = await r.json();
+    let d;
+    if (localKbBundle?.notes?.length) {
+      d = buildLocalSearchResponse(localKbBundle, query, {
+        course: kbActiveCourse,
+        year: kbActiveYear,
+        kind: kbActiveKind,
+        family: kbActiveFamily,
+        sort: kbActiveSort,
+        limit: 8,
+      });
+    } else {
+      const r = await fetch("/api/kb-search?" + params.toString());
+      d = await r.json();
+    }
     results.hidden = false;
     results.innerHTML = "";
     renderFilterChips(d.filters);

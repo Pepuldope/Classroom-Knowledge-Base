@@ -26,7 +26,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, groupCourseNotesBySprint, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, groupCourseNotesBySprint, buildLocalSearchResponse, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 
@@ -56,6 +56,45 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
   });
 });
 
+test("buildLocalSearchResponse searches a cached private bundle and applies facets locally", () => {
+  const bundle = sampleBundle();
+  const response = buildLocalSearchResponse(bundle, "cover letter", {
+    course: "BEng Y1",
+    year: "2023-24",
+    limit: 8,
+  });
+  assert.equal(response.filteredCount, 1);
+  assert.equal(response.results.length, 1);
+  assert.equal(response.results[0].course, "BEng Y1");
+  assert.ok(response.filters.courses.includes("ELA 1 Gama"));
+  assert.ok(response.results[0]._snippet, "local results retain snippets");
+});
+
+test("local search boosts course and topic matches for a multi-term study query", () => {
+  const bundle = {
+    version: 1,
+    notes: [
+      { t: "Weekly exercises", s: "Practice problems", x: "Complete the worksheet.", course: "History", topic: "Modern Europe", y: "2024-25" },
+      { t: "Weekly exercises", s: "Practice problems", x: "Complete the worksheet.", course: "Algebra", topic: "Quadratics", y: "2024-25" },
+    ],
+  };
+  const response = buildLocalSearchResponse(bundle, "Algebra quadratic", { limit: 2 });
+  assert.equal(response.results.length, 1, "course/topic terms should retrieve the matching note");
+  assert.equal(response.results[0].course, "Algebra");
+});
+
+test("local search sort orders the full filtered result set", () => {
+  const bundle = {
+    version: 1,
+    notes: [
+      { t: "Zulu lesson", s: "Algebra", x: "", course: "Math", y: "2024-25" },
+      { t: "Alpha lesson", s: "Algebra", x: "", course: "Math", y: "2024-25" },
+      { t: "Middle lesson", s: "Algebra", x: "", course: "Math", y: "2024-25" },
+    ],
+  };
+  const response = buildLocalSearchResponse(bundle, "Algebra", { sort: "title", limit: 2 });
+  assert.deepEqual(response.results.map((note) => note.t), ["Alpha lesson", "Middle lesson"]);
+});
 test("validateKbBundle accepts a version-one notes bundle and rejects invalid input", () => {
   const valid = { version: 1, notes: [{ t: "Algebra", x: "Quadratics" }] };
   assert.equal(validateKbBundle(valid), valid);
