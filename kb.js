@@ -19,6 +19,7 @@ import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
 
 const $ = (id) => document.getElementById(id);
+export const INTERACTIVE_OAUTH_PROMPT = "select_account";
 const KB_TOKEN_KEY = "cwa_kb_token";
 export { highlightSnippet, bundleToMarkdown, bundleToCsv };
 
@@ -452,9 +453,9 @@ async function startScrape() {
       doScrape(resp.access_token);
     };
     try {
-      // prompt:'' reuses the silent/consent flow; note: scopes here MUST include
-      // the Classroom read-only set (see SCOPES in app.js / index.html preconnect).
-      window.__cwaTokenClient.requestAccessToken({ prompt: "" });
+      // Always show the account chooser so students can switch Classroom accounts;
+      // scopes here MUST include the read-only set (see SCOPES in app.js).
+      window.__cwaTokenClient.requestAccessToken({ prompt: INTERACTIVE_OAUTH_PROMPT });
     } catch (e) { showStatus("Could not start Google sign-in: " + e.message, true); }
     return;
   }

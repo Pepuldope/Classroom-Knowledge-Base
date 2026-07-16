@@ -26,7 +26,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, kbFilterModel, groupCourseNotesBySprint } from "../kb.js";
+import { highlightSnippet, tutorSourceList, kbFilterModel, groupCourseNotesBySprint, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
@@ -1182,4 +1182,8 @@ test("renderAssignmentDescription escapes HTML in table cells", () => {
   const html = renderAssignmentDescription("| Item | Value |\n| --- | --- |\n| Safe | <img src=x onerror=alert(1)> |");
   assert.ok(!html.includes("<img"), "table cells must not create live HTML elements");
   assert.ok(html.includes("&lt;img"), "escaped table-cell text should remain visible");
+});
+
+test("interactive Classroom sign-in always requests the account chooser", () => {
+  assert.equal(INTERACTIVE_OAUTH_PROMPT, "select_account");
 });
