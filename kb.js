@@ -1,4 +1,4 @@
-// kb.js — Knowledge Base ("safekeep") view + AI tutor.
+// kb.js — private Knowledge Base view + AI tutor.
 //
 // Self-contained module. It does NOT reach into app.js internals; it only
 // reuses the already-initialized Google token client (window.__cwaTokenClient)
@@ -508,7 +508,7 @@ export function wireKbEvents() {
     }
   });
 
-  // Export controls (public — the shared DB is readable by anyone).
+  // Export controls (local-only bundle export).
   $("kbExportJson")?.addEventListener("click", () => exportKb("json"));
   $("kbExportMd")?.addEventListener("click", () => exportKb("md"));
   $("kbExportCsv")?.addEventListener("click", () => exportKb("csv"));
@@ -592,7 +592,7 @@ async function doScrape(token) {
     const list = await listRes.json();
     const courses = list.courses || [];
     if (courses.length === 0) { if (statusEl) statusEl.textContent = "✅ No courses found to scrape."; return; }
-    if (statusEl) statusEl.textContent = `Scraping ${courses.length} course${courses.length === 1 ? "" : "s"} into the shared DB…`;
+    if (statusEl) statusEl.textContent = `Building ${courses.length} course${courses.length === 1 ? "" : "s"} into your knowledge base…`;
 
     // Step 2: per-course, incremental save so a single slow/failed course can't
     // 504 the whole scrape and partial progress is preserved.
@@ -637,7 +637,7 @@ async function handleKbFile(e) {
   const statusEl = $("kbBuildStatus");
   const panel = $("kbBuildPanel");
   if (panel) panel.hidden = false;
-  if (statusEl) statusEl.textContent = "Uploading archive.json to the shared DB…";
+  if (statusEl) statusEl.textContent = "Adding archive.json to your knowledge base…";
   try {
     const text = await file.text();
     let parsed; try { parsed = JSON.parse(text); } catch { setKbBuildError("That file isn't valid JSON."); return; }
@@ -1122,7 +1122,7 @@ function renderResultCount(data, { course, year }) {
 }
 
 // ---------------------------------------------------------------------------
-// AI Tutor (RAG over the shared DB)
+// AI Tutor (RAG over the user's local bundle)
 // ---------------------------------------------------------------------------
 let tutorMessages = [];
 

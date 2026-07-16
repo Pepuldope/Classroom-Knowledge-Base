@@ -1,4 +1,4 @@
-// kb-store.js — shared "safekeep" database for the Knowledge Base.
+// kb-store.js — legacy ingestion compatibility store; active bundles are private/local.
 //
 // The original Classroom-Web-Analyzer keeps each student's archive in their
 // own browser (IndexedDB). This project instead persists ONE shared classroom
@@ -171,7 +171,7 @@ export async function getBundle() {
   return bundleFromNotes(notes, { source });
 }
 
-/** Persist the shared knowledge-base bundle (the safekeep). */
+/** Persist a legacy ingestion bundle during migration. */
 export async function saveBundle(bundle) {
   const notes = Array.isArray(bundle.notes) ? bundle.notes : [];
   const meta = {
@@ -188,7 +188,7 @@ export async function saveBundle(bundle) {
   else mem.set(META_KEY, meta);
 }
 
-/** Read-only metadata about the current safekeep (counts, dates). */
+/** Read-only metadata about the legacy ingestion bundle (counts, dates). */
 export async function getMeta() {
   if (kvAvailable()) {
     const m = await kvGetJSON(META_KEY);
@@ -255,7 +255,7 @@ export async function hasBundle() {
 // ---------------------------------------------------------------------------
 // HTTP route: GET /api/kb-store?action=export
 // Returns the full shared knowledge-base bundle (reassembled from shards) as JSON.
-// Public (no auth): the shared DB is readable by anyone.
+// Legacy public compatibility behavior; active client search does not use this route.
 // ---------------------------------------------------------------------------
 export const config = { runtime: "edge" };
 

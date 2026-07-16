@@ -26,13 +26,13 @@ async function requireWriteAuth(req) {
 }
 
 /**
- * Persist a full Classroom scrape into the SHARED knowledge base (the safekeep).
+ * Legacy ingestion compatibility route; active Classroom builds stay local.
  *
  * Two ways to populate it:
  *   1. POST { source: "classroom", authToken: "<google access token>" }
  *      -> we use the caller's own Classroom access token to fetch everything
  *         (courses, coursework, materials, announcements, submissions) and
- *         synthesize the bundle server-side, then save it to the shared DB.
+ *         synthesize the bundle server-side for migration compatibility.
  *         Requires the same Classroom read-only scopes to be granted to the app.
  *   2. POST { source: "bundle", bundle: { ...archive.json... } }
  *      -> caller supplies an already-built bundle (e.g. the offline School

@@ -19,6 +19,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { searchNotes, relatedNotes, suggestCorrection, relatedNotesPreview, makeSortFn } from "../api/kb-retrieval.js";
 import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
@@ -34,6 +35,12 @@ import { validateKbBundle } from "../kb-local.js";
 function makeReq(url, method = "GET") {
   return new Request("http://localhost" + url, { method });
 }
+
+test("private KB UI copy does not promise a shared database", async () => {
+  const source = await readFile(new URL("../kb.js", import.meta.url), "utf8");
+  assert.doesNotMatch(source, /into the shared DB|Uploading archive\.json to the shared DB/);
+  assert.match(source, /into your knowledge base|your knowledge base/);
+});
 
 test("kbSettingsModel normalizes KB controls and preserves local-only defaults", () => {
   assert.deepEqual(kbSettingsModel(), {

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "A Vercel site that does what the original Classroom Web Analyzer does — the live study-plan dashboard + per-assignment AI chat — and adds a shared Knowledge Base.",
+  "description": "A Vercel site that does what the original Classroom Web Analyzer does — the live study-plan dashboard + per-assignment AI chat — and adds a private, per-user Knowledge Base.",
   "main": "app.js",
   "scripts": {
     "test": "bash scripts/test.sh",

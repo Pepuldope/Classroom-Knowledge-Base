@@ -435,7 +435,7 @@ function waitForGis() {
   if (window.google?.accounts?.oauth2) {
     initGis();
     // Expose the token client so the Knowledge-Base module can request a
-    // Classroom-scoped token for scraping into the shared DB.
+    // Classroom-scoped token for building the user's local knowledge base.
     window.__cwaTokenClient = tokenClient;
     // Wire KB events once the DOM is parsed (safe even before first KB view).
     import("./kb.js").then((m) => m.wireKbEvents()).catch(() => {});

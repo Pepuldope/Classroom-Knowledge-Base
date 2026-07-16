@@ -2,7 +2,7 @@
 // Mirrors the scoring in archive.js (title×5, summary×3, body×1, +2 when all
 // query tokens appear) so behaviour matches the original planner's "From your
 // archive" strip, but operates on an EXTERNAL notes array rather than the
-// module-global `archive`, so it can search the server-side safekeep.
+// module-global `archive`, so it can search a private browser-local bundle.
 
 function foldText(s) {
   return String(s == null ? "" : s)

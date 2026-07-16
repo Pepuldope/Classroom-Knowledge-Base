@@ -31,8 +31,8 @@ function toResult(note, index) {
  * GET /api/kb-browse                  -> { meta, courses:[{course,count,years}] }
  * GET /api/kb-browse?course=<name>    -> { meta, notes:[...] } (recency-sorted)
  *
- * Public (no auth): the shared DB is readable by anyone. This is the
- * no-query "discover by course" entry point the KB was missing — a student
+ * Legacy compatibility route; active browse runs over the user's local bundle.
+ * This is the no-query "discover by course" entry point the KB was missing — a student
  * can explore notes without already knowing a search term.
  */
 export default async function handler(req) {

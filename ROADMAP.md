@@ -75,11 +75,11 @@ new work is the loading state + new-content detection + the obsidian replacement
 - [ ] Per-student progress tracking (which notes they've opened / quizzed on).
 
 ## ✅ Done
-- [x] Scrape Classroom into a shared server-side safekeep DB (kv-store.js).
-- [x] Public full-text search over the safekeep (kb-retrieval.js / kb-search.js).
+- [x] Build a private, per-user knowledge base from Classroom (IndexedDB client bundle).
+- [x] Local full-text search over the private bundle (kb-client-search.js).
 - [x] RAG AI tutor grounded only in the knowledge base (tutor.js).
 - [x] Knowledge Base view + AI Tutor modal in the UI (kb.js), 3-tab nav.
-- [x] Verified retrieval on the real school-backup vault (2,763 notes).
+- [x] Verified legacy ingestion and retrieval on the real school-backup vault (2,763 notes).
 - [x] KB course/year filter chips (faceted search).
 
 ## 🤖 Agent-Proposed Backlog

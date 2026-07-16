@@ -1,9 +1,9 @@
 # Classroom Knowledge Base
 
-A Vercel site that does what the original [Classroom Web Analyzer](https://github.com/Pepuldope/Classroom-Web-Analyzer) does — the live study-plan dashboard + per-assignment AI chat — **and adds a shared Knowledge Base**:
+A Vercel site that does what the original [Classroom Web Analyzer](https://github.com/Pepuldope/Classroom-Web-Analyzer) does — the live study-plan dashboard + per-assignment AI chat — **and adds a private, per-user Knowledge Base**:
 
-- **Safekeep DB**: scrape your whole Google Classroom (all years, all courses, coursework, materials, announcements, submissions) into ONE server-side database that every student shares.
-- **Search**: anyone can full-text search the knowledge base (title/summary/body ranked, fuzzy matching).
+- **Your knowledge base**: build a curated study layer in your own browser from your Google Classroom (all years, all courses, coursework, materials, announcements, submissions). It is stored locally in IndexedDB and is not shared with other students.
+- **Search**: full-text search your private knowledge base (title/summary/body ranked, fuzzy matching).
 - **AI Tutor**: an AI that answers **only** from the knowledge base (retrieval-augmented generation), so it can't make things up. Grounded in the actual notes.
 
 The original Planner and personal Archive views are untouched.
@@ -23,20 +23,20 @@ api/
   ai.js              AI call helper (from original)
   oauth-*.js         Google OAuth (from original)
   chat.js            per-assignment planner chat (from original)
-  kb-store.js        shared DB: Upstash KV (Edge-compatible, via Web fetch) — no filesystem
+  kb-store.js        legacy server-side compatibility store for migration and ingestion
   kb-retrieval.js    pure search/scoring over the notes array (mirrors archive.js)
-  kb-search.js       GET /api/kb-search   public search
-  kb-scrape.js       POST /api/kb-scrape  persist a Classroom bundle into the DB
-  tutor.js           POST /api/tutor      streaming RAG tutor (OpenRouter Nemotron)
+  kb-search.js       GET /api/kb-search   legacy compatibility search route
+  kb-scrape.js       POST /api/kb-scrape  legacy ingestion route; active client path stores locally
+  tutor.js           POST /api/tutor      server-side tutor for client-supplied notes
 ```
 
 ### Data flow
 
-1. **Build the safekeep** — `POST /api/kb-scrape` with either:
-   - `{source:"classroom", authToken}` → server fetches Classroom via the caller's own read-only token and synthesizes the bundle with `archive-builder.js`'s `bundleFromRaw`, then saves to the shared DB.
+1. **Build your knowledge base** — the client builds and caches the bundle locally. During migration, `POST /api/kb-scrape` also accepts either:
+   - `{source:"classroom", authToken}` → server fetches Classroom via the caller's own read-only token and synthesizes the bundle with `archive-builder.js`'s `bundleFromRaw`.
    - `{source:"bundle", bundle}` → upload an already-built `archive.json` (e.g. from the School Backup pipeline).
-2. **Search** — `GET /api/kb-search?q=...` runs `searchNotes()` over the stored bundle.
-3. **Tutor** — `POST /api/tutor` retrieves the top notes for the question, injects them as grounded context, and streams an answer from an OpenRouter model.
+2. **Search** — the client runs `searchNotes()` over the cached local bundle; the legacy GET route remains for migration compatibility.
+3. **Tutor** — `POST /api/tutor` receives only the notes retrieved in the browser, injects them as grounded context, and streams an answer through the rotating model router.
 
 ### Notes schema (reused from archive-builder.js)
 
@@ -55,10 +55,10 @@ npm i -g vercel
 vercel dev            # serves api/ as serverless functions, index.html as static
 ```
 
-Without `KV_REST_API_URL` / `KV_REST_API_TOKEN` set, `kb-store.js` falls back to a
-process-memory store so the flow can be developed locally with `vercel dev`.
-That memory store is NOT durable across serverless invocations, so **production
-must set the KV env vars** (below) or the safekeep resets on each cold start.
+The active knowledge-base bundle is stored in the user's browser with IndexedDB,
+so repeat visits are fast and no shared database is needed. The legacy ingestion
+compatibility path can still use `KV_REST_API_URL` / `KV_REST_API_TOKEN` during
+migration; it must never be treated as a public student-data store.
 
 ```bash
 # from /opt/data/workspace
@@ -74,11 +74,11 @@ node kb_e2e_test.mjs      # parses school-backup vault -> bundle -> saves -> sea
    - The Google OAuth client_id/secret are already in `oauth-config.js` / `app.js` (from the original project). The Classroom **read-only** scopes are already requested.
 3. `vercel --prod`.
 
-## First run (populate the safekeep)
+## First run (build your knowledge base)
 
 1. Open the site, sign in with Google.
-2. Go to **Knowledge Base** → "Scrape my Classroom into the shared DB".
-   (This uses your own Google token; only you, the owner, can write. Anyone can search + ask the tutor afterward.)
+2. Go to **Knowledge Base** → "Build my knowledge base".
+   (This uses your own read-only Google token; the resulting bundle stays in your browser.)
 3. Or click "upload an archive.json" and supply the School Backup export.
 
 ---

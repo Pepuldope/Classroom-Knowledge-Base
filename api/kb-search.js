@@ -6,6 +6,7 @@ import { deriveFamily } from "./kb-family.js";
 export const config = { runtime: "edge" };
 
 /**
+ * Legacy GET compatibility route; active search runs over the user's local bundle.
  * GET /api/kb-search?q=...&limit=8&course=Math&year=2025-26&kind=note&family=Engineering&sort=recency
  * Public (no auth) search over the shared knowledge base.
  * Returns { meta, results: [{ t, course, y, topic, p, _score, _snippet }],
