@@ -26,7 +26,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, kbFilterModel, groupCourseNotesBySprint, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, groupCourseNotesBySprint, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 
@@ -34,6 +34,27 @@ import { validateKbBundle } from "../kb-local.js";
 function makeReq(url, method = "GET") {
   return new Request("http://localhost" + url, { method });
 }
+
+test("kbSettingsModel normalizes KB controls and preserves local-only defaults", () => {
+  assert.deepEqual(kbSettingsModel(), {
+    tutorEnabled: true,
+    tutorEffort: "tutor",
+    defaultScope: "all",
+    defaultSort: "recency",
+    relatedCount: 3,
+    density: "comfortable",
+    autoBuild: false,
+  });
+  assert.deepEqual(kbSettingsModel({ tutorEffort: "invalid", relatedCount: 99, density: "compact", autoBuild: true }), {
+    tutorEnabled: true,
+    tutorEffort: "tutor",
+    defaultScope: "all",
+    defaultSort: "recency",
+    relatedCount: 8,
+    density: "compact",
+    autoBuild: true,
+  });
+});
 
 test("validateKbBundle accepts a version-one notes bundle and rejects invalid input", () => {
   const valid = { version: 1, notes: [{ t: "Algebra", x: "Quadratics" }] };

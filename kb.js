@@ -17,7 +17,7 @@
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
-import { loadKbBundle, saveKbBundle } from "./kb-local.js";
+import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -48,8 +48,45 @@ export function kbFilterModel(filters, active = {}) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Fold a course's notes into an ordered list of collapsible sprint/topic
+const KB_SETTINGS_KEY = "cwa_kb_settings";
+const DEFAULT_KB_SETTINGS = Object.freeze({
+  tutorEnabled: true,
+  tutorEffort: "tutor",
+  defaultScope: "all",
+  defaultSort: "recency",
+  relatedCount: 3,
+  density: "comfortable",
+  autoBuild: false,
+});
+
+/** Normalize browser-local KB controls; never sends these preferences to a server. */
+export function kbSettingsModel(value = {}) {
+  const input = value && typeof value === "object" ? value : {};
+  const efforts = new Set(["quick", "tutor", "hard"]);
+  const scopes = new Set(["all", "current", "pinned"]);
+  const sorts = new Set(["relevance", "recency", "course", "title"]);
+  const relatedCount = Number(input.relatedCount);
+  return {
+    tutorEnabled: input.tutorEnabled !== false,
+    tutorEffort: efforts.has(input.tutorEffort) ? input.tutorEffort : DEFAULT_KB_SETTINGS.tutorEffort,
+    defaultScope: scopes.has(input.defaultScope) ? input.defaultScope : DEFAULT_KB_SETTINGS.defaultScope,
+    defaultSort: sorts.has(input.defaultSort) ? input.defaultSort : DEFAULT_KB_SETTINGS.defaultSort,
+    relatedCount: Number.isFinite(relatedCount) ? Math.min(8, Math.max(1, Math.round(relatedCount))) : DEFAULT_KB_SETTINGS.relatedCount,
+    density: input.density === "compact" ? "compact" : DEFAULT_KB_SETTINGS.density,
+    autoBuild: input.autoBuild === true,
+  };
+}
+
+export function loadKbSettings() {
+  try { return kbSettingsModel(JSON.parse(localStorage.getItem(KB_SETTINGS_KEY) || "{}")); }
+  catch { return kbSettingsModel(); }
+}
+
+export function saveKbSettings(value) {
+  const settings = kbSettingsModel(value);
+  try { localStorage.setItem(KB_SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+  return settings;
+}
 // groups (owner request #11). Opening a course used to spill ALL notes (e.g.
 // 343 for "Matematika 1") in one flat list — overwhelming. This groups by the
 // note `topic`, detects "Šprint N …" sprint topics, and orders them:

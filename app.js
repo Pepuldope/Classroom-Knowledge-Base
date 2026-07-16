@@ -12,6 +12,7 @@ import {
   renderAssignmentDescription,
 } from "./archive.js";
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
+import { loadKbBundle, removeKbBundle } from "./kb-local.js";
 
 const CLIENT_ID = "786778645862-cejadrqj2edabpdlk0emsvb1gc2hdijs.apps.googleusercontent.com";
 const SCOPES = [
@@ -1076,7 +1077,36 @@ function closeMenu() {
   btn.setAttribute("aria-expanded", "false");
 }
 
+async function configureKbSettingsUi() {
+  const kb = await import("./kb.js");
+  const s = kb.loadKbSettings();
+  const set = (id, value, prop = "value") => { const el = $(id); if (el) el[prop] = value; };
+  set("kbPrefTutorEnabled", s.tutorEnabled, "checked");
+  set("kbPrefTutorEffort", s.tutorEffort);
+  set("kbPrefScope", s.defaultScope);
+  set("kbPrefSort", s.defaultSort);
+  set("kbPrefRelatedCount", s.relatedCount);
+  set("kbPrefRelatedCountValue", s.relatedCount, "textContent");
+  set("kbPrefDensity", s.density);
+  set("kbPrefAutoBuild", s.autoBuild, "checked");
+  $("kbPrefRelatedCount")?.addEventListener("input", (e) => { $("kbPrefRelatedCountValue").textContent = e.target.value; }, { once: true });
+  $("kbPrefExport")?.addEventListener("click", async () => {
+    const bundle = await loadKbBundle();
+    const status = $("kbPrefStatus");
+    if (!bundle) { if (status) status.textContent = "No local knowledge base to download."; return; }
+    const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" }));
+    const a = document.createElement("a"); a.href = url; a.download = "classroom-knowledge-base.json"; a.click(); URL.revokeObjectURL(url);
+    if (status) status.textContent = `Downloaded ${bundle.notes.length.toLocaleString()} notes.`;
+  }, { once: true });
+  $("kbPrefClear")?.addEventListener("click", async () => {
+    await removeKbBundle();
+    const status = $("kbPrefStatus");
+    if (status) status.textContent = "Local knowledge base cleared.";
+  }, { once: true });
+}
+
 function openSettingsModal() {
+  configureKbSettingsUi().catch(() => {});
   const list = $("classesList");
   list.innerHTML = "";
   if (allCourses.length === 0) {
@@ -1129,6 +1159,15 @@ async function saveSettingsAndReload() {
   };
   saveDisplayPrefsLocal(displayPrefs);
 
+  import("./kb.js").then(({ saveKbSettings }) => saveKbSettings({
+    tutorEnabled: $("kbPrefTutorEnabled")?.checked,
+    tutorEffort: $("kbPrefTutorEffort")?.value,
+    defaultScope: $("kbPrefScope")?.value,
+    defaultSort: $("kbPrefSort")?.value,
+    relatedCount: $("kbPrefRelatedCount")?.value,
+    density: $("kbPrefDensity")?.value,
+    autoBuild: $("kbPrefAutoBuild")?.checked,
+  })).catch(() => {});
   pushPrefsToServer();
   $("settingsModal").hidden = true;
 
