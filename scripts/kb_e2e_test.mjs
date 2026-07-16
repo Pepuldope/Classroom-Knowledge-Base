@@ -28,11 +28,20 @@ import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, kbFilterModel, groupCourseNotesBySprint, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
+import { validateKbBundle } from "../kb-local.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
   return new Request("http://localhost" + url, { method });
 }
+
+test("validateKbBundle accepts a version-one notes bundle and rejects invalid input", () => {
+  const valid = { version: 1, notes: [{ t: "Algebra", x: "Quadratics" }] };
+  assert.equal(validateKbBundle(valid), valid);
+  assert.throws(() => validateKbBundle(null), /bundle object required/);
+  assert.throws(() => validateKbBundle({ version: 2, notes: [] }), /version 1/);
+  assert.throws(() => validateKbBundle({ version: 1, notes: "not an array" }), /notes array/);
+});
 
 function sampleBundle() {
   return {

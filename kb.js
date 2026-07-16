@@ -17,6 +17,7 @@
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
+import { loadKbBundle, saveKbBundle } from "./kb-local.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -133,6 +134,8 @@ export function kbSearchTopic(topic) {
   }
 }
 
+let localKbBundle = null;
+
 async function refreshKb() {
   const onboarding = $("kbOnboarding");
   const main = $("kbMain");
@@ -145,8 +148,26 @@ async function refreshKb() {
   if (main) main.hidden = false;
   let meta = null;
   try {
+    localKbBundle = await loadKbBundle();
+    if (localKbBundle?.notes?.length) {
+      meta = {
+        noteCount: localKbBundle.notes.length,
+        years: localKbBundle.years || [],
+        courses: Array.isArray(localKbBundle.courses) ? localKbBundle.courses.length : 0,
+        generatedAt: localKbBundle.generatedAt || null,
+        updatedAt: localKbBundle.generatedAt || null,
+      };
+      renderKbMeta(meta);
+      if (main) main.hidden = false;
+      if (onboarding) onboarding.hidden = true;
+    }
+  } catch {}
+  try {
     const r = await fetch("/api/kb-search?q=" + encodeURIComponent("__ping__"));
-    if (r.ok) { const d = await r.json(); meta = d.meta; }
+    if (r.ok) {
+      const d = await r.json();
+      if (d.meta?.noteCount > 0 || !meta) meta = d.meta;
+    }
   } catch {}
   const hasDb = !!(meta && meta.noteCount > 0);
   if (onboarding) onboarding.hidden = hasDb && !buildPanel.hidden ? false : hasDb;
@@ -541,6 +562,7 @@ async function handleKbFile(e) {
     });
     if (!r.ok) { const err = await r.json().catch(() => ({})); setKbBuildError(err.error || r.status); return; }
     const data = await r.json();
+    try { localKbBundle = await saveKbBundle(parsed); } catch { /* cache is best-effort */ }
     if (statusEl) statusEl.textContent = `✅ Saved ${data.meta?.noteCount?.toLocaleString()} notes to the shared knowledge base.`;
     setTimeout(() => refreshKb(), 600);
   } catch (err) { setKbBuildError(err.message); }

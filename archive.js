@@ -442,7 +442,7 @@ function openDb() {
   });
 }
 
-async function idbGet(id) {
+export async function idbGet(id) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly");
@@ -452,7 +452,7 @@ async function idbGet(id) {
   });
 }
 
-async function idbPut(record) {
+export async function idbPut(record) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
@@ -462,7 +462,7 @@ async function idbPut(record) {
   });
 }
 
-async function idbDelete(id) {
+export async function idbDelete(id) {
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite");
