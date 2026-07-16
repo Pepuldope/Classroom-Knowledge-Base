@@ -18,7 +18,7 @@
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
-import { searchNotes, makeSortFn, deriveFamily } from "./kb-client-search.js";
+import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview } from "./kb-client-search.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -55,12 +55,16 @@ export function buildLocalSearchResponse(bundle, query, {
 } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const withFamilies = notes.map((note) => note?.family ? note : ({ ...note, family: deriveFamily(note?.course) || "" }));
-  const filtered = withFamilies.filter((note) =>
-    (!course || (note.course || "") === course) &&
-    (!year || (note.y || "") === year) &&
-    (!kind || (note.kind || "") === kind) &&
-    (!family || (note.family || "") === family)
-  );
+  const filtered = withFamilies
+    .map((note, index) => ({ note, index }))
+    .filter(({ note }) =>
+      (!course || (note.course || "") === course) &&
+      (!year || (note.y || "") === year) &&
+      (!kind || (note.kind || "") === kind) &&
+      (!family || (note.family || "") === family)
+    );
+  const filteredNotes = filtered.map(({ note }) => note);
+  const indexMap = filtered.map(({ index }) => index);
   const collect = (field) => [...new Set(withFamilies.map((note) => note?.[field]).filter(Boolean))]
     .sort((a, b) => String(a).localeCompare(String(b)));
   return {
@@ -71,7 +75,8 @@ export function buildLocalSearchResponse(bundle, query, {
       generatedAt: bundle?.generatedAt || null,
       updatedAt: bundle?.generatedAt || null,
     },
-    results: searchNotes(filtered, query, { limit, sortFn: makeSortFn(sort) }),
+    results: searchNotes(filteredNotes, query, { limit, sortFn: makeSortFn(sort), indexMap }),
+    didYouMean: suggestCorrection(filteredNotes, query),
     filteredCount: filtered.length,
     filters: {
       courses: collect("course"),
@@ -80,6 +85,16 @@ export function buildLocalSearchResponse(bundle, query, {
       families: collect("family"),
     },
   };
+}
+
+export function localNoteFromBundle(bundle, index) {
+  const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
+  return Number.isInteger(index) && index >= 0 && index < notes.length ? notes[index] || null : null;
+}
+
+export function localRelatedFromBundle(bundle, index, opts = {}) {
+  const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
+  return localNoteFromBundle(bundle, index) ? relatedNotesPreview(notes, index, opts) : [];
 }
 
 const KB_SETTINGS_KEY = "cwa_kb_settings";
@@ -707,6 +722,25 @@ async function runKbSearch(query) {
         empty.textContent = "No matches in your knowledge base.";
       }
       results.appendChild(empty);
+      if (d.didYouMean) {
+        const dym = document.createElement("div");
+        dym.className = "kb-didyoumean";
+        const label = document.createElement("span");
+        label.textContent = "Did you mean ";
+        dym.appendChild(label);
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "kb-didyoumean-btn";
+        btn.textContent = d.didYouMean;
+        btn.addEventListener("click", () => {
+          const input = $("kbSearchInput");
+          if (input) input.value = d.didYouMean;
+          runKbSearch(d.didYouMean);
+        });
+        dym.appendChild(btn);
+        dym.appendChild(document.createTextNode(" ?"));
+        results.appendChild(dym);
+      }
       return;
     }
     // "Did you mean" — when a typo returned nothing but a confident
@@ -943,10 +977,14 @@ async function openCourse(course) {
 async function renderRelatedPreview(container, noteIndex) {
   if (!container) return;
   try {
-    const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=3`);
-    if (!r.ok) return;
-    const d = await r.json();
-    const related = d.related || [];
+    let related;
+    if (localKbBundle?.notes?.length) {
+      related = localRelatedFromBundle(localKbBundle, noteIndex, { limit: 3 });
+    } else {
+      const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=3`);
+      if (!r.ok) return;
+      related = (await r.json()).related || [];
+    }
     if (!related.length) return;
     container.hidden = false;
     const tag = document.createElement("span");
@@ -1213,14 +1251,20 @@ async function openKbNote(index) {
   if (obsLink) obsLink.hidden = true;
   modal.hidden = false;
   try {
-    const r = await fetch("/api/kb-note?id=" + encodeURIComponent(index));
-    if (!r.ok) {
-      const err = await r.json().catch(() => ({}));
-      bodyEl.innerHTML = `<div class="empty">Couldn't load this note (${err.error || r.status}).</div>`;
-      if (titleEl) titleEl.textContent = "Note";
-      return;
+    let note;
+    if (localKbBundle?.notes?.length) {
+      note = localNoteFromBundle(localKbBundle, index);
+      if (!note) throw new Error("note not found in local knowledge base");
+    } else {
+      const r = await fetch("/api/kb-note?id=" + encodeURIComponent(index));
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        bodyEl.innerHTML = `<div class="empty">Couldn't load this note (${err.error || r.status}).</div>`;
+        if (titleEl) titleEl.textContent = "Note";
+        return;
+      }
+      note = await r.json();
     }
-    const note = await r.json();
     if (titleEl) titleEl.textContent = note.t || "(untitled)";
     if (metaEl) metaEl.textContent = [note.course, note.y, note.topic].filter(Boolean).join("  ·  ");
     // Prefer the full body, fall back to summary. renderLightMarkdown escapes
@@ -1277,11 +1321,16 @@ async function renderRelatedNotes(index) {
   wrap.hidden = true;
   list.innerHTML = "";
   try {
-    const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=3");
-    if (!r.ok) return;
-    const d = await r.json();
+    let related;
+    if (localKbBundle?.notes?.length) {
+      related = localRelatedFromBundle(localKbBundle, index, { limit: 3 });
+    } else {
+      const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=3");
+      if (!r.ok) return;
+      related = (await r.json()).related || [];
+    }
     // owner #6: cap the rendered panel to 3 items so it stays compact.
-    const related = (d.related || []).slice(0, 3);
+    related = related.slice(0, 3);
     if (!related.length) return;
     for (const rel of related) {
       const item = document.createElement("button");

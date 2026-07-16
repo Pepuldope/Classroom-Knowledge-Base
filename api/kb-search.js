@@ -56,17 +56,22 @@ export default async function handler(req) {
   };
 
   let notes = bundle.notes.map(withFamily);
+  let indexMap = notes.map((_, index) => index);
   if (courseFilter || yearFilter || kindFilter || familyFilter) {
-    notes = notes.filter(
-      (n) =>
-        (!courseFilter || (n.course || "") === courseFilter) &&
-        (!yearFilter || (n.y || "") === yearFilter) &&
-        (!kindFilter || (n.kind || "") === kindFilter) &&
-        (!familyFilter || (n.family || "") === familyFilter)
-    );
+    const filtered = notes
+      .map((note, index) => ({ note, index: indexMap[index] }))
+      .filter(
+        ({ note: n }) =>
+          (!courseFilter || (n.course || "") === courseFilter) &&
+          (!yearFilter || (n.y || "") === yearFilter) &&
+          (!kindFilter || (n.kind || "") === kindFilter) &&
+          (!familyFilter || (n.family || "") === familyFilter)
+      );
+    notes = filtered.map(({ note }) => note);
+    indexMap = filtered.map(({ index }) => index);
   }
   const sortFn = makeSortFn(sort);
-  const results = searchNotes(notes, q, { limit, sortFn });
+  const results = searchNotes(notes, q, { limit, sortFn, indexMap });
   // filteredCount = how many notes the current result set was drawn from
   // (post-facet-filter, pre-limit). The UI shows "Showing N of M notes" where
   // M is filteredCount — so a course/year/kind/family filter visibly narrows M too.

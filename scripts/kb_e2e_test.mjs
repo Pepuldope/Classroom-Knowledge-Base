@@ -19,14 +19,14 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { searchNotes, relatedNotes, suggestCorrection, relatedNotesPreview } from "../api/kb-retrieval.js";
+import { searchNotes, relatedNotes, suggestCorrection, relatedNotesPreview, makeSortFn } from "../api/kb-retrieval.js";
 import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, groupCourseNotesBySprint, buildLocalSearchResponse, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 
@@ -95,6 +95,48 @@ test("local search sort orders the full filtered result set", () => {
   const response = buildLocalSearchResponse(bundle, "Algebra", { sort: "title", limit: 2 });
   assert.deepEqual(response.results.map((note) => note.t), ["Alpha lesson", "Middle lesson"]);
 });
+test("recency sort sinks undated notes after dated notes", () => {
+  const notes = [
+    { t: "Undated", s: "Algebra", y: "undated" },
+    { t: "Dated", s: "Algebra", y: "2024-25" },
+  ];
+  const results = searchNotes(notes, "Algebra", { limit: 2, sortFn: makeSortFn("recency") });
+  assert.deepEqual(results.map((note) => note.t), ["Dated", "Undated"]);
+});
+
+test("local search preserves original bundle indices when facets filter notes", () => {
+  const bundle = {
+    version: 1,
+    notes: [
+      { t: "Other course", s: "Algebra", course: "History", y: "2024-25" },
+      { t: "Target note", s: "Algebra", course: "Math", y: "2024-25" },
+    ],
+  };
+  const response = buildLocalSearchResponse(bundle, "Algebra", { course: "Math" });
+  assert.equal(response.results[0].noteIndex, 1);
+  assert.equal(localNoteFromBundle(bundle, response.results[0].noteIndex).t, "Target note");
+});
+
+test("local search returns typo corrections when the query has no direct match", () => {
+  const bundle = { version: 1, notes: [{ t: "Mitochondria", s: "Cell biology", x: "Energy" }] };
+  const response = buildLocalSearchResponse(bundle, "mitocondria");
+  assert.equal(response.results.length, 0);
+  assert.equal(response.didYouMean, "mitochondria");
+});
+
+test("local note and related lookups use only the cached bundle", () => {
+  const bundle = {
+    version: 1,
+    notes: [
+      { t: "Algebra one", course: "Math", topic: "Algebra", x: "linear equations" },
+      { t: "Algebra two", course: "Math", topic: "Algebra", x: "quadratics" },
+    ],
+  };
+  assert.equal(localNoteFromBundle(bundle, 1).t, "Algebra two");
+  assert.equal(localNoteFromBundle(bundle, 9), null);
+  assert.equal(localRelatedFromBundle(bundle, 0, { limit: 1 })[0].noteIndex, 1);
+});
+
 test("validateKbBundle accepts a version-one notes bundle and rejects invalid input", () => {
   const valid = { version: 1, notes: [{ t: "Algebra", x: "Quadratics" }] };
   assert.equal(validateKbBundle(valid), valid);
@@ -224,6 +266,32 @@ test("/api/kb-search year filter narrows results", async () => {
   // Only the 2022-23 STAR note should remain.
   assert.ok(d.results.every((n) => n.y === "2022-23"), "every result must be the filtered year");
   assert.ok(d.results.some((n) => n.t === "STAR Method"), "the 2022-23 STAR note is present");
+});
+
+test("/api/kb-search preserves original note index through facet filtering", async () => {
+  await seed({
+    version: 1,
+    notes: [
+      { t: "History algebra decoy", s: "Algebra", course: "History", y: "2024-25", x: "decoy" },
+      { t: "Math algebra target", s: "Algebra", course: "Math", y: "2024-25", x: "target body" },
+    ],
+  });
+  const r = await kbSearch(makeReq("/api/kb-search?q=algebra&course=Math&limit=8"));
+  const d = await r.json();
+  assert.equal(d.results.length, 1);
+  assert.equal(d.results[0].noteIndex, 1, "filtered result must retain its bundle index");
+  const nr = await kbNote(makeReq("/api/kb-note?id=" + d.results[0].noteIndex));
+  assert.equal((await nr.json()).t, "Math algebra target", "opening result must resolve the target note");
+});
+
+test("searchNotes sorts all matches before applying the result limit", () => {
+  const notes = [
+    { t: "Zulu", s: "Algebra", y: "2024-25" },
+    { t: "Alpha", s: "Algebra", y: "2024-25" },
+    { t: "Beta", s: "Algebra", y: "2024-25" },
+  ];
+  const results = searchNotes(notes, "Algebra", { limit: 2, sortFn: makeSortFn("title") });
+  assert.deepEqual(results.map((note) => note.t), ["Alpha", "Beta"]);
 });
 
 test("empty knowledge base returns empty results with empty:true", async () => {

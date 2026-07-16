@@ -97,8 +97,11 @@ export function makeSortFn(sort) {
       // Newest year first (string year sorts lexicographically — already works
       // for "2025-26" > "2024-25" > "2023-24"; "undated" sinks). Ties broken by
       // the relevance score so a newer-year tie still ranks by match quality.
+      const undated = (value) => !value || String(value).toLowerCase() === "undated";
+      const byDate = (value) => undated(value) ? "" : String(value);
       return (a, b) =>
-        String((b.y || "0")).localeCompare(String((a.y || "0"))) ||
+        (undated(a.y) ? 1 : 0) - (undated(b.y) ? 1 : 0) ||
+        byDate(b.y).localeCompare(byDate(a.y)) ||
         (b._score || 0) - (a._score || 0);
     case "title":
       return (a, b) => String(a.t || "").localeCompare(String(b.t || ""));
@@ -122,7 +125,7 @@ export function makeSortFn(sort) {
  * Each returned note also carries t/s/course/y/topic/p so the frontend and
  * the tutor can cite the source.
  */
-export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = false, sortFn = null } = {}) {
+export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = false, sortFn = null, indexMap = null } = {}) {
   if (!Array.isArray(notes) || notes.length === 0) return [];
   const qTokens = tokenize(query);
   if (qTokens.length === 0) return [];
@@ -142,7 +145,7 @@ export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = f
       y: n.y || "",
       topic: n.topic || null,
       p: n.p || "",
-      noteIndex: index,
+      noteIndex: Array.isArray(indexMap) && indexMap[index] != null ? indexMap[index] : index,
       _score: score,
       _snippet: snippet,
     });

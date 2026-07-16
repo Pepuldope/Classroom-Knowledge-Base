@@ -195,6 +195,24 @@ try {
   // A misspelled query that has a confident correction in the corpus should
   // surface a "Did you mean" suggestion; clicking it retries the corrected
   // query and shows real results.
+  await check("empty results render the did-you-mean control", async () => {
+    await page.route("**/api/kb-search?q=typo-regression**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ meta: { noteCount: 3 }, results: [], filteredCount: 3, filters: { courses: [], years: [], kinds: [], families: [] }, didYouMean: "algebra" }),
+      });
+    });
+    await page.fill("#kbSearchInput", "typo-regression");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#kbResults .kb-didyoumean", { timeout: 5000 });
+    assert.equal(await page.locator("#kbResults .kb-didyoumean-btn").textContent(), "algebra");
+    await page.unroute("**/api/kb-search?q=typo-regression**");
+    await page.fill("#kbSearchInput", "cover letter");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 5000 });
+  });
+
   await check("a misspelled query shows a 'Did you mean' hint that retries", async () => {
     // Pick a term that exists, misspell it, and confirm the hint appears.
     const r = await page.request.fetch(BASE + "/api/kb-search?q=__ping__");
