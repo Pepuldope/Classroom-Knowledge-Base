@@ -41,6 +41,11 @@ BASE_URL="http://localhost:$PORT" node scripts/kb_loading_test.mjs
 LOAD_OK=$?
 if [ "$LOAD_OK" -ne 0 ]; then echo "loading e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Settings styling e2e (local)"
+BASE_URL="http://localhost:$PORT" node scripts/settings_ui_test.mjs
+SETTINGS_OK=$?
+if [ "$SETTINGS_OK" -ne 0 ]; then echo "settings styling e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 kill "$SRV" 2>/dev/null
 
 if [ "$UI_OK" -ne 0 ]; then echo "UI e2e FAILED"; exit 1; fi

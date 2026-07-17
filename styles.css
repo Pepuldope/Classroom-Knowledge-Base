@@ -787,6 +787,20 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-radius: 5px;
   background: var(--card);
 }
+.settings-row select.settings-select {
+  font-size: 0.85rem;
+  padding: 0.45rem 0.75rem;
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
+}
+.settings-row select.settings-select:hover { border-color: var(--accent); }
+.settings-row select.settings-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
 .settings-row-toggle {
   flex-direction: row;
   align-items: center;
