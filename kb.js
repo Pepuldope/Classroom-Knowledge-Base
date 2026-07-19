@@ -489,6 +489,7 @@ export function wireKbEvents() {
   const tutorClose = $("kbTutorClose");
   const tutorForm = $("kbTutorForm");
   const tutorInput = $("kbTutorInput");
+  const tutorNewTopic = $("kbTutorNewTopic");
 
   buildBtn?.addEventListener("click", () => startScrape());
   fileLink?.addEventListener("click", () => fileInput?.click());
@@ -496,6 +497,7 @@ export function wireKbEvents() {
 
   tutorOpen?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = false; });
   tutorClose?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = true; });
+  tutorNewTopic?.addEventListener("click", resetTutorUi);
   tutorForm?.addEventListener("submit", (e) => { e.preventDefault(); const v = tutorInput?.value.trim(); if (v) sendTutor(v); });
   document.querySelectorAll("#kbTutorModal .ai-quick button").forEach((b) =>
     b.addEventListener("click", () => { const p = b.dataset.prompt; if (p) sendTutor(p); })
@@ -1163,6 +1165,43 @@ function renderResultCount(data, { course, year }) {
 // ---------------------------------------------------------------------------
 let tutorMessages = [];
 
+/** Return a fresh thread without mutating the previous conversation. */
+export function resetTutorConversation() {
+  return [];
+}
+
+export function copyableTutorText(text) {
+  return typeof text === "string" ? text.trim() : "";
+}
+
+function addTutorCopyAction(messageEl, text) {
+  if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-copy-btn")) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ai-copy-btn";
+  button.textContent = "Copy";
+  button.title = "Copy this answer";
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(copyableTutorText(text));
+      button.textContent = "Copied";
+      setTimeout(() => { button.textContent = "Copy"; }, 1200);
+    } catch {
+      button.textContent = "Copy unavailable";
+    }
+  });
+  messageEl.appendChild(button);
+}
+
+function resetTutorUi() {
+  tutorMessages = resetTutorConversation();
+  const messages = $("kbTutorMessages");
+  if (messages) messages.replaceChildren();
+  const sources = $("kbTutorSources");
+  if (sources) sources.innerHTML = '<span class="ai-context-note">New topic — answers will still use your knowledge base.</span>';
+  $("kbTutorInput")?.focus();
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
@@ -1245,6 +1284,7 @@ async function sendTutor(text) {
     }
     // After streaming, render the source chips (clickable -> open the note).
     renderTutorSources(sourcesEl, sources);
+    addTutorCopyAction(assistantEl, acc);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {
     if (assistantEl) assistantEl.textContent = `❌ ${e.message}`;

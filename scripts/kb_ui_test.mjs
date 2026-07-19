@@ -443,12 +443,16 @@ try {
     assert.ok(chipCount === 2, `expected 2 source chips, got ${chipCount}`);
     const firstTitle = await page.locator("#kbTutorSources .kb-source-chip .kb-chip-title").first().textContent();
     assert.ok(firstTitle && firstTitle.includes("STAR"), `chip title wrong: ${firstTitle}`);
+    await page.waitForSelector("#kbTutorMessages .ai-copy-btn", { timeout: 8000 });
+    assert.equal(await page.locator("#kbTutorMessages .ai-copy-btn").count(), 1, "each answer should expose one copy action");
     // Clicking a chip must open the note detail modal.
     await page.locator("#kbTutorSources .kb-source-chip").first().click();
     await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
     const noteTitle = await page.locator("#kbNoteTitle").textContent();
     assert.ok(noteTitle && noteTitle.length > 0, "clicking a source chip should open the note");
     await page.click("#kbNoteClose");
+    await page.click("#kbTutorNewTopic");
+    assert.equal(await page.locator("#kbTutorMessages .ai-msg").count(), 0, "new topic should clear the current thread");
     await page.click("#kbTutorClose");
   });
 

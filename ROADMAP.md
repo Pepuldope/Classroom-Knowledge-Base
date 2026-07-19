@@ -78,7 +78,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: richer empty state with example searches and a "browse by course" entry point.
 - [x] KB: search result count + "showing N of M notes" and a "clear filters" control when course/year chips are active.
 - [x] KB Settings dropdowns stylized with shared `.settings-select` (`0502235`) — do not re-do.
-- [ ] Tutor: copy-to-clipboard on each answer + "save to my study list" (personal, localStorage).
+- [ ] Tutor: save answers to my study list (personal, localStorage). Copy-to-clipboard + "New topic" reset shipped this run.
 - [ ] Tutor: surface which provider/model answered (already in X- headers) as a small line under the answer.
 - [x] KB: persist last-used sort/filters across visits via localStorage (settings defaults exist — wire live search state too). Shipped this run: `cwa_kb_search_state` normalizes and restores course/year/type/class-type filters and sort order.
 - [ ] (loop: invent more here every run when higher lists are blocked or thin)

@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes } from "../api/tutor.js";
@@ -505,6 +505,17 @@ test("relatedNotes is fast and scores related notes sanely (regression guard)", 
 });
 
 // ---------------------------------------------------------------------------
+test("resetTutorConversation clears the current thread without mutating the input", () => {
+  const messages = [{ role: "user", content: "What is photosynthesis?" }, { role: "assistant", content: "It is…" }];
+  assert.deepEqual(resetTutorConversation(messages), []);
+  assert.equal(messages.length, 2);
+});
+
+test("copyableTutorText normalizes an answer for clipboard use", () => {
+  assert.equal(copyableTutorText("  Answer with notes.  "), "Answer with notes.");
+  assert.equal(copyableTutorText(null), "");
+});
+
 // Tutor source attribution: the tutor must SHOW WHICH NOTES it used, as
 // clickable chips that jump to the note. The pure transform tutorSourceList()
 // turns a raw list of retrieved notes into the chip descriptors the UI renders.
