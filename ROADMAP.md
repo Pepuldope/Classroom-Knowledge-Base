@@ -18,15 +18,11 @@ then builds it. Keep items concrete and student-facing where possible.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
 ## 🐛 Reported by Pepuldo (2026-07-13) — fix before new features
-These came straight from user feedback. The "DB empty → scrape onboarding" branch
-ALREADY EXISTS (`refreshKb()` gates on `meta.noteCount` in kb.js:137-141), so the
-new work is the loading state + new-content detection + the obsidian replacement.
-- [ ] KB load: show a LOADING ANIMATION (spinner/skeleton) immediately on
-  `showKbView()` while the DB is read, THEN show content if `noteCount > 0` OR the
-  existing scrape onboarding if empty. Today the populated path renders `kbMain`
-  blank during the meta fetch — on a fresh deploy (Vercel + Upstash KV cold start)
-  that blank window reads as "~30s of nothing". Spinner must appear synchronously
-  (before any await) and be removed the instant meta + first content paint.
+These came straight from user feedback. Prefer these over speculative polish.
+- [x] KB load: show a LOADING ANIMATION (spinner/skeleton) immediately on
+  `showKbView()` / search. Done 2026-07-13 in `772bca3` + `91a6ede` (`.kb-spinner`,
+  `.kb-loading-inline`, "Loading your knowledge base…"). Keep regressions covered
+  by `scripts/kb_loading_test.mjs`.
 - [ ] Detect NEW Classroom content on every load and offer/auto re-scrape. After
   sign-in, on each KB view call a lightweight bounded check (new `mode:"changed"` in
   kb-scrape.js, or `/api/kb-changes`) that compares stored `meta` (generatedAt /
@@ -35,13 +31,10 @@ new work is the loading state + new-content detection + the obsidian replacement
   non-blocking "X new items — Update now" banner AND/OR fire the existing
   resumable list→course background scrape. Must run AFTER the KB shell paints so
   the view never blocks on it.
-- [ ] Cut KB load time. Likely root cause: Vercel fn cold-start + Upstash KV
-  cold-start on every redeploy (session is dropped → cold path each time).
-  Implement + MEASURE: (a) add `Cache-Control: s-maxage` to the tiny meta call so
-  repeat loads are served from the CDN edge; (b) lazy-render the browse panel after
-  the shell; (c) add a meta-only endpoint that does NOT reassemble all shards;
-  (d) add real timing marks (performance.now) around load so improvement is proven
-  not guessed. Acceptance: populated KB view paints <3s warm, <8s cold.
+- [ ] Cut KB load time (still open after private/IndexedDB pivot). Measure first:
+  (a) lazy-load non-critical panels (build/tutor/related preview); (b) debounce
+  search; (c) code-split heavy modules; (d) `performance.now` marks around first
+  paint + search. Acceptance: populated KB view paints <3s warm with local bundle.
 - [x] Replace the Obsidian-only "open" action with a UNIVERSAL external-open. Most
   users don't have Obsidian, and for vault notes the `obsidian://open?path=...` link
   points at a local file they can't reach. Fixed 2026-07-15: note modal now resolves
@@ -63,8 +56,8 @@ new work is the loading state + new-content detection + the obsidian replacement
 ## 🧠 Soon
 - [x] KB: "Did you mean" typo-tolerance — suggest a corrected spelling when a search returns nothing (query-side fuzzy spelling).
 - [ ] Tutor: conversation memory across messages within a session (already in place) + a "new topic" reset.
-- [ ] KB: export the whole knowledge base as a printable PDF / markdown book.
-- [ ] Search: typo-tolerance using the existing fuzzy stem matching (extend to query side).
+- [ ] KB: export the whole knowledge base as a printable PDF / markdown book (JSON/MD/CSV export already exists — extend to a readable multi-note "book" + optional print stylesheet; PDF optional).
+- [x] Search: typo-tolerance using the existing fuzzy stem matching (extend to query side) — covered by didYouMean path (`544456d`, `b06c0a3`).
 - [ ] Tutor: let students rate answers (👍/👎) and store feedback for tuning.
 
 ## 💡 Ideas / experiments
@@ -89,16 +82,16 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Tutor: "summarise this note" quick action on each search result card.
 - [x] KB: sort results by relevance / recency / course (sort toggle chips).
 - [x] KB: keyboard shortcut (press "/" to focus search, Esc to clear).
-- [ ] Tutor: copy-to-clipboard button on each answer + "save note" to a personal study list.
-- [ ] Tutor: show which provider/model answered (already in response headers — surface it in the UI).
 - [x] Search: "did you mean" suggestion when a query returns <3 results.
 - [x] KB: related-notes preview chips directly under each search result card (no need to open the note first).
 - [x] KB: Planner→KB bridge — a "🔍 KB" button on every assignment card that searches the knowledge base for that topic.
 - [x] KB: richer empty state with example searches and a "browse by course" entry point.
 - [x] KB: search result count + "showing N of M notes" and a "clear filters" control when course/year chips are active.
-- [ ] KB: persist last-used sort (relevance/recency/course) across searches via localStorage.
-- [ ] Tutor: "copy answer" button on each tutor message + "save to my study list" (personal, localStorage).
+- [x] KB Settings dropdowns stylized with shared `.settings-select` (`0502235`) — do not re-do.
+- [ ] Tutor: copy-to-clipboard on each answer + "save to my study list" (personal, localStorage).
 - [ ] Tutor: surface which provider/model answered (already in X- headers) as a small line under the answer.
+- [ ] KB: persist last-used sort/filters across visits via localStorage (settings defaults exist — wire live search state too).
+- [ ] (loop: invent more here every run when higher lists are blocked or thin)
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
