@@ -30,6 +30,7 @@ import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
+import { normalizeTutorNotes } from "../api/tutor.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -40,6 +41,14 @@ test("private KB UI copy does not promise a shared database", async () => {
   const source = await readFile(new URL("../kb.js", import.meta.url), "utf8");
   assert.doesNotMatch(source, /into the shared DB|Uploading archive\.json to the shared DB/);
   assert.match(source, /into your knowledge base|your knowledge base/);
+});
+
+test("tutor context accepts only a bounded client-retrieved note shape", () => {
+  const notes = normalizeTutorNotes([
+    { t: "Algebra", course: "Math", y: "2024-25", topic: "Quadratics", s: "Summary", x: "Body", noteIndex: 7, secret: "drop me" },
+    { t: "Second", x: "Other" },
+  ], 1);
+  assert.deepEqual(notes, [{ t: "Algebra", course: "Math", y: "2024-25", topic: "Quadratics", s: "Summary", x: "Body", noteIndex: 7 }]);
 });
 
 test("kbSettingsModel normalizes KB controls and preserves local-only defaults", () => {

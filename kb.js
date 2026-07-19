@@ -13,7 +13,7 @@
 // Backend endpoints (see api/):
 //   POST /api/kb-scrape   { source:'classroom', authToken } | { source:'bundle', bundle }
 //   GET  /api/kb-search?q=  -> { meta, results:[{t,course,y,topic,p,_score,_snippet}] }
-//   POST /api/tutor        { messages:[...] }  (streaming SSE, uses DB context)
+//   POST /api/tutor        { messages:[...], notes:[...] } (streaming SSE)
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
@@ -1195,10 +1195,16 @@ async function sendTutor(text) {
   const assistantEl = addTutorMessage("assistant", "…", true);
   let acc = "";
   try {
+    const retrieved = localKbBundle?.notes?.length && text
+      ? searchNotes(localKbBundle.notes, text, { limit: 6 }).map((result) => ({
+        ...localKbBundle.notes[result.noteIndex],
+        noteIndex: result.noteIndex,
+      }))
+      : [];
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
-      body: JSON.stringify({ messages: tutorMessages }),
+      body: JSON.stringify({ messages: tutorMessages, notes: retrieved }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));

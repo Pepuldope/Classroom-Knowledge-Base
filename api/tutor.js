@@ -1,16 +1,28 @@
 import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
-import { getBundle } from "./kb-store.js";
-import { searchNotes } from "./kb-retrieval.js";
 import { routeChat } from "./ai-router.js";
 
 export const config = { runtime: "edge" };
 
-// RAG tutor: retrieves up to N relevant notes from the shared KB, injects
-// them as grounded context, and streams an answer from the AI model.
+// RAG tutor: receives only the notes retrieved in the student's browser,
+// injects them as grounded context, and streams an answer from the AI model.
 // The model call goes through ai-router.js, which fails over across ALL
 // configured providers (OpenRouter, local proxy, Groq, Cerebras, Mistral,
 // NVIDIA, GitHub, Qwen, Google) so the tutor stays up even if one runs out.
 const CONTEXT_NOTES = 6;
+
+/** Keep the server-side model context bounded and free of client metadata. */
+export function normalizeTutorNotes(notes, limit = CONTEXT_NOTES) {
+  if (!Array.isArray(notes)) return [];
+  return notes.slice(0, Math.max(0, limit)).map((n) => ({
+    t: typeof n?.t === "string" ? n.t.slice(0, 300) : "",
+    course: typeof n?.course === "string" ? n.course.slice(0, 160) : "",
+    y: typeof n?.y === "string" ? n.y.slice(0, 40) : "",
+    topic: typeof n?.topic === "string" ? n.topic.slice(0, 160) : "",
+    s: typeof n?.s === "string" ? n.s.slice(0, 1400) : "",
+    x: typeof n?.x === "string" ? n.x.slice(0, 1400) : "",
+    noteIndex: Number.isInteger(n?.noteIndex) ? n.noteIndex : undefined,
+  }));
+}
 
 function buildSystemPrompt(notes) {
   const ctx = notes
@@ -21,12 +33,12 @@ function buildSystemPrompt(notes) {
     })
     .join("\n\n---\n\n");
   return [
-    "You are a friendly study tutor for a student using their school's shared Classroom knowledge base.",
+    "You are a friendly study tutor for a student using their private Classroom knowledge base.",
     "Answer using ONLY the notes provided below. If the notes do not cover the question, say so plainly and suggest what topic to look up — do NOT invent facts or pull from outside knowledge.",
     "Be encouraging and clear. Use short paragraphs, bullet points where helpful, and concrete examples drawn from the notes.",
     "When you use a fact, you may mention which note it came from (e.g. 'the STAR Method note says…').",
     "",
-    "=== SHARED KNOWLEDGE BASE (retrieved notes) ===",
+    "=== PRIVATE KNOWLEDGE BASE (retrieved notes) ===",
     ctx || "(no notes retrieved)",
   ].join("\n");
 }
@@ -45,15 +57,9 @@ export default async function handler(req) {
   const body = await req.json().catch(() => null);
   if (!body || !Array.isArray(body.messages)) return jsonResponse({ error: "messages array required" }, 400);
 
-  const lastUser = [...body.messages].reverse().find((m) => m.role === "user");
-  const query = lastUser ? lastUser.content : "";
-
-  // ---- RAG retrieval ----
-  const bundle = await getBundle();
-  let notes = [];
-  if (bundle && Array.isArray(bundle.notes) && query) {
-    notes = searchNotes(bundle.notes, query, { limit: CONTEXT_NOTES });
-  }
+  // The browser performs retrieval over its private IndexedDB bundle. The
+  // server never reads a shared bundle and receives only this bounded context.
+  const notes = normalizeTutorNotes(body.notes);
 
   const systemPrompt = buildSystemPrompt(notes);
   const messages = [{ role: "system", content: systemPrompt }, ...body.messages];
