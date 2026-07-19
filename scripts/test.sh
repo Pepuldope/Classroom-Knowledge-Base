@@ -15,6 +15,11 @@ cd "$ROOT"
 # cache at /opt/hermes is root-owned and not writable by the agent).
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$ROOT/.pw-browsers}"
 
+echo "==> Theme model tests"
+node scripts/theme_test.mjs
+THEME_OK=$?
+if [ "$THEME_OK" -ne 0 ]; then echo "theme tests FAILED"; exit 1; fi
+
 echo "==> API / retrieval tests"
 node scripts/kb_e2e_test.mjs
 API_OK=$?

@@ -13,6 +13,9 @@ import {
 } from "./archive.js";
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 import { loadKbBundle, removeKbBundle } from "./kb-local.js";
+import { applyTheme, loadTheme } from "./theme.js";
+
+applyTheme(loadTheme());
 
 const CLIENT_ID = "786778645862-cejadrqj2edabpdlk0emsvb1gc2hdijs.apps.googleusercontent.com";
 const SCOPES = [
@@ -1089,6 +1092,7 @@ async function configureKbSettingsUi() {
   set("kbPrefRelatedCountValue", s.relatedCount, "textContent");
   set("kbPrefDensity", s.density);
   set("kbPrefAutoBuild", s.autoBuild, "checked");
+  set("prefTheme", loadTheme());
   $("kbPrefRelatedCount")?.addEventListener("input", (e) => { $("kbPrefRelatedCountValue").textContent = e.target.value; }, { once: true });
   $("kbPrefExport")?.addEventListener("click", async () => {
     const bundle = await loadKbBundle();
@@ -1158,6 +1162,7 @@ async function saveSettingsAndReload() {
     showOverdueInDoNow: showOver ? showOver.checked : displayPrefs.showOverdueInDoNow,
   };
   saveDisplayPrefsLocal(displayPrefs);
+  applyTheme($("prefTheme")?.value);
 
   import("./kb.js").then(({ saveKbSettings }) => saveKbSettings({
     tutorEnabled: $("kbPrefTutorEnabled")?.checked,
