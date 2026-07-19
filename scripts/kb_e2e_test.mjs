@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 
@@ -60,6 +60,29 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     relatedCount: 8,
     density: "compact",
     autoBuild: true,
+  });
+});
+
+test("kbSearchStateModel keeps only valid local filter and sort choices", () => {
+  assert.deepEqual(kbSearchStateModel({
+    course: "Math",
+    year: "2024-25",
+    kind: "assignment",
+    family: "engineering",
+    sort: "title",
+  }), {
+    course: "Math",
+    year: "2024-25",
+    kind: "assignment",
+    family: "engineering",
+    sort: "title",
+  });
+  assert.deepEqual(kbSearchStateModel({ course: 42, sort: "unsupported" }), {
+    course: "",
+    year: "",
+    kind: "",
+    family: "",
+    sort: "relevance",
   });
 });
 

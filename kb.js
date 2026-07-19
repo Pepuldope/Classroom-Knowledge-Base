@@ -98,6 +98,33 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
 }
 
 const KB_SETTINGS_KEY = "cwa_kb_settings";
+const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
+const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
+
+/** Normalize the last-used local KB filter state; unknown values never persist. */
+export function kbSearchStateModel(value = {}) {
+  const input = value && typeof value === "object" ? value : {};
+  const text = (key) => typeof input[key] === "string" ? input[key].trim() : "";
+  return {
+    course: text("course"),
+    year: text("year"),
+    kind: text("kind"),
+    family: text("family"),
+    sort: KB_SEARCH_SORTS.has(input.sort) ? input.sort : "relevance",
+  };
+}
+
+export function loadKbSearchState() {
+  try { return kbSearchStateModel(JSON.parse(localStorage.getItem(KB_SEARCH_STATE_KEY) || "{}")); }
+  catch { return kbSearchStateModel(); }
+}
+
+export function saveKbSearchState(value) {
+  const state = kbSearchStateModel(value);
+  try { localStorage.setItem(KB_SEARCH_STATE_KEY, JSON.stringify(state)); } catch {}
+  return state;
+}
+
 const DEFAULT_KB_SETTINGS = Object.freeze({
   tutorEnabled: true,
   tutorEffort: "tutor",
@@ -449,6 +476,12 @@ let _kbWired = false;
 export function wireKbEvents() {
   if (_kbWired) return; // idempotent — safe to call multiple times
   _kbWired = true;
+  const savedSearchState = loadKbSearchState();
+  kbActiveCourse = savedSearchState.course;
+  kbActiveYear = savedSearchState.year;
+  kbActiveKind = savedSearchState.kind;
+  kbActiveFamily = savedSearchState.family;
+  kbActiveSort = savedSearchState.sort;
   const buildBtn = $("kbBuildBtn");
   const fileLink = $("kbLoadFileLink");
   const fileInput = $("kbFileInput");
@@ -478,8 +511,10 @@ export function wireKbEvents() {
   // Focus area 7: explicit sort order. Changing the dropdown re-runs the search
   // with the chosen sort (default relevance, which is omitted server-side).
   const sortSel = $("kbSort");
+  if (sortSel) sortSel.value = kbActiveSort;
   sortSel?.addEventListener("change", () => {
     kbActiveSort = sortSel.value || "relevance";
+    saveKbSearchState({ course: kbActiveCourse, year: kbActiveYear, kind: kbActiveKind, family: kbActiveFamily, sort: kbActiveSort });
     const input = $("kbSearchInput");
     runKbSearch(input ? input.value : "");
   });
@@ -1043,6 +1078,7 @@ function renderFilterChips(filters) {
       else if (kind === "year") kbActiveYear = active ? "" : value;
       else if (kind === "kind") kbActiveKind = active ? "" : value;
       else if (kind === "family") kbActiveFamily = active ? "" : value;
+      saveKbSearchState({ course: kbActiveCourse, year: kbActiveYear, kind: kbActiveKind, family: kbActiveFamily, sort: kbActiveSort });
       const input = $("kbSearchInput");
       runKbSearch(input ? input.value : "");
     });
@@ -1098,6 +1134,7 @@ function renderFilterChips(filters) {
       // stays in sync (a persistent non-default sort would otherwise keep the
       // clear button visible even with no facet active).
       kbActiveSort = "relevance";
+      saveKbSearchState({ course: kbActiveCourse, year: kbActiveYear, kind: kbActiveKind, family: kbActiveFamily, sort: kbActiveSort });
       const sortSel = $("kbSort");
       if (sortSel) sortSel.value = "relevance";
       const input = $("kbSearchInput");
