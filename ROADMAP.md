@@ -31,10 +31,10 @@ These came straight from user feedback. Prefer these over speculative polish.
   non-blocking "X new items — Update now" banner AND/OR fire the existing
   resumable list→course background scrape. Must run AFTER the KB shell paints so
   the view never blocks on it.
-- [ ] Cut KB load time (still open after private/IndexedDB pivot). Measure first:
+- [x] Cut KB load time (still open after private/IndexedDB pivot). Measure first:
   (a) lazy-load non-critical panels (build/tutor/related preview); (b) debounce
   search; (c) code-split heavy modules; (d) `performance.now` marks around first
-  paint + search. Acceptance: populated KB view paints <3s warm with local bundle.
+  paint + search. Acceptance: populated KB view paints <3s warm with local bundle. Shipped 2026-07-20: cached local bundles skip the legacy server metadata probe.
 - [x] Replace the Obsidian-only "open" action with a UNIVERSAL external-open. Most
   users don't have Obsidian, and for vault notes the `obsidian://open?path=...` link
   points at a local file they can't reach. Fixed 2026-07-15: note modal now resolves
@@ -46,7 +46,7 @@ These came straight from user feedback. Prefer these over speculative polish.
 ## 🧠 Soon
 - [x] KB: "Did you mean" typo-tolerance — suggest a corrected spelling when a search returns nothing (query-side fuzzy spelling).
 - [ ] Tutor: conversation memory across messages within a session (already in place) + a "new topic" reset.
-- [ ] KB: export the whole knowledge base as a printable PDF / markdown book (JSON/MD/CSV export already exists — extend to a readable multi-note "book" + optional print stylesheet; PDF optional).
+- [x] KB: export the whole knowledge base as a printable PDF / markdown book (JSON/MD/CSV export already exists — extend to a readable multi-note "book" + optional print stylesheet; PDF optional). Shipped 2026-07-20: Settings now downloads a local grouped Markdown study book.
 - [x] Search: typo-tolerance using the existing fuzzy stem matching (extend to query side) — covered by didYouMean path (`544456d`, `b06c0a3`).
 - [x] Tutor: let students rate answers (👍/👎) and store feedback for tuning. Local-only ratings shipped 2026-07-20.
 
