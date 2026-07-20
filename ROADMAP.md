@@ -23,14 +23,7 @@ These came straight from user feedback. Prefer these over speculative polish.
   `showKbView()` / search. Done 2026-07-13 in `772bca3` + `91a6ede` (`.kb-spinner`,
   `.kb-loading-inline`, "Loading your knowledge base…"). Keep regressions covered
   by `scripts/kb_loading_test.mjs`.
-- [ ] Detect NEW Classroom content on every load and offer/auto re-scrape. After
-  sign-in, on each KB view call a lightweight bounded check (new `mode:"changed"` in
-  kb-scrape.js, or `/api/kb-changes`) that compares stored `meta` (generatedAt /
-  per-course note counts) against the live Classroom course list — one bounded call,
-  stays under the Edge 10s limit. If new coursework/announcements exist, show a
-  non-blocking "X new items — Update now" banner AND/OR fire the existing
-  resumable list→course background scrape. Must run AFTER the KB shell paints so
-  the view never blocks on it.
+- [x] Detect NEW Classroom courses on every load and offer a background update. Shipped 2026-07-20: after the local KB shell paints, a bounded `mode:"list"` check shows a non-blocking “N new courses — Update now” banner; coursework-count detection remains a follow-up once Classroom exposes per-course change metadata.
 - [x] Cut KB load time (still open after private/IndexedDB pivot). Measure first:
   (a) lazy-load non-critical panels (build/tutor/related preview); (b) debounce
   search; (c) code-split heavy modules; (d) `performance.now` marks around first

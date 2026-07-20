@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes } from "../api/tutor.js";
@@ -529,6 +529,16 @@ test("resetTutorConversation clears the current thread without mutating the inpu
   const messages = [{ role: "user", content: "What is photosynthesis?" }, { role: "assistant", content: "It is…" }];
   assert.deepEqual(resetTutorConversation(messages), []);
   assert.equal(messages.length, 2);
+});
+
+test("detectClassroomChanges reports courses absent from the cached bundle", () => {
+  const bundle = { notes: [{ course: "Math" }, { course: "English" }] };
+  assert.deepEqual(detectClassroomChanges(bundle, [
+    { id: "1", name: "Math" },
+    { id: "2", name: "English" },
+    { id: "3", name: "Physics" },
+  ]), { newCourses: ["Physics"], hasChanges: true });
+  assert.deepEqual(detectClassroomChanges(bundle, [{ name: "Math" }, { name: "English" }]), { newCourses: [], hasChanges: false });
 });
 
 test("copyableTutorText normalizes an answer for clipboard use", () => {

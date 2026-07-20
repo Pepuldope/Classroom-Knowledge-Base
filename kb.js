@@ -87,6 +87,16 @@ export function buildLocalSearchResponse(bundle, query, {
   };
 }
 
+export function detectClassroomChanges(bundle, courses) {
+  const cachedCourses = new Set((Array.isArray(bundle?.notes) ? bundle.notes : [])
+    .map((note) => String(note?.course || "").trim())
+    .filter(Boolean));
+  const newCourses = [...new Set((Array.isArray(courses) ? courses : [])
+    .map((course) => String(course?.name || "").trim())
+    .filter((name) => name && !cachedCourses.has(name)))];
+  return { newCourses, hasChanges: newCourses.length > 0 };
+}
+
 export function localNoteFromBundle(bundle, index) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   return Number.isInteger(index) && index >= 0 && index < notes.length ? notes[index] || null : null;
@@ -331,6 +341,7 @@ async function refreshKb() {
   if (onboarding) onboarding.hidden = hasDb;
   if (hasDb) {
     renderKbMeta(meta);
+    void checkForClassroomChanges(localKbBundle);
     // Fresh load (no active query yet) → surface the discovery panel so the
     // KB isn't blank below the search box. A real query hides it via runKbSearch.
     const search = $("kbSearchInput");
@@ -347,6 +358,36 @@ function renderKbMeta(meta) {
     `<span>🏫 ${meta.courses ?? 0} courses</span>` +
     `<span>📅 ${yrs}</span>` +
     `<span>🕑 updated ${updated}</span>`;
+}
+
+let kbChangeCheckInFlight = false;
+async function checkForClassroomChanges(bundle) {
+  const banner = $("kbChangesBanner");
+  const token = currentAccessToken();
+  if (!banner || !token || kbChangeCheckInFlight) return;
+  kbChangeCheckInFlight = true;
+  try {
+    const response = await fetch("/api/kb-scrape", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: "classroom", mode: "list", authToken: token }),
+    });
+    if (!response.ok) return;
+    const data = await response.json();
+    const changes = detectClassroomChanges(bundle, data.courses);
+    if (!changes.hasChanges) return;
+    banner.replaceChildren();
+    const label = document.createElement("span");
+    label.textContent = `${changes.newCourses.length} new course${changes.newCourses.length === 1 ? "" : "s"} found in Google Classroom.`;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "link-btn";
+    button.textContent = "Update now";
+    button.addEventListener("click", () => startScrape());
+    banner.append(label, button);
+    banner.hidden = false;
+  } catch {}
+  finally { kbChangeCheckInFlight = false; }
 }
 
 // ---------------------------------------------------------------------------
