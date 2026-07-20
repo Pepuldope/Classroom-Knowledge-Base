@@ -99,6 +99,7 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
 
 const KB_SETTINGS_KEY = "cwa_kb_settings";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
+const STUDY_LIST_KEY = "cwa_tutor_study_list";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
 
 /** Normalize the last-used local KB filter state; unknown values never persist. */
@@ -123,6 +124,41 @@ export function saveKbSearchState(value) {
   const state = kbSearchStateModel(value);
   try { localStorage.setItem(KB_SEARCH_STATE_KEY, JSON.stringify(state)); } catch {}
   return state;
+}
+
+/** Normalize locally saved tutor answers; malformed entries never reach the UI. */
+export function studyListModel(value = []) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item) => item && typeof item.id === "string" && item.id.trim() && typeof item.text === "string" && item.text.trim())
+    .map((item) => ({ id: item.id.trim(), text: item.text.trim(), savedAt: Number.isFinite(Number(item.savedAt)) ? Number(item.savedAt) : 0 }));
+}
+
+function studyAnswerId(text) {
+  return String(text || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120);
+}
+
+export function addStudyAnswer(value, text, savedAt = Date.now()) {
+  const clean = String(text || "").trim();
+  if (!clean) return studyListModel(value);
+  const id = studyAnswerId(clean);
+  const list = studyListModel(value);
+  if (!id || list.some((item) => item.id === id)) return list;
+  return [...list, { id, text: clean, savedAt: Number(savedAt) || 0 }];
+}
+
+export function removeStudyAnswer(value, id) {
+  return studyListModel(value).filter((item) => item.id !== String(id || "").trim());
+}
+
+function loadStudyList() {
+  try { return studyListModel(JSON.parse(localStorage.getItem(STUDY_LIST_KEY) || "[]")); } catch { return []; }
+}
+
+function saveStudyList(value) {
+  const list = studyListModel(value);
+  try { localStorage.setItem(STUDY_LIST_KEY, JSON.stringify(list)); } catch {}
+  return list;
 }
 
 const DEFAULT_KB_SETTINGS = Object.freeze({
@@ -1194,7 +1230,7 @@ function addTutorCopyAction(messageEl, text) {
   if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-copy-btn")) return;
   const button = document.createElement("button");
   button.type = "button";
-  button.className = "ai-copy-btn";
+  button.className = "ai-copy-btn msg-action";
   button.textContent = "Copy";
   button.title = "Copy this answer";
   button.addEventListener("click", async () => {
@@ -1205,6 +1241,22 @@ function addTutorCopyAction(messageEl, text) {
     } catch {
       button.textContent = "Copy unavailable";
     }
+  });
+  messageEl.appendChild(button);
+}
+
+function addTutorStudyAction(messageEl, text) {
+  if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-save-btn")) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ai-save-btn msg-action";
+  button.textContent = "Save to study list";
+  button.title = "Save this answer in this browser for later review";
+  button.addEventListener("click", () => {
+    const before = loadStudyList();
+    const after = saveStudyList(addStudyAnswer(before, text));
+    button.textContent = after.length > before.length ? "Saved" : "Already saved";
+    button.disabled = true;
   });
   messageEl.appendChild(button);
 }
@@ -1303,6 +1355,7 @@ async function sendTutor(text) {
     // After streaming, render the source chips (clickable -> open the note).
     renderTutorSources(sourcesEl, sources);
     addTutorCopyAction(assistantEl, acc);
+    addTutorStudyAction(assistantEl, acc);
     addTutorAttribution(assistantEl, provider, model);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {

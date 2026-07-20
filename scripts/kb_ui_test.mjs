@@ -445,6 +445,10 @@ try {
     assert.ok(firstTitle && firstTitle.includes("STAR"), `chip title wrong: ${firstTitle}`);
     await page.waitForSelector("#kbTutorMessages .ai-copy-btn", { timeout: 8000 });
     assert.equal(await page.locator("#kbTutorMessages .ai-copy-btn").count(), 1, "each answer should expose one copy action");
+    await page.waitForSelector("#kbTutorMessages .ai-save-btn", { timeout: 8000 });
+    assert.equal(await page.locator("#kbTutorMessages .ai-save-btn").count(), 1, "each answer should expose one study-list action");
+    await page.locator("#kbTutorMessages .ai-save-btn").click();
+    assert.equal(await page.locator("#kbTutorMessages .ai-save-btn").textContent(), "Saved", "answer should be saved locally");
     // Clicking a chip must open the note detail modal.
     await page.locator("#kbTutorSources .kb-source-chip").first().click();
     await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
