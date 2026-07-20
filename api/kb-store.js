@@ -125,6 +125,10 @@ async function writeSharded(notes, source) {
   await kvSetJSON(SHARDS_KEY, { count: shardCount });
 }
 
+export async function readShardedSlices(count, readSlice) {
+  return Promise.all(Array.from({ length: count }, (_, index) => readSlice(index)));
+}
+
 async function readShardedNotes() {
   if (!kvAvailable()) {
     const all = [];
@@ -133,12 +137,8 @@ async function readShardedNotes() {
     return all;
   }
   const shards = (await kvGetJSON(SHARDS_KEY))?.count || 0;
-  const out = [];
-  for (let i = 0; i < shards; i++) {
-    const slice = await kvGetJSON(shardKey(i));
-    if (Array.isArray(slice)) out.push(...slice);
-  }
-  return out;
+  const slices = await readShardedSlices(shards, async (i) => kvGetJSON(shardKey(i)));
+  return slices.flatMap((slice) => Array.isArray(slice) ? slice : []);
 }
 
 function bundleFromNotes(notes, extra = {}) {

@@ -25,7 +25,7 @@ import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
-import { saveBundle, getBundle } from "../api/kb-store.js";
+import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
@@ -36,6 +36,20 @@ import { normalizeTutorNotes } from "../api/tutor.js";
 function makeReq(url, method = "GET") {
   return new Request("http://localhost" + url, { method });
 }
+
+test("readShardedSlices starts all shard reads concurrently and preserves order", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const slices = await readShardedSlices(3, async (index) => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    active -= 1;
+    return [`shard-${index}`];
+  });
+  assert.equal(maxActive, 3);
+  assert.deepEqual(slices, [["shard-0"], ["shard-1"], ["shard-2"]]);
+});
 
 test("private KB UI copy does not promise a shared database", async () => {
   const source = await readFile(new URL("../kb.js", import.meta.url), "utf8");
