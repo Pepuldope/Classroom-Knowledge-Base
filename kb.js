@@ -1174,6 +1174,22 @@ export function copyableTutorText(text) {
   return typeof text === "string" ? text.trim() : "";
 }
 
+export function formatTutorAttribution(provider, model) {
+  const p = typeof provider === "string" ? provider.trim() : "";
+  const m = typeof model === "string" ? model.trim() : "";
+  return p && m ? `Answered by ${p} · ${m}` : "";
+}
+
+function addTutorAttribution(messageEl, provider, model) {
+  const text = formatTutorAttribution(provider, model);
+  if (!messageEl || !text || messageEl.querySelector(".ai-attribution")) return;
+  const attribution = document.createElement("span");
+  attribution.className = "ai-attribution";
+  attribution.textContent = text;
+  attribution.title = "The provider and model selected by the tutor router for this answer";
+  messageEl.appendChild(attribution);
+}
+
 function addTutorCopyAction(messageEl, text) {
   if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-copy-btn")) return;
   const button = document.createElement("button");
@@ -1252,6 +1268,8 @@ async function sendTutor(text) {
       return;
     }
     const notesUsed = Number(r.headers.get("X-KB-Notes") || "0");
+    const provider = r.headers.get("X-AI-Provider") || "";
+    const model = r.headers.get("X-AI-Model") || "";
     // Feature: expose WHICH notes the tutor grounded on, as clickable chips
     // that jump to the full note (openKbNote). The server returns them as a
     // JSON line on a dedicated stream event so the UI can render them once.
@@ -1285,6 +1303,7 @@ async function sendTutor(text) {
     // After streaming, render the source chips (clickable -> open the note).
     renderTutorSources(sourcesEl, sources);
     addTutorCopyAction(assistantEl, acc);
+    addTutorAttribution(assistantEl, provider, model);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {
     if (assistantEl) assistantEl.textContent = `❌ ${e.message}`;

@@ -1612,6 +1612,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-export-status.error { color: var(--danger); }
 .kb-tutor-wrap { margin-top: 1.5rem; text-align: center; }
 .ai-context-note { display: block; font-size: 0.8rem; color: var(--muted); padding: 0.4rem 0.6rem; background: var(--accent-bg); border-radius: 8px; margin-bottom: 0.5rem; }
+.ai-attribution { display: block; margin-top: 0.55rem; color: var(--muted); font-size: 0.72rem; }
 #kbTutorSources { margin-bottom: 0.5rem; }
 .ai-msg { padding: 0.6rem 0.8rem; border-radius: 12px; margin-bottom: 0.6rem; max-width: 92%; white-space: pre-wrap; }
 .ai-msg-user { background: var(--accent); color: #fff; margin-left: auto; }
