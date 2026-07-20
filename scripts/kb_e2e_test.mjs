@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes } from "../api/tutor.js";
@@ -528,6 +528,14 @@ test("resetTutorConversation clears the current thread without mutating the inpu
 test("copyableTutorText normalizes an answer for clipboard use", () => {
   assert.equal(copyableTutorText("  Answer with notes.  "), "Answer with notes.");
   assert.equal(copyableTutorText(null), "");
+});
+
+test("tutorFeedbackModel keeps only local thumbs ratings and toggles the same rating off", () => {
+  assert.deepEqual(tutorFeedbackModel(), {});
+  assert.deepEqual(tutorFeedbackModel({ answerId: "a1", rating: "up" }), { a1: "up" });
+  assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "a1", rating: "up" }), {});
+  assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "a1", rating: "down" }), { a1: "down" });
+  assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "", rating: "down" }), { a1: "up" });
 });
 
 // Tutor source attribution: the tutor must SHOW WHICH NOTES it used, as

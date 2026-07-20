@@ -1216,6 +1216,61 @@ export function formatTutorAttribution(provider, model) {
   return p && m ? `Answered by ${p} · ${m}` : "";
 }
 
+export function tutorFeedbackModel(current = {}, change) {
+  if (change === undefined && current && typeof current === "object" && !Array.isArray(current) && "answerId" in current) {
+    change = current;
+    current = {};
+  }
+  const next = current && typeof current === "object" && !Array.isArray(current) ? { ...current } : {};
+  const answerId = typeof change?.answerId === "string" ? change.answerId.trim() : "";
+  const rating = change?.rating;
+  if (!answerId || !["up", "down"].includes(rating)) return next;
+  if (next[answerId] === rating) delete next[answerId];
+  else next[answerId] = rating;
+  return next;
+}
+
+function tutorAnswerId(text) {
+  let hash = 2166136261;
+  for (const char of copyableTutorText(text)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
+  return `answer-${(hash >>> 0).toString(16)}`;
+}
+
+function loadTutorFeedback() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem("cwa_tutor_feedback") || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch { return {}; }
+}
+
+function saveTutorFeedback(feedback) {
+  try { localStorage.setItem("cwa_tutor_feedback", JSON.stringify(feedback)); } catch {}
+}
+
+function addTutorFeedbackActions(messageEl, text) {
+  if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-feedback")) return;
+  const answerId = tutorAnswerId(text);
+  const wrap = document.createElement("span");
+  wrap.className = "ai-feedback";
+  wrap.title = "Rate this answer locally in this browser";
+  const current = loadTutorFeedback();
+  for (const [rating, label] of [["up", "Helpful"], ["down", "Not helpful"]]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `ai-feedback-btn ai-feedback-${rating} msg-action`;
+    button.textContent = rating === "up" ? "👍" : "👎";
+    button.setAttribute("aria-label", label);
+    button.setAttribute("aria-pressed", current[answerId] === rating ? "true" : "false");
+    button.addEventListener("click", () => {
+      const next = tutorFeedbackModel(loadTutorFeedback(), { answerId, rating });
+      saveTutorFeedback(next);
+      for (const sibling of wrap.querySelectorAll("button")) sibling.setAttribute("aria-pressed", next[answerId] === (sibling === button ? rating : sibling.classList.contains("ai-feedback-up") ? "up" : "down") ? "true" : "false");
+    });
+    wrap.appendChild(button);
+  }
+  messageEl.appendChild(wrap);
+}
+
 function addTutorAttribution(messageEl, provider, model) {
   const text = formatTutorAttribution(provider, model);
   if (!messageEl || !text || messageEl.querySelector(".ai-attribution")) return;
@@ -1356,6 +1411,7 @@ async function sendTutor(text) {
     renderTutorSources(sourcesEl, sources);
     addTutorCopyAction(assistantEl, acc);
     addTutorStudyAction(assistantEl, acc);
+    addTutorFeedbackActions(assistantEl, acc);
     addTutorAttribution(assistantEl, provider, model);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {

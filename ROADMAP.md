@@ -48,7 +48,7 @@ These came straight from user feedback. Prefer these over speculative polish.
 - [ ] Tutor: conversation memory across messages within a session (already in place) + a "new topic" reset.
 - [ ] KB: export the whole knowledge base as a printable PDF / markdown book (JSON/MD/CSV export already exists — extend to a readable multi-note "book" + optional print stylesheet; PDF optional).
 - [x] Search: typo-tolerance using the existing fuzzy stem matching (extend to query side) — covered by didYouMean path (`544456d`, `b06c0a3`).
-- [ ] Tutor: let students rate answers (👍/👎) and store feedback for tuning.
+- [x] Tutor: let students rate answers (👍/👎) and store feedback for tuning. Local-only ratings shipped 2026-07-20.
 
 ## 💡 Ideas / experiments
 - [ ] Multi-language tutor (Slovak) using the existing prefLanguage plumbing.
