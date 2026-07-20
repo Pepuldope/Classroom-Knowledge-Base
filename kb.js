@@ -260,6 +260,10 @@ export function groupCourseNotesBySprint(notes) {
 // ---------------------------------------------------------------------------
 // View switching
 // ---------------------------------------------------------------------------
+export function shouldProbeLegacyKb(bundle) {
+  return !Array.isArray(bundle?.notes) || bundle.notes.length === 0;
+}
+
 export function showKbView() {
   wireKbEvents(); // ensure search/tutor listeners are attached (idempotent)
   const v = $("kbView");
@@ -311,13 +315,15 @@ async function refreshKb() {
       if (onboarding) onboarding.hidden = true;
     }
   } catch {}
-  try {
-    const r = await fetch("/api/kb-search?q=" + encodeURIComponent("__ping__"));
-    if (r.ok) {
-      const d = await r.json();
-      if (d.meta?.noteCount > 0 || !meta) meta = d.meta;
-    }
-  } catch {}
+  if (shouldProbeLegacyKb(localKbBundle)) {
+    try {
+      const r = await fetch("/api/kb-search?q=" + encodeURIComponent("__ping__"));
+      if (r.ok) {
+        const d = await r.json();
+        if (d.meta?.noteCount > 0 || !meta) meta = d.meta;
+      }
+    } catch {}
+  }
   const hasDb = !!(meta && meta.noteCount > 0);
   if (onboarding) onboarding.hidden = hasDb && !buildPanel.hidden ? false : hasDb;
   // If a DB exists, show the main search/tutor surface; else show onboarding.

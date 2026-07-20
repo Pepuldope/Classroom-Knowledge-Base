@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes } from "../api/tutor.js";
@@ -84,6 +84,12 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     density: "compact",
     autoBuild: true,
   });
+});
+
+test("local KB bundles skip the legacy server probe while empty state keeps the fallback", () => {
+  assert.equal(shouldProbeLegacyKb({ version: 1, notes: [{ t: "Algebra" }] }), false);
+  assert.equal(shouldProbeLegacyKb(null), true);
+  assert.equal(shouldProbeLegacyKb({ version: 1, notes: [] }), true);
 });
 
 test("kbSearchStateModel keeps only valid local filter and sort choices", () => {
