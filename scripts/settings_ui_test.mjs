@@ -29,6 +29,10 @@ try {
     };
   });
 
+  const bookButton = await page.locator("#kbPrefExportBook");
+  assert.equal(await bookButton.count(), 1, "Settings should offer a readable study-book export");
+  assert.match(await bookButton.textContent(), /study book/i);
+
   assert.match(result.className, /settings-select/);
   assert.equal(result.borderRadius, "6px");
   assert.equal(result.padding, "7.2px 12px");

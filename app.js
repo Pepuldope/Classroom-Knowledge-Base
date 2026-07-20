@@ -1102,6 +1102,16 @@ async function configureKbSettingsUi() {
     const a = document.createElement("a"); a.href = url; a.download = "classroom-knowledge-base.json"; a.click(); URL.revokeObjectURL(url);
     if (status) status.textContent = `Downloaded ${bundle.notes.length.toLocaleString()} notes.`;
   }, { once: true });
+  $("kbPrefExportBook")?.addEventListener("click", async () => {
+    const bundle = await loadKbBundle();
+    const status = $("kbPrefStatus");
+    if (!bundle) { if (status) status.textContent = "No local knowledge base to download."; return; }
+    const book = kb.bundleToMarkdown(bundle);
+    const url = URL.createObjectURL(new Blob([book], { type: "text/markdown;charset=utf-8" }));
+    const a = document.createElement("a"); a.href = url; a.download = "classroom-knowledge-book.md"; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    if (status) status.textContent = `Downloaded a study book with ${bundle.notes.length.toLocaleString()} notes.`;
+  }, { once: true });
   $("kbPrefClear")?.addEventListener("click", async () => {
     await removeKbBundle();
     const status = $("kbPrefStatus");
