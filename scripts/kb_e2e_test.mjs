@@ -30,7 +30,7 @@ import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
-import { normalizeTutorNotes } from "../api/tutor.js";
+import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -63,6 +63,12 @@ test("tutor context accepts only a bounded client-retrieved note shape", () => {
     { t: "Second", x: "Other" },
   ], 1);
   assert.deepEqual(notes, [{ t: "Algebra", course: "Math", y: "2024-25", topic: "Quadratics", s: "Summary", x: "Body", noteIndex: 7 }]);
+});
+
+test("tutor language preference adds a bounded Slovak instruction and defaults to English", () => {
+  assert.equal(tutorLanguageInstruction(), "");
+  assert.equal(tutorLanguageInstruction("sk"), "Reply in Slovak (slovenčina), while keeping note titles and quoted source text unchanged.");
+  assert.equal(tutorLanguageInstruction("de"), "");
 });
 
 test("kbSettingsModel normalizes KB controls and preserves local-only defaults", () => {

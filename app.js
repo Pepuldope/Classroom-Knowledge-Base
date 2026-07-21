@@ -41,7 +41,7 @@ let hiddenCourseIds = loadHiddenCourses();
 let allCourses = [];
 
 const DISPLAY_PREFS_KEY = "cwa_display_prefs";
-const defaultDisplayPrefs = { showSubmitted: false, showOverdueInDoNow: true };
+const defaultDisplayPrefs = { showSubmitted: false, showOverdueInDoNow: true, language: "en" };
 function loadDisplayPrefs() {
   try { return { ...defaultDisplayPrefs, ...JSON.parse(localStorage.getItem(DISPLAY_PREFS_KEY) || "{}") }; }
   catch { return { ...defaultDisplayPrefs }; }
@@ -1141,6 +1141,7 @@ function openSettingsModal() {
   }
   const showSub = $("prefShowSubmitted"); if (showSub) showSub.checked = !!displayPrefs.showSubmitted;
   const showOver = $("prefShowOverdue"); if (showOver) showOver.checked = !!displayPrefs.showOverdueInDoNow;
+  const language = $("prefLanguage"); if (language) language.value = displayPrefs.language === "sk" ? "sk" : "en";
   updateArchiveSettingsUi();
   switchSettingsTab("classes");
   $("settingsModal").hidden = false;
@@ -1170,6 +1171,7 @@ async function saveSettingsAndReload() {
     ...displayPrefs,
     showSubmitted: showSub ? showSub.checked : displayPrefs.showSubmitted,
     showOverdueInDoNow: showOver ? showOver.checked : displayPrefs.showOverdueInDoNow,
+    language: $("prefLanguage")?.value === "sk" ? "sk" : "en",
   };
   saveDisplayPrefsLocal(displayPrefs);
   applyTheme($("prefTheme")?.value);

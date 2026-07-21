@@ -24,7 +24,13 @@ export function normalizeTutorNotes(notes, limit = CONTEXT_NOTES) {
   }));
 }
 
-function buildSystemPrompt(notes) {
+export function tutorLanguageInstruction(language = "en") {
+  return language === "sk"
+    ? "Reply in Slovak (slovenčina), while keeping note titles and quoted source text unchanged."
+    : "";
+}
+
+function buildSystemPrompt(notes, language = "en") {
   const ctx = notes
     .map((n, i) => {
       const head = `NOTE ${i + 1} — "${n.t}"${n.course ? ` (${n.course}${n.y ? `, ${n.y}` : ""})` : ""}${n.topic ? ` · topic: ${n.topic}` : ""}`;
@@ -36,6 +42,7 @@ function buildSystemPrompt(notes) {
     "You are a friendly study tutor for a student using their private Classroom knowledge base.",
     "Answer using ONLY the notes provided below. If the notes do not cover the question, say so plainly and suggest what topic to look up — do NOT invent facts or pull from outside knowledge.",
     "Be encouraging and clear. Use short paragraphs, bullet points where helpful, and concrete examples drawn from the notes.",
+    tutorLanguageInstruction(language),
     "When you use a fact, you may mention which note it came from (e.g. 'the STAR Method note says…').",
     "",
     "=== PRIVATE KNOWLEDGE BASE (retrieved notes) ===",
@@ -60,8 +67,9 @@ export default async function handler(req) {
   // The browser performs retrieval over its private IndexedDB bundle. The
   // server never reads a shared bundle and receives only this bounded context.
   const notes = normalizeTutorNotes(body.notes);
+  const language = body.language === "sk" ? "sk" : "en";
 
-  const systemPrompt = buildSystemPrompt(notes);
+  const systemPrompt = buildSystemPrompt(notes, language);
   const messages = [{ role: "system", content: systemPrompt }, ...body.messages];
 
   // Build the source descriptors we'll surface as clickable chips (noteIndex

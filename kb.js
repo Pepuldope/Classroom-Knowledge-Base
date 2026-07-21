@@ -1477,6 +1477,13 @@ function addTutorMessage(role, text, isStreaming) {
   return el;
 }
 
+function preferredTutorLanguage() {
+  try {
+    const prefs = JSON.parse(localStorage.getItem("cwa_display_prefs") || "{}");
+    return prefs?.language === "sk" ? "sk" : "en";
+  } catch { return "en"; }
+}
+
 async function sendTutor(text, { retry = false } = {}) {
   const input = $("kbTutorInput");
   if (input) input.value = "";
@@ -1499,7 +1506,7 @@ async function sendTutor(text, { retry = false } = {}) {
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
-      body: JSON.stringify({ messages: tutorMessages, notes: retrieved }),
+      body: JSON.stringify({ messages: tutorMessages, notes: retrieved, language: preferredTutorLanguage() }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));

@@ -44,7 +44,7 @@ These came straight from user feedback. Prefer these over speculative polish.
 - [x] Tutor: let students rate answers (👍/👎) and store feedback for tuning. Local-only ratings shipped 2026-07-20.
 
 ## 💡 Ideas / experiments
-- [ ] Multi-language tutor (Slovak) using the existing prefLanguage plumbing.
+- [x] Multi-language tutor (Slovak) using the existing prefLanguage plumbing. Shipped 2026-07-21: Display → Language now persists locally and sends a bounded Slovak instruction with grounded tutor requests.
 - [ ] "Study streak" gamification on the KB home.
 - [ ] Auto-generate a weekly "what to review" digest from the KB + planner.
 - [ ] Voice tutor: pipe tutor answers through TTS (Edge/OpenAI) for hands-free study.
