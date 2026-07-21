@@ -348,6 +348,14 @@
       </section>
       <section class="settings-pane" data-pane="knowledge-base" hidden>
         <p class="modal-sub">Your knowledge base is stored only in this browser. Tutor requests send only the notes needed for the current question.</p>
+        <div id="kbPrivacySummary" class="settings-privacy" role="note">
+          <strong>Privacy at a glance</strong>
+          <ul>
+            <li>Your notes and settings stay in this browser by default.</li>
+            <li>The tutor receives only the notes needed to answer your question.</li>
+            <li>Your read-only Google Classroom connection is used only to build your local notes; your token is not stored on this site.</li>
+          </ul>
+        </div>
         <label class="settings-row settings-row-toggle"><span>Enable AI tutor</span><input type="checkbox" id="kbPrefTutorEnabled" checked /></label>
         <label class="settings-row"><span>Tutor effort</span><select class="settings-select" id="kbPrefTutorEffort"><option value="quick">Quick</option><option value="tutor">Tutor</option><option value="hard">Deep</option></select></label>
         <label class="settings-row"><span>Default search scope</span><select class="settings-select" id="kbPrefScope"><option value="all">All courses</option><option value="current">Current course</option><option value="pinned">Pinned courses</option></select></label>

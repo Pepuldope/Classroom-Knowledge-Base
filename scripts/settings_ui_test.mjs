@@ -33,6 +33,12 @@ try {
   assert.equal(await bookButton.count(), 1, "Settings should offer a readable study-book export");
   assert.match(await bookButton.textContent(), /study book/i);
 
+  const privacy = page.locator("#kbPrivacySummary");
+  assert.equal(await privacy.count(), 1, "Knowledge Base settings should explain local storage and tutor sharing");
+  assert.match(await privacy.textContent(), /stay in this browser/i);
+  assert.match(await privacy.textContent(), /only the notes needed/i);
+  assert.match(await privacy.textContent(), /read-only Google Classroom/i);
+
   assert.match(result.className, /settings-select/);
   assert.equal(result.borderRadius, "6px");
   assert.equal(result.padding, "7.2px 12px");
