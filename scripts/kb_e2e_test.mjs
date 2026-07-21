@@ -531,6 +531,17 @@ test("resetTutorConversation clears the current thread without mutating the inpu
   assert.equal(messages.length, 2);
 });
 
+test("tutor modal exposes a clear-chat action in the integrated and harness UIs", async () => {
+  const [indexSource, harnessSource] = await Promise.all([
+    readFile(new URL("../index.html", import.meta.url), "utf8"),
+    readFile(new URL("../kb-test-harness.html", import.meta.url), "utf8"),
+  ]);
+  for (const source of [indexSource, harnessSource]) {
+    assert.match(source, /id="kbTutorClearChat"/);
+    assert.match(source, /Clear chat/);
+  }
+});
+
 test("detectClassroomChanges reports courses absent from the cached bundle", () => {
   const bundle = { notes: [{ course: "Math" }, { course: "English" }] };
   assert.deepEqual(detectClassroomChanges(bundle, [

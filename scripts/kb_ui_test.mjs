@@ -186,6 +186,21 @@ try {
     assert.ok(cards > 0 || empty > 0, "sort change produces results or an empty state");
   });
 
+  await check("clear chat removes visible tutor messages and keeps grounding", async () => {
+    await page.click("#kbTutorOpen");
+    await page.evaluate(() => {
+      const messages = document.getElementById("kbTutorMessages");
+      const message = document.createElement("div");
+      message.className = "ai-msg ai-msg-user";
+      message.textContent = "temporary question";
+      messages.appendChild(message);
+    });
+    await page.click("#kbTutorClearChat");
+    assert.equal(await page.locator("#kbTutorMessages .ai-msg").count(), 0);
+    assert.match(await page.locator("#kbTutorSources").textContent(), /still use your knowledge base/i);
+    await page.click("#kbTutorClose");
+  });
+
   await check("matched terms are highlighted in results", async () => {
     const marks = await page.locator("#kbResults mark").count();
     assert.ok(marks > 0, "expected <mark> highlights in snippets");
@@ -214,17 +229,9 @@ try {
   });
 
   await check("a misspelled query shows a 'Did you mean' hint that retries", async () => {
-    // Pick a term that exists, misspell it, and confirm the hint appears.
-    const r = await page.request.fetch(BASE + "/api/kb-search?q=__ping__");
-    const meta = await r.json().catch(() => null);
-    const courses = meta?.meta?.courseList || meta?.filters?.courses || [];
-    // Fall back to a word we know is in the seeded vault via a known term.
-    let typo = "mitochndria"; // typo of "mitochondria" present in seeded vault
-    if (Array.isArray(courses) && courses.length) {
-      // courseList items are objects {name,...}; derive a base word safely.
-      const firstName = (courses[0]?.name || courses[0] || "").toString().split(/\s+/)[0].toLowerCase();
-      if (firstName.length > 4) typo = firstName.slice(0, -1) + "z"; // plausible typo of a course word
-    }
+    // Use a deterministic seeded-corpus typo; avoid a separate health probe here
+    // because page.request can race the dev server's keep-alive socket.
+    const typo = "matematikz"; // typo of the seeded "Matematika 1" course
     await page.fill("#kbSearchInput", typo);
     await page.keyboard.press("Enter");
     try {
@@ -245,6 +252,9 @@ try {
 
   // --- Related-notes preview chips under each result card ---
   await check("each result card shows related-notes preview chips", async () => {
+    // Reset any in-flight did-you-mean search before starting the preview check.
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForSelector("#kbSearchInput", { timeout: 8000 });
     await page.fill("#kbSearchInput", "cover letter");
     await page.click("#kbSearchInput");
     await page.keyboard.press("Enter");

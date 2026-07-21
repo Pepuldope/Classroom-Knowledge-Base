@@ -38,7 +38,7 @@ These came straight from user feedback. Prefer these over speculative polish.
 
 ## 🧠 Soon
 - [x] KB: "Did you mean" typo-tolerance — suggest a corrected spelling when a search returns nothing (query-side fuzzy spelling).
-- [ ] Tutor: conversation memory across messages within a session (already in place) + a "new topic" reset.
+- [x] Tutor: conversation memory across messages, a "new topic" reset, and a "clear chat" action (clear-chat shipped 2026-07-20).
 - [x] KB: export the whole knowledge base as a printable PDF / markdown book (JSON/MD/CSV export already exists — extend to a readable multi-note "book" + optional print stylesheet; PDF optional). Shipped 2026-07-20: Settings now downloads a local grouped Markdown study book.
 - [x] Search: typo-tolerance using the existing fuzzy stem matching (extend to query side) — covered by didYouMean path (`544456d`, `b06c0a3`).
 - [x] Tutor: let students rate answers (👍/👎) and store feedback for tuning. Local-only ratings shipped 2026-07-20.

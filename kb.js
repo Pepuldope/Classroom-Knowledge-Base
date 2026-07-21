@@ -572,6 +572,7 @@ export function wireKbEvents() {
   const tutorClose = $("kbTutorClose");
   const tutorForm = $("kbTutorForm");
   const tutorInput = $("kbTutorInput");
+  const tutorClearChat = $("kbTutorClearChat");
   const tutorNewTopic = $("kbTutorNewTopic");
 
   buildBtn?.addEventListener("click", () => startScrape());
@@ -580,6 +581,7 @@ export function wireKbEvents() {
 
   tutorOpen?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = false; });
   tutorClose?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = true; });
+  tutorClearChat?.addEventListener("click", clearTutorUi);
   tutorNewTopic?.addEventListener("click", resetTutorUi);
   tutorForm?.addEventListener("submit", (e) => { e.preventDefault(); const v = tutorInput?.value.trim(); if (v) sendTutor(v); });
   document.querySelectorAll("#kbTutorModal .ai-quick button").forEach((b) =>
@@ -1369,6 +1371,15 @@ function resetTutorUi() {
   if (messages) messages.replaceChildren();
   const sources = $("kbTutorSources");
   if (sources) sources.innerHTML = '<span class="ai-context-note">New topic — answers will still use your knowledge base.</span>';
+  $("kbTutorInput")?.focus();
+}
+
+function clearTutorUi() {
+  tutorMessages = resetTutorConversation();
+  const messages = $("kbTutorMessages");
+  if (messages) messages.replaceChildren();
+  const sources = $("kbTutorSources");
+  if (sources) sources.innerHTML = '<span class="ai-context-note">Chat cleared — answers will still use your knowledge base.</span>';
   $("kbTutorInput")?.focus();
 }
 
