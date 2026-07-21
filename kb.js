@@ -20,6 +20,7 @@ import { renderLightMarkdown } from "./archive.js";
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
+import { recordNoteProgress, studyProgressModel } from "./study-progress.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -112,6 +113,7 @@ const KB_SETTINGS_KEY = "cwa_kb_settings";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const STUDY_LIST_KEY = "cwa_tutor_study_list";
 const STUDY_ACTIVITY_KEY = "cwa_kb_study_activity";
+const STUDY_PROGRESS_KEY = "cwa_kb_note_progress";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
 
 /** Normalize the last-used local KB filter state; unknown values never persist. */
@@ -233,6 +235,22 @@ function markStudyActivity() {
   try { localStorage.setItem(STUDY_ACTIVITY_KEY, JSON.stringify(updated)); } catch {}
   renderStudyStreak(updated);
 }
+function loadStudyProgress() {
+  try { return JSON.parse(localStorage.getItem(STUDY_PROGRESS_KEY) || "{}"); } catch { return {}; }
+}
+function renderStudyProgress(progress = loadStudyProgress()) {
+  const card = $("kbStudyProgress");
+  if (!card) return;
+  const summary = studyProgressModel(progress, localKbBundle?.notes?.length || 0);
+  card.innerHTML = `<strong>📖 ${summary.percent}% explored</strong>` +
+    `<span>${summary.openedNotes} of ${summary.totalNotes.toLocaleString()} notes opened${summary.lastOpened ? ` · last opened ${summary.lastOpened}` : ""}</span>`;
+  card.setAttribute("aria-label", `${summary.openedNotes} of ${summary.totalNotes} notes opened`);
+}
+function markNoteProgress(index) {
+  const next = recordNoteProgress(loadStudyProgress(), index, todayIso());
+  try { localStorage.setItem(STUDY_PROGRESS_KEY, JSON.stringify(next)); } catch {}
+  renderStudyProgress(next);
+}
 // groups (owner request #11). Opening a course used to spill ALL notes (e.g.
 // 343 for "Matematika 1") in one flat list — overwhelming. This groups by the
 // note `topic`, detects "Šprint N …" sprint topics, and orders them:
@@ -338,6 +356,7 @@ async function refreshKb() {
   let meta = null;
   try {
     localKbBundle = await loadKbBundle();
+    renderStudyProgress();
     if (localKbBundle?.notes?.length) {
       meta = {
         noteCount: localKbBundle.notes.length,
@@ -1598,6 +1617,7 @@ async function openKbNote(index) {
     }
     if (titleEl) titleEl.textContent = note.t || "(untitled)";
     if (metaEl) metaEl.textContent = [note.course, note.y, note.topic].filter(Boolean).join("  ·  ");
+    markNoteProgress(index);
     // Prefer the full body, fall back to summary. renderLightMarkdown escapes
     // HTML and turns markdown links ([text](url)) into clickable <a> tags, so
     // teacher materials + student submission links are actually clickable.

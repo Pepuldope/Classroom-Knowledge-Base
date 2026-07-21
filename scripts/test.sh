@@ -25,6 +25,11 @@ node scripts/study_streak_test.mjs
 STREAK_OK=$?
 if [ "$STREAK_OK" -ne 0 ]; then echo "study streak tests FAILED"; exit 1; fi
 
+echo "==> Study progress model tests"
+node scripts/study_progress_test.mjs
+PROGRESS_OK=$?
+if [ "$PROGRESS_OK" -ne 0 ]; then echo "study progress tests FAILED"; exit 1; fi
+
 echo "==> Tutor attribution model tests"
 node scripts/tutor_provider_test.mjs
 TUTOR_ATTRIBUTION_OK=$?

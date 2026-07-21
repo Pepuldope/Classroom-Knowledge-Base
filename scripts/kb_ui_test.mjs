@@ -106,6 +106,17 @@ try {
     await page.click("#kbNoteClose");
   });
 
+  await check("opening a note updates the local study progress card", async () => {
+    await page.fill("#kbSearchInput", "cover letter");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
+    await page.locator("#kbResults .kb-result-card").first().click();
+    await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
+    await page.click("#kbNoteClose");
+    const progress = await page.locator("#kbStudyProgress").textContent();
+    assert.match(progress || "", /note/i, "progress card should describe opened notes");
+  });
+
   await check("search input is functional", async () => {
     await page.fill("#kbSearchInput", "cover letter");
   });

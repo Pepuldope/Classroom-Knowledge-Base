@@ -79,6 +79,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Tutor: retry a failed answer without duplicating the user's last prompt; keep grounding and conversation state intact.
 - [x] KB: make the Settings "Related notes" control live in search previews and note detail panels (2026-07-21).
 - [x] KB: show a local-only study streak on the home surface, updated when a student searches or opens the KB (2026-07-21).
+- [x] KB: track locally which notes a student has opened and show an explored-note progress summary (2026-07-21).
 - [ ] (loop: invent more here every run when higher lists are blocked or thin)
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
