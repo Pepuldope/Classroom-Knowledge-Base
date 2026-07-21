@@ -123,7 +123,7 @@ try {
 
   // --- Run a search ---
   await check("search returns result cards", async () => {
-    await page.click("#kbSearchInput");
+    await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
     const n = await page.locator("#kbResults .kb-result-card").count();
