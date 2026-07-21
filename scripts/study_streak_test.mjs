@@ -21,3 +21,8 @@ test("records one local activity date without duplicates", () => {
   assert.deepEqual(recordStudyActivity(["2026-07-20"], "2026-07-21"), ["2026-07-20", "2026-07-21"]);
   assert.deepEqual(recordStudyActivity(["2026-07-21"], "2026-07-21"), ["2026-07-21"]);
 });
+
+test("ignores calendar-impossible activity dates", () => {
+  assert.deepEqual(recordStudyActivity(["2026-02-28"], "2026-02-30"), ["2026-02-28"]);
+  assert.deepEqual(studyStreakModel(["2026-02-30"], "2026-03-01"), { current: 0, activeToday: false, lastDate: null });
+});

@@ -45,7 +45,7 @@ These came straight from user feedback. Prefer these over speculative polish.
 
 ## 💡 Ideas / experiments
 - [x] Multi-language tutor (Slovak) using the existing prefLanguage plumbing. Shipped 2026-07-21: Display → Language now persists locally and sends a bounded Slovak instruction with grounded tutor requests.
-- [ ] "Study streak" gamification on the KB home.
+- [x] "Study streak" gamification on the KB home. Shipped 2026-07-21; local calendar-date validation hardened 2026-07-21.
 - [ ] Auto-generate a weekly "what to review" digest from the KB + planner.
 - [ ] Voice tutor: pipe tutor answers through TTS (Edge/OpenAI) for hands-free study.
 - [ ] Per-student progress tracking (which notes they've opened / quizzed on).
