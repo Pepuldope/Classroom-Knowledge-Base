@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes } from "../api/tutor.js";
@@ -84,6 +84,13 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     density: "compact",
     autoBuild: true,
   });
+});
+
+test("related notes use the configured local limit and clamp invalid values", () => {
+  assert.equal(relatedNotesLimit({ relatedCount: 6 }), 6);
+  assert.equal(relatedNotesLimit({ relatedCount: 99 }), 8);
+  assert.equal(relatedNotesLimit({ relatedCount: 0 }), 1);
+  assert.equal(relatedNotesLimit(), 3);
 });
 
 test("local KB bundles skip the legacy server probe while empty state keeps the fallback", () => {

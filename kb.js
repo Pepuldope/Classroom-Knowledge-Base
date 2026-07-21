@@ -199,6 +199,10 @@ export function kbSettingsModel(value = {}) {
   };
 }
 
+export function relatedNotesLimit(value = {}) {
+  return kbSettingsModel(value).relatedCount;
+}
+
 export function loadKbSettings() {
   try { return kbSettingsModel(JSON.parse(localStorage.getItem(KB_SETTINGS_KEY) || "{}")); }
   catch { return kbSettingsModel(); }
@@ -771,7 +775,7 @@ async function handleKbFile(e) {
     if (!r.ok) { const err = await r.json().catch(() => ({})); setKbBuildError(err.error || r.status); return; }
     const data = await r.json();
     try { localKbBundle = await saveKbBundle(parsed); } catch { /* cache is best-effort */ }
-    if (statusEl) statusEl.textContent = `✅ Saved ${data.meta?.noteCount?.toLocaleString()} notes to the shared knowledge base.`;
+    if (statusEl) statusEl.textContent = `✅ Saved ${data.meta?.noteCount?.toLocaleString()} notes to your knowledge base.`;
     setTimeout(() => refreshKb(), 600);
   } catch (err) { setKbBuildError(err.message); }
   finally { e.target.value = ""; }
@@ -1100,10 +1104,11 @@ async function renderRelatedPreview(container, noteIndex) {
   if (!container) return;
   try {
     let related;
+    const limit = relatedNotesLimit(loadKbSettings());
     if (localKbBundle?.notes?.length) {
-      related = localRelatedFromBundle(localKbBundle, noteIndex, { limit: 3 });
+      related = localRelatedFromBundle(localKbBundle, noteIndex, { limit });
     } else {
-      const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=3`);
+      const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=${limit}`);
       if (!r.ok) return;
       related = (await r.json()).related || [];
     }
@@ -1626,10 +1631,11 @@ async function renderRelatedNotes(index) {
   list.innerHTML = "";
   try {
     let related;
+    const limit = relatedNotesLimit(loadKbSettings());
     if (localKbBundle?.notes?.length) {
-      related = localRelatedFromBundle(localKbBundle, index, { limit: 3 });
+      related = localRelatedFromBundle(localKbBundle, index, { limit });
     } else {
-      const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=3");
+      const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=" + limit);
       if (!r.ok) return;
       related = (await r.json()).related || [];
     }
