@@ -19,6 +19,7 @@ import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview } from "./kb-client-search.js";
+import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -110,6 +111,7 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
 const KB_SETTINGS_KEY = "cwa_kb_settings";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const STUDY_LIST_KEY = "cwa_tutor_study_list";
+const STUDY_ACTIVITY_KEY = "cwa_kb_study_activity";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
 
 /** Normalize the last-used local KB filter state; unknown values never persist. */
@@ -213,6 +215,24 @@ export function saveKbSettings(value) {
   try { localStorage.setItem(KB_SETTINGS_KEY, JSON.stringify(settings)); } catch {}
   return settings;
 }
+
+function todayIso() { return new Date().toISOString().slice(0, 10); }
+function loadStudyActivity() {
+  try { return JSON.parse(localStorage.getItem(STUDY_ACTIVITY_KEY) || "[]"); } catch { return []; }
+}
+function renderStudyStreak(activity) {
+  const card = $("kbStudyStreak");
+  if (!card) return;
+  const streak = studyStreakModel(activity, todayIso());
+  card.innerHTML = `<strong>🔥 ${streak.current} day${streak.current === 1 ? "" : "s"}</strong>` +
+    `<span>${streak.activeToday ? "Nice work — your streak is active today." : "Search or open a note to start your streak."}</span>`;
+  card.classList.toggle("is-active", streak.activeToday);
+}
+function markStudyActivity() {
+  const updated = recordStudyActivity(loadStudyActivity(), todayIso());
+  try { localStorage.setItem(STUDY_ACTIVITY_KEY, JSON.stringify(updated)); } catch {}
+  renderStudyStreak(updated);
+}
 // groups (owner request #11). Opening a course used to spill ALL notes (e.g.
 // 343 for "Matematika 1") in one flat list — overwhelming. This groups by the
 // note `topic`, detects "Šprint N …" sprint topics, and orders them:
@@ -280,6 +300,7 @@ export function shouldProbeLegacyKb(bundle) {
 
 export function showKbView() {
   wireKbEvents(); // ensure search/tutor listeners are attached (idempotent)
+  markStudyActivity();
   const v = $("kbView");
   if (!v) return;
   v.hidden = false;
@@ -308,6 +329,7 @@ async function refreshKb() {
   const main = $("kbMain");
   const buildPanel = $("kbBuildPanel");
   const metaBar = $("kbMetaBar");
+  renderStudyStreak(loadStudyActivity());
   // Explicit loading state (owner #1/#2): show that the KB is FETCHING, not
   // empty, so the user can always tell "still loading" from "nothing there".
   // Cleared once we know whether a DB exists (renderKbMeta overwrites it).
@@ -597,7 +619,7 @@ export function wireKbEvents() {
   $("kbNoteCloseBtn")?.addEventListener("click", closeKbNote);
 
   const search = $("kbSearchInput");
-  search?.addEventListener("input", debounce(() => runKbSearch(search.value), 200));
+  search?.addEventListener("input", debounce(() => { markStudyActivity(); runKbSearch(search.value); }, 200));
 
   // Focus area 7: explicit sort order. Changing the dropdown re-runs the search
   // with the chosen sort (default relevance, which is omitted server-side).

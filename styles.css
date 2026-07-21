@@ -1619,6 +1619,10 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-search-bar { margin: 1.25rem 0 0.75rem; }
 .kb-search-bar input { width: 100%; padding: 0.7rem 0.9rem; font-size: 1rem; border: 1px solid var(--border); border-radius: 10px; }
 .kb-export-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.55rem 0.7rem; margin: 0.75rem 0 0; background: var(--surface, #fff); border: 1px solid var(--border); border-radius: 10px; }
+.kb-study-streak { display: flex; align-items: baseline; gap: 0.55rem; margin: 0.65rem 0 0; padding: 0.65rem 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface, #fff); color: var(--muted); font-size: 0.84rem; }
+.kb-study-streak strong { color: var(--fg); font-size: 0.95rem; }
+.kb-study-streak.is-active { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.kb-study-streak.is-active strong { color: var(--accent); }
 .kb-export-label { font-size: 0.85rem; color: var(--muted); }
 .kb-export-bar .ghost-btn { font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0.32rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--fg); transition: background 0.12s, border-color 0.12s, color 0.12s; }
 .kb-export-bar .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }

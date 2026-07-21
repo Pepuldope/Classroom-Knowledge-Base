@@ -20,6 +20,11 @@ node scripts/theme_test.mjs
 THEME_OK=$?
 if [ "$THEME_OK" -ne 0 ]; then echo "theme tests FAILED"; exit 1; fi
 
+echo "==> Study streak model tests"
+node scripts/study_streak_test.mjs
+STREAK_OK=$?
+if [ "$STREAK_OK" -ne 0 ]; then echo "study streak tests FAILED"; exit 1; fi
+
 echo "==> Tutor attribution model tests"
 node scripts/tutor_provider_test.mjs
 TUTOR_ATTRIBUTION_OK=$?
