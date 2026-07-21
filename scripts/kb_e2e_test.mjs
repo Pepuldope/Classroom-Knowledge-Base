@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
@@ -1016,6 +1016,13 @@ test("renderLightMarkdown renders links whose label contains [brackets]", async 
 // "knowledge base" export that omits the bodies is worthless to a student.
 // These regression tests guard that contract for both Markdown and CSV.
 // ---------------------------------------------------------------------------
+test("local export payload serializes the supplied private bundle without a server read", () => {
+  const bundle = { version: 1, notes: [{ t: "Algebra", x: "Quadratic formula", course: "Math" }] };
+  assert.equal(exportBundlePayload(bundle, "json"), JSON.stringify(bundle, null, 2));
+  assert.match(exportBundlePayload(bundle, "md"), /Quadratic formula/);
+  assert.match(exportBundlePayload(bundle, "csv"), /Algebra,Math/);
+});
+
 test("bundleToMarkdown includes note body + summary, not just metadata", async () => {
   const { bundleToMarkdown } = await import("../kb.js");
   assert.ok(typeof bundleToMarkdown === "function", "bundleToMarkdown is exported");

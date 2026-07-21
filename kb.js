@@ -546,6 +546,13 @@ function bundleToCsv(bundle) {
   return rows.map((r) => r.join(",")).join("\n");
 }
 
+export function exportBundlePayload(bundle, format) {
+  if (format === "json") return JSON.stringify(bundle, null, 2);
+  if (format === "md") return bundleToMarkdown(bundle);
+  if (format === "csv") return bundleToCsv(bundle);
+  throw new Error(`Unsupported export format: ${format}`);
+}
+
 async function exportKb(format) {
   const status = $("kbExportStatus");
   const setStatus = (msg, isError) => {
@@ -556,21 +563,13 @@ async function exportKb(format) {
   };
   setStatus("Preparing…");
   try {
-    const r = await fetch("/api/kb-store?action=export");
-    if (!r.ok) throw new Error(`export failed (${r.status})`);
-    const data = await r.json();
-    const bundle = data.bundle;
+    const bundle = await loadKbBundle();
     if (!bundle || !Array.isArray(bundle.notes) || bundle.notes.length === 0) {
       setStatus("Nothing to export yet — the knowledge base is empty.", true);
       return;
     }
-    if (format === "json") {
-      downloadFile(exportFilename("json"), JSON.stringify(bundle, null, 2), "application/json");
-    } else if (format === "md") {
-      downloadFile(exportFilename("md"), bundleToMarkdown(bundle), "text/markdown");
-    } else if (format === "csv") {
-      downloadFile(exportFilename("csv"), bundleToCsv(bundle), "text/csv");
-    }
+    const mime = format === "json" ? "application/json" : format === "md" ? "text/markdown" : "text/csv";
+    downloadFile(exportFilename(format), exportBundlePayload(bundle, format), mime);
     setStatus(`Exported ${bundle.notes.length} notes.`);
   } catch (err) {
     setStatus("Export failed: " + (err.message || err), true);
