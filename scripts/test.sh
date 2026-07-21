@@ -25,6 +25,11 @@ node scripts/tutor_provider_test.mjs
 TUTOR_ATTRIBUTION_OK=$?
 if [ "$TUTOR_ATTRIBUTION_OK" -ne 0 ]; then echo "tutor attribution tests FAILED"; exit 1; fi
 
+echo "==> Tutor retry model tests"
+node scripts/tutor_retry_test.mjs
+TUTOR_RETRY_OK=$?
+if [ "$TUTOR_RETRY_OK" -ne 0 ]; then echo "tutor retry tests FAILED"; exit 1; fi
+
 echo "==> API / retrieval tests"
 node scripts/kb_e2e_test.mjs
 API_OK=$?

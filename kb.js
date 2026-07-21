@@ -1255,6 +1255,18 @@ export function resetTutorConversation() {
   return [];
 }
 
+/** Return the latest non-empty user prompt so a failed turn can be retried. */
+export function getTutorRetryPrompt(messages = []) {
+  if (!Array.isArray(messages)) return "";
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === "user" && typeof message.content === "string" && message.content.trim()) {
+      return message.content.trim();
+    }
+  }
+  return "";
+}
+
 export function copyableTutorText(text) {
   return typeof text === "string" ? text.trim() : "";
 }
@@ -1365,6 +1377,21 @@ function addTutorStudyAction(messageEl, text) {
   messageEl.appendChild(button);
 }
 
+function addTutorRetryAction(messageEl, prompt) {
+  if (!messageEl || !prompt || messageEl.querySelector(".ai-retry-btn")) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ai-retry-btn msg-action";
+  button.textContent = "Retry";
+  button.title = "Retry this tutor question";
+  button.addEventListener("click", () => {
+    button.disabled = true;
+    button.textContent = "Retrying…";
+    sendTutor(prompt, { retry: true });
+  });
+  messageEl.appendChild(button);
+}
+
 function resetTutorUi() {
   tutorMessages = resetTutorConversation();
   const messages = $("kbTutorMessages");
@@ -1404,11 +1431,13 @@ function addTutorMessage(role, text, isStreaming) {
   return el;
 }
 
-async function sendTutor(text) {
+async function sendTutor(text, { retry = false } = {}) {
   const input = $("kbTutorInput");
   if (input) input.value = "";
-  tutorMessages.push({ role: "user", content: text });
-  addTutorMessage("user", text);
+  if (!retry) {
+    tutorMessages.push({ role: "user", content: text });
+    addTutorMessage("user", text);
+  }
   const sourcesEl = $("kbTutorSources");
   if (sourcesEl) sourcesEl.innerHTML = `<span class="ai-context-note">Thinking… (searching the knowledge base)</span>`;
 
@@ -1429,7 +1458,10 @@ async function sendTutor(text) {
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       acc = `❌ ${err.error || err.message || r.status}`;
-      if (assistantEl) assistantEl.textContent = acc;
+      if (assistantEl) {
+        assistantEl.textContent = acc;
+        addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
+      }
       return;
     }
     const notesUsed = Number(r.headers.get("X-KB-Notes") || "0");
@@ -1473,7 +1505,10 @@ async function sendTutor(text) {
     addTutorAttribution(assistantEl, provider, model);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {
-    if (assistantEl) assistantEl.textContent = `❌ ${e.message}`;
+    if (assistantEl) {
+      assistantEl.textContent = `❌ ${e.message}`;
+      addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
+    }
   }
 }
 
