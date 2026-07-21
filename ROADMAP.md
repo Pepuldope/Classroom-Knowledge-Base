@@ -75,6 +75,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Tutor: save answers to my study list (personal, localStorage). Copy-to-clipboard + "New topic" reset shipped this run. Saved-answer action shipped 2026-07-20 with local deduplication and browser-only persistence.
 - [x] Tutor: surface which provider/model answered (already in X- headers) as a small line under the answer. Shipped 2026-07-20 with local formatting coverage and the existing streamed response headers.
 - [x] KB: persist last-used sort/filters across visits via localStorage (settings defaults exist — wire live search state too). Shipped this run: `cwa_kb_search_state` normalizes and restores course/year/type/class-type filters and sort order.
+- [x] Settings: explain local storage, tutor context sharing, and read-only Classroom access in plain language (shipped 2026-07-21).
 - [ ] (loop: invent more here every run when higher lists are blocked or thin)
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
