@@ -33,3 +33,18 @@ export function studyProgressModel(value, totalNotes) {
     lastOpened,
   };
 }
+
+export function studyProgressCopy(summary) {
+  if (!summary || typeof summary !== "object" ||
+      !Number.isFinite(summary.totalNotes) || summary.totalNotes <= 0 ||
+      !Number.isFinite(summary.openedNotes) || !Number.isFinite(summary.percent)) {
+    return {
+      headline: "📖 Start exploring",
+      detail: "Open a note from your local knowledge base to track progress here.",
+    };
+  }
+  return {
+    headline: `📖 ${summary.percent}% explored`,
+    detail: `${summary.openedNotes.toLocaleString()} of ${summary.totalNotes.toLocaleString()} notes opened${summary.lastOpened ? ` · last opened ${summary.lastOpened}` : ""}`,
+  };
+}

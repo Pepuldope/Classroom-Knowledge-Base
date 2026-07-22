@@ -81,6 +81,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: show a local-only study streak on the home surface, updated when a student searches or opens the KB (2026-07-21).
 - [x] KB: track locally which notes a student has opened and show an explored-note progress summary (2026-07-21).
 - [x] KB: make in-view JSON/Markdown/CSV exports read only the local IndexedDB bundle (2026-07-21).
+- [x] KB: show an honest empty local-progress state when no private bundle is cached (shipped 2026-07-22).
 - [ ] (loop: invent more here every run when higher lists are blocked or thin)
 
 ## 🚧 Blocked (pinged — needs Pepuldo)

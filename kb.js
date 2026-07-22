@@ -20,7 +20,7 @@ import { renderLightMarkdown } from "./archive.js";
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
-import { recordNoteProgress, studyProgressModel } from "./study-progress.js";
+import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -242,9 +242,10 @@ function renderStudyProgress(progress = loadStudyProgress()) {
   const card = $("kbStudyProgress");
   if (!card) return;
   const summary = studyProgressModel(progress, localKbBundle?.notes?.length || 0);
-  card.innerHTML = `<strong>📖 ${summary.percent}% explored</strong>` +
-    `<span>${summary.openedNotes} of ${summary.totalNotes.toLocaleString()} notes opened${summary.lastOpened ? ` · last opened ${summary.lastOpened}` : ""}</span>`;
-  card.setAttribute("aria-label", `${summary.openedNotes} of ${summary.totalNotes} notes opened`);
+  const copy = studyProgressCopy(summary);
+  card.innerHTML = `<strong>${copy.headline}</strong>` +
+    `<span>${copy.detail}</span>`;
+  card.setAttribute("aria-label", copy.detail);
 }
 function markNoteProgress(index) {
   const next = recordNoteProgress(loadStudyProgress(), index, todayIso());
