@@ -1188,16 +1188,19 @@ async function saveSettingsAndReload() {
   saveDisplayPrefsLocal(displayPrefs);
   applyTheme($("prefTheme")?.value);
 
-  import("./kb.js").then(({ saveKbSettings }) => saveKbSettings({
-    tutorEnabled: $("kbPrefTutorEnabled")?.checked,
-    tutorEffort: $("kbPrefTutorEffort")?.value,
-    defaultScope: $("kbPrefScope")?.value,
-    defaultSort: $("kbPrefSort")?.value,
-    relatedCount: $("kbPrefRelatedCount")?.value,
-    density: $("kbPrefDensity")?.value,
-    speechRate: $("kbPrefSpeechRate")?.value,
-    autoBuild: $("kbPrefAutoBuild")?.checked,
-  })).catch(() => {});
+  import("./kb.js").then(({ saveKbSettings, applyKbDensity }) => {
+    saveKbSettings({
+      tutorEnabled: $("kbPrefTutorEnabled")?.checked,
+      tutorEffort: $("kbPrefTutorEffort")?.value,
+      defaultScope: $("kbPrefScope")?.value,
+      defaultSort: $("kbPrefSort")?.value,
+      relatedCount: $("kbPrefRelatedCount")?.value,
+      density: $("kbPrefDensity")?.value,
+      speechRate: $("kbPrefSpeechRate")?.value,
+      autoBuild: $("kbPrefAutoBuild")?.checked,
+    });
+    applyKbDensity();
+  }).catch(() => {});
   pushPrefsToServer();
   $("settingsModal").hidden = true;
 

@@ -259,6 +259,9 @@ summary::-webkit-details-marker { color: var(--muted); }
 
 .list { display: flex; flex-direction: column; gap: 0.5rem; }
 .list.compact .assignment { padding: 0.55rem 0.85rem; font-size: 0.9rem; }
+#kbView.kb-density-comfortable .list.compact .assignment { padding: 0.85rem 1rem; font-size: 1rem; }
+#kbView.kb-density-compact .list.compact .assignment { padding: 0.4rem 0.65rem; font-size: 0.86rem; }
+#kbView.kb-density-compact .list.compact { gap: 0.35rem; }
 
 .day-group,
 .course-group {

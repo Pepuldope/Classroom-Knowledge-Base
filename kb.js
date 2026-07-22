@@ -216,6 +216,17 @@ export function kbSettingsModel(value = {}) {
   };
 }
 
+export function kbDensityClass(value = {}) {
+  return kbSettingsModel(value).density === "compact" ? "kb-density-compact" : "kb-density-comfortable";
+}
+
+export function applyKbDensity(value = loadKbSettings()) {
+  const view = $("kbView");
+  if (!view) return;
+  view.classList.remove("kb-density-compact", "kb-density-comfortable");
+  view.classList.add(kbDensityClass(value));
+}
+
 export function relatedNotesLimit(value = {}) {
   return kbSettingsModel(value).relatedCount;
 }
@@ -363,6 +374,7 @@ export function shouldProbeLegacyKb(bundle) {
 export function showKbView() {
   wireKbEvents(); // ensure search/tutor listeners are attached (idempotent)
   markStudyActivity();
+  applyKbDensity();
   const v = $("kbView");
   if (!v) return;
   v.hidden = false;
