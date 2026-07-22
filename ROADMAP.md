@@ -84,6 +84,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: make in-view JSON/Markdown/CSV exports read only the local IndexedDB bundle (2026-07-21).
 - [x] KB: show an honest empty local-progress state when no private bundle is cached (shipped 2026-07-22).
 - [x] KB: show the signed-in Classroom account and safe switch/sign-out actions inside Knowledge Base Settings (2026-07-22).
+- [x] KB: honor the Knowledge Base Settings default sort on a first visit, while preserving explicit saved filter/sort choices.
 - [ ] (loop: invent more here every run when higher lists are blocked or thin)
 
 ## 🚧 Blocked (pinged — needs Pepuldo)

@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
@@ -126,6 +126,12 @@ test("kbSearchStateModel keeps only valid local filter and sort choices", () => 
     family: "",
     sort: "relevance",
   });
+});
+
+test("initial KB search state uses the saved Settings sort when no search state exists", () => {
+  assert.equal(initialKbSearchState(null, { defaultSort: "title" }).sort, "title");
+  assert.equal(initialKbSearchState({}, { defaultSort: "course" }).sort, "course");
+  assert.equal(initialKbSearchState({ sort: "recency", course: "Math" }, { defaultSort: "title" }).sort, "recency");
 });
 
 test("buildLocalSearchResponse searches a cached private bundle and applies facets locally", () => {

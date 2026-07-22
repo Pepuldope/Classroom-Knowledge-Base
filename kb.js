@@ -130,9 +130,18 @@ export function kbSearchStateModel(value = {}) {
   };
 }
 
+export function initialKbSearchState(saved, settings = {}) {
+  const hasSavedState = saved && typeof saved === "object" && Object.keys(saved).length > 0;
+  if (hasSavedState) return kbSearchStateModel(saved);
+  const preferredSort = KB_SEARCH_SORTS.has(settings?.defaultSort) ? settings.defaultSort : "relevance";
+  return kbSearchStateModel({ sort: preferredSort });
+}
+
 export function loadKbSearchState() {
-  try { return kbSearchStateModel(JSON.parse(localStorage.getItem(KB_SEARCH_STATE_KEY) || "{}")); }
-  catch { return kbSearchStateModel(); }
+  try {
+    const raw = JSON.parse(localStorage.getItem(KB_SEARCH_STATE_KEY) || "null");
+    return initialKbSearchState(raw, loadKbSettings());
+  } catch { return initialKbSearchState(null, loadKbSettings()); }
 }
 
 export function saveKbSearchState(value) {
