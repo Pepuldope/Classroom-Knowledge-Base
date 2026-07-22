@@ -47,7 +47,7 @@ These came straight from user feedback. Prefer these over speculative polish.
 - [x] Multi-language tutor (Slovak) using the existing prefLanguage plumbing. Shipped 2026-07-21: Display → Language now persists locally and sends a bounded Slovak instruction with grounded tutor requests.
 - [x] "Study streak" gamification on the KB home. Shipped 2026-07-21; local calendar-date validation hardened 2026-07-21.
 - [x] Auto-generate a weekly "what to review" digest from the KB + planner. Shipped 2026-07-22: local weekly review card prioritizes unopened notes and falls back to recent notes.
-- [ ] Voice tutor: pipe tutor answers through TTS (Edge/OpenAI) for hands-free study.
+- [x] Voice tutor: read tutor answers aloud with the browser's built-in speech engine for hands-free study (2026-07-22).
 - [x] Per-student progress tracking (which notes they've opened / quizzed on). Shipped 2026-07-21: note opens are tracked locally and summarized in the KB view.
 
 ## ✅ Done
@@ -85,7 +85,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: show an honest empty local-progress state when no private bundle is cached (shipped 2026-07-22).
 - [x] KB: show the signed-in Classroom account and safe switch/sign-out actions inside Knowledge Base Settings (2026-07-22).
 - [x] KB: honor the Knowledge Base Settings default sort on a first visit, while preserving explicit saved filter/sort choices.
-- [ ] (loop: invent more here every run when higher lists are blocked or thin)
+- [ ] Tutor: add a local playback-speed preference for read-aloud answers (loop follow-up).
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

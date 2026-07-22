@@ -1358,6 +1358,14 @@ export function copyableTutorText(text) {
   return typeof text === "string" ? text.trim() : "";
 }
 
+export function tutorSpeechModel(text, speaking = false) {
+  const clean = copyableTutorText(text);
+  if (!clean) return null;
+  return speaking
+    ? { text: clean, label: "Stop", title: "Stop reading this answer" }
+    : { text: clean, label: "Read aloud", title: "Read this answer aloud" };
+}
+
 export function formatTutorAttribution(provider, model) {
   const p = typeof provider === "string" ? provider.trim() : "";
   const m = typeof model === "string" ? model.trim() : "";
@@ -1444,6 +1452,44 @@ function addTutorCopyAction(messageEl, text) {
     } catch {
       button.textContent = "Copy unavailable";
     }
+  });
+  messageEl.appendChild(button);
+}
+
+function addTutorSpeechAction(messageEl, text) {
+  if (!messageEl || !tutorSpeechModel(text) || messageEl.querySelector(".ai-speak-btn")) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ai-speak-btn msg-action";
+  let speaking = false;
+  const update = () => {
+    const model = tutorSpeechModel(text, speaking);
+    if (!model) return;
+    button.textContent = model.label;
+    button.title = model.title;
+    button.setAttribute("aria-label", model.title);
+    button.setAttribute("aria-pressed", speaking ? "true" : "false");
+  };
+  const finish = () => { speaking = false; update(); };
+  update();
+  button.addEventListener("click", () => {
+    if (typeof window === "undefined" || !window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") {
+      button.textContent = "Voice unavailable";
+      button.disabled = true;
+      return;
+    }
+    if (speaking) {
+      window.speechSynthesis.cancel();
+      finish();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new window.SpeechSynthesisUtterance(copyableTutorText(text));
+    utterance.onend = finish;
+    utterance.onerror = finish;
+    speaking = true;
+    update();
+    window.speechSynthesis.speak(utterance);
   });
   messageEl.appendChild(button);
 }
@@ -1594,6 +1640,7 @@ async function sendTutor(text, { retry = false } = {}) {
     // After streaming, render the source chips (clickable -> open the note).
     renderTutorSources(sourcesEl, sources);
     addTutorCopyAction(assistantEl, acc);
+    addTutorSpeechAction(assistantEl, acc);
     addTutorStudyAction(assistantEl, acc);
     addTutorFeedbackActions(assistantEl, acc);
     addTutorAttribution(assistantEl, provider, model);

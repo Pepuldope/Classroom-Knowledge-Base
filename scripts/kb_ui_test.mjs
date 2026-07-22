@@ -490,6 +490,8 @@ try {
     assert.ok(firstTitle && firstTitle.includes("STAR"), `chip title wrong: ${firstTitle}`);
     await page.waitForSelector("#kbTutorMessages .ai-copy-btn", { timeout: 8000 });
     assert.equal(await page.locator("#kbTutorMessages .ai-copy-btn").count(), 1, "each answer should expose one copy action");
+    await page.waitForSelector("#kbTutorMessages .ai-speak-btn", { timeout: 8000 });
+    assert.equal(await page.locator("#kbTutorMessages .ai-speak-btn").textContent(), "Read aloud", "each answer should expose read-aloud action");
     await page.waitForSelector("#kbTutorMessages .ai-save-btn", { timeout: 8000 });
     assert.equal(await page.locator("#kbTutorMessages .ai-save-btn").count(), 1, "each answer should expose one study-list action");
     await page.locator("#kbTutorMessages .ai-save-btn").click();
