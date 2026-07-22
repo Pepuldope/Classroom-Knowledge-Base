@@ -1092,6 +1092,15 @@ async function configureKbSettingsUi() {
   set("kbPrefRelatedCountValue", s.relatedCount, "textContent");
   set("kbPrefDensity", s.density);
   set("kbPrefAutoBuild", s.autoBuild, "checked");
+  const accountStatus = $("kbAccountStatus");
+  const cachedProfile = loadCachedProfile();
+  if (accountStatus) accountStatus.textContent = cachedProfile?.email
+    ? `Signed in as ${cachedProfile.email}`
+    : (cachedProfile?.name ? `Signed in as ${cachedProfile.name}` : "Not signed in");
+  const switchAccountButton = $("kbSwitchAccount");
+  const signOutButton = $("kbSignOut");
+  if (switchAccountButton) switchAccountButton.onclick = () => $("switchBtn")?.click();
+  if (signOutButton) signOutButton.onclick = () => $("logoutBtn")?.click();
   set("prefTheme", loadTheme());
   $("kbPrefRelatedCount")?.addEventListener("input", (e) => { $("kbPrefRelatedCountValue").textContent = e.target.value; }, { once: true });
   $("kbPrefExport")?.addEventListener("click", async () => {

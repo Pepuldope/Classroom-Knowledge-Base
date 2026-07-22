@@ -33,6 +33,12 @@ try {
   assert.equal(await bookButton.count(), 1, "Settings should offer a readable study-book export");
   assert.match(await bookButton.textContent(), /study book/i);
 
+  const accountStatus = page.locator("#kbAccountStatus");
+  assert.equal(await accountStatus.count(), 1, "Knowledge Base settings should show the local Classroom account status");
+  assert.match(await accountStatus.textContent(), /not signed in|signed in as/i);
+  assert.equal(await page.locator("#kbSwitchAccount").count(), 1, "Settings should offer account switching");
+  assert.equal(await page.locator("#kbSignOut").count(), 1, "Settings should offer sign out");
+
   const privacy = page.locator("#kbPrivacySummary");
   assert.equal(await privacy.count(), 1, "Knowledge Base settings should explain local storage and tutor sharing");
   assert.match(await privacy.textContent(), /stay in this browser/i);
