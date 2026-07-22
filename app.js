@@ -1104,17 +1104,21 @@ async function configureKbSettingsUi() {
   if (switchAccountButton) switchAccountButton.onclick = () => $("switchBtn")?.click();
   if (signOutButton) signOutButton.onclick = () => $("logoutBtn")?.click();
   set("prefTheme", loadTheme());
-  $("kbPrefRelatedCount")?.addEventListener("input", (e) => { $("kbPrefRelatedCountValue").textContent = e.target.value; }, { once: true });
-  $("kbPrefSpeechRate")?.addEventListener("input", (e) => { $("kbPrefSpeechRateValue").textContent = `${e.target.value}×`; }, { once: true });
-  $("kbPrefExport")?.addEventListener("click", async () => {
+  const relatedCount = $("kbPrefRelatedCount");
+  if (relatedCount) relatedCount.oninput = (e) => { $("kbPrefRelatedCountValue").textContent = e.target.value; };
+  const speechRate = $("kbPrefSpeechRate");
+  if (speechRate) speechRate.oninput = (e) => { $("kbPrefSpeechRateValue").textContent = `${e.target.value}×`; };
+  const exportButton = $("kbPrefExport");
+  if (exportButton) exportButton.onclick = async () => {
     const bundle = await loadKbBundle();
     const status = $("kbPrefStatus");
     if (!bundle) { if (status) status.textContent = "No local knowledge base to download."; return; }
     const url = URL.createObjectURL(new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" }));
     const a = document.createElement("a"); a.href = url; a.download = "classroom-knowledge-base.json"; a.click(); URL.revokeObjectURL(url);
     if (status) status.textContent = `Downloaded ${bundle.notes.length.toLocaleString()} notes.`;
-  }, { once: true });
-  $("kbPrefExportBook")?.addEventListener("click", async () => {
+  };
+  const exportBookButton = $("kbPrefExportBook");
+  if (exportBookButton) exportBookButton.onclick = async () => {
     const bundle = await loadKbBundle();
     const status = $("kbPrefStatus");
     if (!bundle) { if (status) status.textContent = "No local knowledge base to download."; return; }
@@ -1123,12 +1127,13 @@ async function configureKbSettingsUi() {
     const a = document.createElement("a"); a.href = url; a.download = "classroom-knowledge-book.md"; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     if (status) status.textContent = `Downloaded a study book with ${bundle.notes.length.toLocaleString()} notes.`;
-  }, { once: true });
-  $("kbPrefClear")?.addEventListener("click", async () => {
+  };
+  const clearButton = $("kbPrefClear");
+  if (clearButton) clearButton.onclick = async () => {
     await removeKbBundle();
     const status = $("kbPrefStatus");
     if (status) status.textContent = "Local knowledge base cleared.";
-  }, { once: true });
+  };
 }
 
 function openSettingsModal() {

@@ -33,6 +33,27 @@ try {
   assert.equal(await bookButton.count(), 1, "Settings should offer a readable study-book export");
   assert.match(await bookButton.textContent(), /study book/i);
 
+  // Regression: range output listeners must survive repeated changes in one
+  // settings visit, not disappear after the first input event.
+  await page.evaluate(() => document.querySelector("#settingsBtn")?.click());
+  await page.waitForTimeout(100);
+  await page.evaluate(() => {
+    const modal = document.querySelector("#settingsModal");
+    const pane = document.querySelector('[data-pane="knowledge-base"]');
+    if (!modal || !pane) throw new Error("Knowledge Base settings pane is missing");
+    modal.hidden = false;
+    pane.hidden = false;
+    const related = document.querySelector("#kbPrefRelatedCount");
+    const output = document.querySelector("#kbPrefRelatedCountValue");
+    if (!related || !output) throw new Error("Related-notes setting controls are missing");
+    related.value = "4";
+    related.dispatchEvent(new Event("input", { bubbles: true }));
+    if (output.textContent !== "4") throw new Error(`first range update missing: ${output.textContent}`);
+    related.value = "7";
+    related.dispatchEvent(new Event("input", { bubbles: true }));
+    if (output.textContent !== "7") throw new Error(`second range update missing: ${output.textContent}`);
+  });
+
   const accountStatus = page.locator("#kbAccountStatus");
   assert.equal(await accountStatus.count(), 1, "Knowledge Base settings should show the local Classroom account status");
   assert.match(await accountStatus.textContent(), /not signed in|signed in as/i);
