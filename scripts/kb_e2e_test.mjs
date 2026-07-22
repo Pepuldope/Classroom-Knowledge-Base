@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
@@ -81,6 +81,14 @@ test("tutorSpeechModel gives read-aloud controls stable labels and safe text", (
   assert.deepEqual(tutorSpeechModel("   ", false), null);
 });
 
+test("tutorSpeechRateModel clamps and normalizes the local playback preference", () => {
+  assert.equal(tutorSpeechRateModel(), 1);
+  assert.equal(tutorSpeechRateModel(1.25), 1.25);
+  assert.equal(tutorSpeechRateModel("slow"), 1);
+  assert.equal(tutorSpeechRateModel(9), 2);
+  assert.equal(tutorSpeechRateModel(0), 0.5);
+});
+
 test("kbSettingsModel normalizes KB controls and preserves local-only defaults", () => {
   assert.deepEqual(kbSettingsModel(), {
     tutorEnabled: true,
@@ -90,6 +98,7 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     relatedCount: 3,
     density: "comfortable",
     autoBuild: false,
+    speechRate: 1,
   });
   assert.deepEqual(kbSettingsModel({ tutorEffort: "invalid", relatedCount: 99, density: "compact", autoBuild: true }), {
     tutorEnabled: true,
@@ -99,6 +108,7 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     relatedCount: 8,
     density: "compact",
     autoBuild: true,
+    speechRate: 1,
   });
 });
 

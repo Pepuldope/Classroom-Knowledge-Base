@@ -1091,6 +1091,8 @@ async function configureKbSettingsUi() {
   set("kbPrefRelatedCount", s.relatedCount);
   set("kbPrefRelatedCountValue", s.relatedCount, "textContent");
   set("kbPrefDensity", s.density);
+  set("kbPrefSpeechRate", s.speechRate);
+  set("kbPrefSpeechRateValue", `${s.speechRate}×`, "textContent");
   set("kbPrefAutoBuild", s.autoBuild, "checked");
   const accountStatus = $("kbAccountStatus");
   const cachedProfile = loadCachedProfile();
@@ -1103,6 +1105,7 @@ async function configureKbSettingsUi() {
   if (signOutButton) signOutButton.onclick = () => $("logoutBtn")?.click();
   set("prefTheme", loadTheme());
   $("kbPrefRelatedCount")?.addEventListener("input", (e) => { $("kbPrefRelatedCountValue").textContent = e.target.value; }, { once: true });
+  $("kbPrefSpeechRate")?.addEventListener("input", (e) => { $("kbPrefSpeechRateValue").textContent = `${e.target.value}×`; }, { once: true });
   $("kbPrefExport")?.addEventListener("click", async () => {
     const bundle = await loadKbBundle();
     const status = $("kbPrefStatus");
@@ -1192,6 +1195,7 @@ async function saveSettingsAndReload() {
     defaultSort: $("kbPrefSort")?.value,
     relatedCount: $("kbPrefRelatedCount")?.value,
     density: $("kbPrefDensity")?.value,
+    speechRate: $("kbPrefSpeechRate")?.value,
     autoBuild: $("kbPrefAutoBuild")?.checked,
   })).catch(() => {});
   pushPrefsToServer();

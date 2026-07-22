@@ -193,6 +193,7 @@ const DEFAULT_KB_SETTINGS = Object.freeze({
   relatedCount: 3,
   density: "comfortable",
   autoBuild: false,
+  speechRate: 1,
 });
 
 /** Normalize browser-local KB controls; never sends these preferences to a server. */
@@ -201,6 +202,7 @@ export function kbSettingsModel(value = {}) {
   const efforts = new Set(["quick", "tutor", "hard"]);
   const scopes = new Set(["all", "current", "pinned"]);
   const sorts = new Set(["relevance", "recency", "course", "title"]);
+  const speechRate = Number(input.speechRate);
   const relatedCount = Number(input.relatedCount);
   return {
     tutorEnabled: input.tutorEnabled !== false,
@@ -210,6 +212,7 @@ export function kbSettingsModel(value = {}) {
     relatedCount: Number.isFinite(relatedCount) ? Math.min(8, Math.max(1, Math.round(relatedCount))) : DEFAULT_KB_SETTINGS.relatedCount,
     density: input.density === "compact" ? "compact" : DEFAULT_KB_SETTINGS.density,
     autoBuild: input.autoBuild === true,
+    speechRate: Number.isFinite(speechRate) ? Math.min(2, Math.max(0.5, speechRate)) : DEFAULT_KB_SETTINGS.speechRate,
   };
 }
 
@@ -1366,6 +1369,11 @@ export function tutorSpeechModel(text, speaking = false) {
     : { text: clean, label: "Read aloud", title: "Read this answer aloud" };
 }
 
+export function tutorSpeechRateModel(value) {
+  const rate = Number(value);
+  return Number.isFinite(rate) ? Math.min(2, Math.max(0.5, rate)) : 1;
+}
+
 export function formatTutorAttribution(provider, model) {
   const p = typeof provider === "string" ? provider.trim() : "";
   const m = typeof model === "string" ? model.trim() : "";
@@ -1485,6 +1493,7 @@ function addTutorSpeechAction(messageEl, text) {
     }
     window.speechSynthesis.cancel();
     const utterance = new window.SpeechSynthesisUtterance(copyableTutorText(text));
+    utterance.rate = tutorSpeechRateModel(loadKbSettings().speechRate);
     utterance.onend = finish;
     utterance.onerror = finish;
     speaking = true;

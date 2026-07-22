@@ -85,7 +85,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: show an honest empty local-progress state when no private bundle is cached (shipped 2026-07-22).
 - [x] KB: show the signed-in Classroom account and safe switch/sign-out actions inside Knowledge Base Settings (2026-07-22).
 - [x] KB: honor the Knowledge Base Settings default sort on a first visit, while preserving explicit saved filter/sort choices.
-- [ ] Tutor: add a local playback-speed preference for read-aloud answers (loop follow-up).
+- [x] Tutor: add a local playback-speed preference for read-aloud answers (0.5×–2× slider in Knowledge Base Settings; 2026-07-22).
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
