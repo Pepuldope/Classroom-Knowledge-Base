@@ -56,6 +56,18 @@ try {
   await check("harness page loads without error", async () => {
     const res = await page.goto(BASE + "/kb-test-harness.html", { waitUntil: "networkidle", timeout: 30000 });
     assert.ok(res && res.ok(), `HTTP ${res && res.status()}`);
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const req = indexedDB.open("cwa-archive", 1);
+      req.onupgradeneeded = () => req.result.createObjectStore("archive", { keyPath: "id" });
+      req.onerror = () => reject(req.error);
+      req.onsuccess = () => {
+        const tx = req.result.transaction("archive", "readwrite");
+        tx.objectStore("archive").put({ id: "kb-bundle", data: { version: 1, notes: [{ t: "Local review note", course: "Math", y: "2025-26", topic: "Algebra", s: "Review", x: "Review" }], years: ["2025-26"], courses: ["Math"] } });
+        tx.oncomplete = () => { req.result.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+    }));
+    await page.reload({ waitUntil: "networkidle" });
   });
 
   await check("KB view is revealed by showKbView()", async () => {
@@ -71,6 +83,18 @@ try {
     await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 10000 });
     const cards = await page.locator("#kbBrowseCourses .kb-course-card").count();
     assert.ok(cards > 0, "expected at least one course card");
+  });
+
+  await check("weekly review digest shows local study recommendations", async () => {
+    await page.waitForSelector("#kbReviewDigest .kb-review-item", { timeout: 10000 });
+    assert.match(await page.locator("#kbReviewDigest").textContent(), /Your weekly review/);
+    assert.ok(await page.locator("#kbReviewDigest .kb-review-item").count() > 0, "digest should recommend at least one note");
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const req = indexedDB.open("cwa-archive", 1);
+      req.onsuccess = () => { const tx = req.result.transaction("archive", "readwrite"); tx.objectStore("archive").delete("kb-bundle"); tx.oncomplete = () => { req.result.close(); resolve(); }; tx.onerror = () => reject(tx.error); };
+      req.onerror = () => reject(req.error);
+    }));
+    await page.reload({ waitUntil: "networkidle" });
   });
 
   await check("example-search chips render and run a search", async () => {

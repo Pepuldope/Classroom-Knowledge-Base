@@ -30,6 +30,11 @@ node scripts/study_progress_test.mjs
 PROGRESS_OK=$?
 if [ "$PROGRESS_OK" -ne 0 ]; then echo "study progress tests FAILED"; exit 1; fi
 
+echo "==> Weekly review digest model tests"
+node scripts/review_digest_test.mjs
+REVIEW_DIGEST_OK=$?
+if [ "$REVIEW_DIGEST_OK" -ne 0 ]; then echo "review digest tests FAILED"; exit 1; fi
+
 echo "==> Tutor attribution model tests"
 node scripts/tutor_provider_test.mjs
 TUTOR_ATTRIBUTION_OK=$?

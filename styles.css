@@ -1625,6 +1625,13 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-study-streak.is-active strong { color: var(--accent); }
 .kb-study-progress { display: flex; align-items: baseline; gap: 0.55rem; margin: 0.55rem 0 0.9rem; padding: 0.65rem 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface, #fff); color: var(--muted); font-size: 0.84rem; }
 .kb-study-progress strong { color: var(--accent); font-size: 0.95rem; }
+.kb-review-digest { margin: 0.65rem 0 1rem; padding: 0.8rem; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 12px; background: var(--surface, #fff); }
+.kb-review-digest h3 { margin: 0; font-size: 1rem; }
+.kb-review-detail { margin: 0.2rem 0 0.65rem; color: var(--muted); font-size: 0.82rem; }
+.kb-review-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; }
+.kb-review-item { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 0.6rem 0.7rem; border: 1px solid var(--border); border-radius: 9px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; font: inherit; }
+.kb-review-item:hover, .kb-review-item:focus-visible { border-color: var(--accent); outline: none; }
+.kb-review-item span { color: var(--muted); font-size: 0.78rem; }
 .kb-export-label { font-size: 0.85rem; color: var(--muted); }
 .kb-export-bar .ghost-btn { font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0.32rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--fg); transition: background 0.12s, border-color 0.12s, color 0.12s; }
 .kb-export-bar .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }

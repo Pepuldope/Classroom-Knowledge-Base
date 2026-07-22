@@ -67,6 +67,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: keyboard shortcut (press "/" to focus search, Esc to clear).
 - [x] Search: "did you mean" suggestion when a query returns <3 results.
 - [x] KB: related-notes preview chips directly under each search result card (no need to open the note first).
+- [x] KB: local weekly review card prioritizing unopened notes, with recent-note fallback when the bundle is fully explored (2026-07-22).
 - [x] KB: parallelize legacy KV shard reads so related/search compatibility routes do not wait on shards serially (2026-07-20).
 - [x] KB: Planner→KB bridge — a "🔍 KB" button on every assignment card that searches the knowledge base for that topic.
 - [x] KB: richer empty state with example searches and a "browse by course" entry point.

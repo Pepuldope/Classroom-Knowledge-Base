@@ -21,6 +21,7 @@ import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
+import { buildReviewDigest } from "./review-digest.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -247,10 +248,40 @@ function renderStudyProgress(progress = loadStudyProgress()) {
     `<span>${copy.detail}</span>`;
   card.setAttribute("aria-label", copy.detail);
 }
+function renderReviewDigest(progress = loadStudyProgress()) {
+  const card = $("kbReviewDigest");
+  const notes = Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [];
+  if (!card || !notes.length) return;
+  const digest = buildReviewDigest(notes, progress, 3);
+  card.replaceChildren();
+  const heading = document.createElement("h3");
+  heading.id = "kbReviewDigestTitle";
+  heading.textContent = digest.title;
+  const detail = document.createElement("p");
+  detail.className = "kb-review-detail";
+  detail.textContent = digest.detail;
+  const list = document.createElement("div");
+  list.className = "kb-review-list";
+  for (const item of digest.items) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "kb-review-item";
+    const title = document.createElement("strong");
+    title.textContent = item.title;
+    const meta = document.createElement("span");
+    meta.textContent = item.detail || "Open note";
+    button.append(title, meta);
+    button.addEventListener("click", () => openKbNote(item.index));
+    list.appendChild(button);
+  }
+  card.append(heading, detail, list);
+  card.hidden = digest.items.length === 0;
+}
 function markNoteProgress(index) {
   const next = recordNoteProgress(loadStudyProgress(), index, todayIso());
   try { localStorage.setItem(STUDY_PROGRESS_KEY, JSON.stringify(next)); } catch {}
   renderStudyProgress(next);
+  renderReviewDigest(next);
 }
 // groups (owner request #11). Opening a course used to spill ALL notes (e.g.
 // 343 for "Matematika 1") in one flat list — overwhelming. This groups by the
@@ -358,6 +389,7 @@ async function refreshKb() {
   try {
     localKbBundle = await loadKbBundle();
     renderStudyProgress();
+    renderReviewDigest();
     if (localKbBundle?.notes?.length) {
       meta = {
         noteCount: localKbBundle.notes.length,
