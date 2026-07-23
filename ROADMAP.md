@@ -90,6 +90,13 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Settings: keep Knowledge Base range controls and local export/clear actions live across repeated visits (2026-07-22).
 - [x] Settings: opt-in auto-build starts a private Classroom KB after sign-in only when no local bundle exists (2026-07-23).
 - [x] KB: use relevance sorting for active searches while retaining newest-first on the browse surface (2026-07-23).
+- [x] Settings: improve Settings tab accessibility (tablist/tab/tabpanel + aria-selected sync; 2026-07-23).
+- [ ] Tutor: unify Planner assignment-help tutor with the KB tutor pipeline (shared streaming, provider rotation, multi-turn, privacy-bounded context) without breaking Planner cards.
+- [ ] Settings: wire default search scope (all / current course / pinned courses) into live local KB search behavior, not only the control UI.
+- [ ] Perf: cut hosted legacy `/api/kb-search` cold latency toward <1s while keeping the private IndexedDB path instant (measure before/after; do not break local fast path).
+- [ ] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings.
+- [ ] Continuity: automated smoke that opens Archive + Planner + Settings after KB changes and fails the run if any view errors (extend existing browser gates).
+- [ ] Tutor: optional local “study mode” that turns the last grounded answer into 3 short quiz questions without uploading extra notes beyond the answer context.
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

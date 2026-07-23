@@ -232,3 +232,12 @@ nontrivial architecture decisions. Then: check → plan → implement → test.
 - `/api/kb-search` `filters.courses` / `filters.years` list MANY courses/years.
 - `/api/kb-related?id=<n>` returns related notes in <1s.
 - Live site redeployed and the live e2e (`KB_LIVE_URL` set) passes.
+- **BACKLOG REPLENISH (hard — owner 2026-07-23):** before ending the run,
+  `ROADMAP.md` section `## 🤖 Agent-Proposed Backlog` MUST contain **at least
+  3 unchecked** `- [ ]` items that the *next* tick can pick up. Shipping and
+  ticking the item you just built is required; ending with an all-`[x]`
+  Agent-Proposed list is a **failed run** even if code shipped. When static
+  Ready/Reported/Soon/Ideas are drained, invent concrete student-facing work
+  from the Phase-1 survey (upgrades OR net-new), append open `- [ ]` rows
+  first, then implement at most one of them this tick and leave the rest open.
+  Status report MUST quote the open residual count (e.g. `open Agent-Proposed: 4`).
