@@ -1094,6 +1094,29 @@ async function configureKbSettingsUi() {
   set("kbPrefSpeechRate", s.speechRate);
   set("kbPrefSpeechRateValue", `${s.speechRate}×`, "textContent");
   set("kbPrefAutoBuild", s.autoBuild, "checked");
+  const pinnedList = $("kbPinnedCoursesList");
+  if (pinnedList) {
+    const bundle = await loadKbBundle().catch(() => null);
+    const courses = [...new Set((bundle?.notes || []).map((note) => String(note?.course || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    const pinned = new Set(kb.loadKbPinnedCourses());
+    pinnedList.innerHTML = "";
+    if (!courses.length) {
+      pinnedList.innerHTML = '<span class="settings-hint">Build your local knowledge base to choose courses.</span>';
+    } else {
+      for (const course of courses) {
+        const label = document.createElement("label");
+        label.className = "settings-check-row";
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = course;
+        checkbox.checked = pinned.has(course);
+        const text = document.createElement("span");
+        text.textContent = course;
+        label.append(checkbox, text);
+        pinnedList.appendChild(label);
+      }
+    }
+  }
   const accountStatus = $("kbAccountStatus");
   const cachedProfile = loadCachedProfile();
   if (accountStatus) accountStatus.textContent = cachedProfile?.email
@@ -1205,6 +1228,8 @@ async function saveSettingsAndReload() {
       speechRate: $("kbPrefSpeechRate")?.value,
       autoBuild: $("kbPrefAutoBuild")?.checked,
     });
+    const pinned = [...($("kbPinnedCoursesList")?.querySelectorAll("input:checked") || [])].map((input) => input.value);
+    kb.saveKbPinnedCourses(pinned);
     applyKbDensity();
   }).catch(() => {});
   pushPrefsToServer();

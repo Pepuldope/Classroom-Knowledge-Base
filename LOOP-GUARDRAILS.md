@@ -40,6 +40,9 @@ them. If a change violates any rule, it is aborted and rolled back.
 ## 4. Reporting
 - Every iteration posts to `#kb-site-status` (via `scripts/post_status.py`):
   what changed, test result, and the screenshot path/link.
+- At the start of every iteration run `python3 scripts/post_status.py --retain-only`
+  so the channel stays a rolling 7-day view while full history is archived to
+  `/opt/data/logs/channel-history/kb-site-status/` (not a separate cron).
 - If the loop is BLOCKED (needs Vercel URL, KV keys, OAuth domain, or a human
   decision), it posts with `--mention` + `--pin` so Pepuldo is pinged and can
   find it pinned.

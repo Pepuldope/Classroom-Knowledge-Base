@@ -836,6 +836,34 @@ summary::-webkit-details-marker { color: var(--muted); }
   justify-content: space-between;
 }
 .settings-row-toggle input { width: 18px; height: 18px; }
+.settings-fieldset {
+  margin: 0.25rem 0 0.8rem;
+  padding: 0.65rem 0.75rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.settings-fieldset legend {
+  padding: 0 0.35rem;
+  color: var(--fg);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.settings-checklist {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.35rem 0.75rem;
+  max-height: 12rem;
+  overflow: auto;
+}
+.settings-check-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+  color: var(--fg);
+  font-size: 0.84rem;
+}
+.settings-check-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .settings-account {
   display: flex;
   align-items: center;

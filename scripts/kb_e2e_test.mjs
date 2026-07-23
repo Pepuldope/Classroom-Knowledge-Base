@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
@@ -196,6 +196,28 @@ test("buildLocalSearchResponse searches a cached private bundle and applies face
   assert.equal(response.results[0].course, "BEng Y1");
   assert.ok(response.filters.courses.includes("ELA 1 Gama"));
   assert.ok(response.results[0]._snippet, "local results retain snippets");
+});
+
+test("Settings default scope resolves to live local course filters", () => {
+  assert.deepEqual(kbScopeFilters({ defaultScope: "all" }, {}, { currentCourse: "Math", pinnedCourses: ["Math"] }), { courses: [] });
+  assert.deepEqual(kbScopeFilters({ defaultScope: "current" }, {}, { currentCourse: "Math" }), { courses: ["Math"] });
+  assert.deepEqual(kbScopeFilters({ defaultScope: "pinned" }, {}, { currentCourse: "Math", pinnedCourses: ["Math", "History"] }), { courses: ["Math", "History"] });
+  assert.deepEqual(kbScopeFilters({ defaultScope: "current" }, { course: "History" }, { currentCourse: "Math" }), { courses: ["History"] });
+});
+
+test("pinned course settings keep only unique non-empty course names", () => {
+  assert.deepEqual(kbPinnedCoursesModel([" Math ", "", "Math", null, "History"]), ["Math", "History"]);
+  assert.deepEqual(kbPinnedCoursesModel("Math"), []);
+});
+
+test("local search accepts a multi-course scope filter", () => {
+  const bundle = { version: 1, notes: [
+    { t: "Algebra", s: "Practice", x: "", course: "Math" },
+    { t: "Essay", s: "Practice", x: "", course: "History" },
+  ] };
+  const response = buildLocalSearchResponse(bundle, "practice", { courses: ["History"] });
+  assert.equal(response.filteredCount, 1);
+  assert.equal(response.results[0].course, "History");
 });
 
 test("local search boosts course and topic matches for a multi-term study query", () => {

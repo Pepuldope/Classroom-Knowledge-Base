@@ -66,13 +66,16 @@ export function kbFilterModel(filters, active = {}) {
 
 /** Search a cached private bundle without a network round-trip. */
 export function buildLocalSearchResponse(bundle, query, {
-  course = "", year = "", kind = "", family = "", sort = "relevance", limit = 8,
+  course = "", courses = [], year = "", kind = "", family = "", sort = "relevance", limit = 8,
 } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const withFamilies = notes.map((note) => note?.family ? note : ({ ...note, family: deriveFamily(note?.course) || "" }));
+  const scopedCourses = new Set((Array.isArray(courses) ? courses : [])
+    .map((value) => String(value || "").trim()).filter(Boolean));
   const filtered = withFamilies
     .map((note, index) => ({ note, index }))
     .filter(({ note }) =>
+      (!scopedCourses.size || scopedCourses.has(note.course || "")) &&
       (!course || (note.course || "") === course) &&
       (!year || (note.y || "") === year) &&
       (!kind || (note.kind || "") === kind) &&
@@ -128,6 +131,7 @@ const STUDY_LIST_KEY = "cwa_tutor_study_list";
 const STUDY_ACTIVITY_KEY = "cwa_kb_study_activity";
 const STUDY_PROGRESS_KEY = "cwa_kb_note_progress";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
+const KB_PINNED_COURSES_KEY = "cwa_kb_pinned_courses";
 
 /** Normalize the last-used local KB filter state; unknown values never persist. */
 export function kbSearchStateModel(value = {}) {
@@ -149,6 +153,28 @@ export function initialKbSearchState(saved, settings = {}) {
   return kbSearchStateModel({ sort: preferredSort });
 }
 
+/** Resolve the Settings default scope without overriding an explicit course filter. */
+export function kbScopeFilters(settings = {}, active = {}, { currentCourse = "", pinnedCourses = [] } = {}) {
+  if (active?.course) return { courses: [String(active.course)] };
+  const scope = settings?.defaultScope;
+  if (scope === "current") {
+    const course = String(currentCourse || "").trim();
+    return { courses: course ? [course] : [] };
+  }
+  if (scope === "pinned") {
+    const courses = [...new Set((Array.isArray(pinnedCourses) ? pinnedCourses : [])
+      .map((course) => String(course || "").trim()).filter(Boolean))];
+    return { courses };
+  }
+  return { courses: [] };
+}
+
+/** Normalize the browser-local pinned course list used by the default scope. */
+export function kbPinnedCoursesModel(value = []) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((course) => String(course || "").trim()).filter(Boolean))];
+}
+
 /** Keep the browse default useful without overriding an explicit query sort. */
 export function kbSortForQuery(query, sort, { explicit = false } = {}) {
   const selected = KB_SEARCH_SORTS.has(sort) ? sort : "relevance";
@@ -166,6 +192,18 @@ export function saveKbSearchState(value) {
   const state = kbSearchStateModel(value);
   try { localStorage.setItem(KB_SEARCH_STATE_KEY, JSON.stringify(state)); } catch {}
   return state;
+}
+
+export function loadKbPinnedCourses() {
+  try {
+    return kbPinnedCoursesModel(JSON.parse(localStorage.getItem(KB_PINNED_COURSES_KEY) || "[]"));
+  } catch { return []; }
+}
+
+export function saveKbPinnedCourses(value) {
+  const courses = kbPinnedCoursesModel(value);
+  try { localStorage.setItem(KB_PINNED_COURSES_KEY, JSON.stringify(courses)); } catch {}
+  return courses;
 }
 
 /** Normalize locally saved tutor answers; malformed entries never reach the UI. */
@@ -933,12 +971,17 @@ let kbActiveKind = "";
 let kbActiveFamily = "";
 let kbActiveSort = "relevance";
 let kbSortExplicit = false;
+let kbCurrentCourse = "";
 
 async function runKbSearch(query) {
   const results = $("kbResults");
   if (!results) return;
   query = (query || "").trim();
   const effectiveSort = kbSortForQuery(query, kbActiveSort, { explicit: kbSortExplicit });
+  const scope = kbScopeFilters(loadKbSettings(), { course: kbActiveCourse }, {
+    currentCourse: kbCurrentCourse,
+    pinnedCourses: loadKbPinnedCourses(),
+  });
   const sortSelect = $("kbSort");
   if (sortSelect) sortSelect.value = effectiveSort;
   if (!query) {
@@ -968,6 +1011,7 @@ async function runKbSearch(query) {
     if (localKbBundle?.notes?.length) {
       d = buildLocalSearchResponse(localKbBundle, query, {
         course: kbActiveCourse,
+        courses: kbActiveCourse ? [] : scope.courses,
         year: kbActiveYear,
         kind: kbActiveKind,
         family: kbActiveFamily,
@@ -1168,6 +1212,7 @@ async function loadBrowseCourses() {
 }
 
 async function openCourse(course) {
+  kbCurrentCourse = String(course || "").trim();
   const list = $("kbBrowseCourses");
   const notesEl = $("kbBrowseNotes");
   const back = $("kbBrowseBack");

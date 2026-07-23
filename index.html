@@ -369,6 +369,11 @@
         <label class="settings-row settings-row-toggle"><span>Enable AI tutor</span><input type="checkbox" id="kbPrefTutorEnabled" checked /></label>
         <label class="settings-row"><span>Tutor effort</span><select class="settings-select" id="kbPrefTutorEffort"><option value="quick">Quick</option><option value="tutor">Tutor</option><option value="hard">Deep</option></select></label>
         <label class="settings-row"><span>Default search scope</span><select class="settings-select" id="kbPrefScope"><option value="all">All courses</option><option value="current">Current course</option><option value="pinned">Pinned courses</option></select></label>
+        <fieldset class="settings-fieldset" id="kbPinnedCoursesFieldset">
+          <legend>Pinned courses</legend>
+          <p class="settings-hint">Used when your default scope is set to Pinned courses. These choices stay in this browser.</p>
+          <div id="kbPinnedCoursesList" class="settings-checklist"><span class="settings-hint">No local courses loaded yet.</span></div>
+        </fieldset>
         <label class="settings-row"><span>Default sort</span><select class="settings-select" id="kbPrefSort"><option value="relevance">Relevance</option><option value="recency">Newest first</option><option value="course">By course</option><option value="title">By title</option></select></label>
         <label class="settings-row"><span>Related notes <output id="kbPrefRelatedCountValue">3</output></span><input id="kbPrefRelatedCount" type="range" min="1" max="8" value="3" /></label>
         <label class="settings-row"><span>Reading density</span><select class="settings-select" id="kbPrefDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
