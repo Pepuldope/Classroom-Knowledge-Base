@@ -231,7 +231,10 @@ nontrivial architecture decisions. Then: check → plan → implement → test.
   results over a corpus of hundreds of real notes (NOT the empty set).
 - `/api/kb-search` `filters.courses` / `filters.years` list MANY courses/years.
 - `/api/kb-related?id=<n>` returns related notes in <1s.
-- Live site redeployed and the live e2e (`KB_LIVE_URL` set) passes.
+- Live site redeployed and the live e2e passes. `scripts/kb_live_test.mjs` and
+  `scripts/test.sh` default to `https://classroom-knowledge-google.vercel.app`
+  when `KB_LIVE_URL` is unset (override for previews; skip only with
+  `KB_SKIP_LIVE=1`). Never report "works on live" after a skipped live e2e.
 - **BACKLOG REPLENISH (hard — owner 2026-07-23):** before ending the run,
   `ROADMAP.md` section `## 🤖 Agent-Proposed Backlog` MUST contain **at least
   3 unchecked** `- [ ]` items that the *next* tick can pick up. Shipping and

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # test.sh — combined test gate for the Classroom Knowledge Base.
-# Runs the fast API tests + the real-browser UI e2e (local), and optionally the
-# live-site e2e (only if KB_LIVE_URL is set). Used by the autonomous loop's
-# verification step and by `scripts/guard.py`.
+# Runs the fast API tests + the real-browser UI e2e (local), then the live-site
+# e2e against production (or KB_LIVE_URL). Skip live with KB_SKIP_LIVE=1.
+# Used by the autonomous loop's verification step and by `scripts/guard.py`.
 #
 # Usage: bash scripts/test.sh [port]
 #   port  defaults to 4321 (the dev-server port)
@@ -85,11 +85,14 @@ kill "$SRV" 2>/dev/null
 
 if [ "$UI_OK" -ne 0 ]; then echo "UI e2e FAILED"; exit 1; fi
 
-echo "==> Live-site e2e (skipped if KB_LIVE_URL unset)"
-if [ -z "${KB_LIVE_URL:-}" ]; then
-  echo "[live] KB_LIVE_URL unset — skipping live verification."
+echo "==> Live-site e2e (default production; set KB_SKIP_LIVE=1 to skip)"
+if [ "${KB_SKIP_LIVE:-}" = "1" ] || [ "${KB_SKIP_LIVE:-}" = "true" ] || [ "${KB_LIVE_URL:-}" = "skip" ]; then
+  echo "[live] KB_SKIP_LIVE — skipping live verification."
   LIVE_OK=0
 else
+  # Default matches kb_live_test.mjs / seed-vault so cron never silently skips.
+  export KB_LIVE_URL="${KB_LIVE_URL:-https://classroom-knowledge-google.vercel.app}"
+  echo "[live] KB_LIVE_URL=$KB_LIVE_URL"
   node scripts/kb_live_test.mjs
   LIVE_OK=$?
 fi

@@ -2,21 +2,28 @@
 // site (Vercel / any public URL). Run AFTER each push so we verify production,
 // not just the local simulation.
 //
-// Requires KB_LIVE_URL (the public site root). If unset, the script exits 0
-// (no-op) so local/test runs don't fail when production isn't configured yet.
+// Default target is the production alias (same as seed-vault / visual audits).
+// Override with KB_LIVE_URL; skip intentionally with KB_SKIP_LIVE=1.
 //
-//   KB_LIVE_URL=https://your-app.vercel.app node scripts/kb_live_test.mjs
+//   node scripts/kb_live_test.mjs
+//   KB_LIVE_URL=https://your-preview.vercel.app node scripts/kb_live_test.mjs
+//   KB_SKIP_LIVE=1 node scripts/kb_live_test.mjs
 //
 // Exit 0 = pass (or skipped), non-zero = production regression detected.
 
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
-const LIVE = process.env.KB_LIVE_URL;
-if (!LIVE) {
-  console.log("[KB live e2e] KB_LIVE_URL not set — skipping live verification.");
+const DEFAULT_LIVE = "https://classroom-knowledge-google.vercel.app";
+const skipLive =
+  process.env.KB_SKIP_LIVE === "1" ||
+  process.env.KB_SKIP_LIVE === "true" ||
+  process.env.KB_LIVE_URL === "skip";
+if (skipLive) {
+  console.log("[KB live e2e] KB_SKIP_LIVE set — skipping live verification.");
   process.exit(0);
 }
+const LIVE = (process.env.KB_LIVE_URL || DEFAULT_LIVE).replace(/\/$/, "");
 
 const results = [];
 function check(name, fn) {
