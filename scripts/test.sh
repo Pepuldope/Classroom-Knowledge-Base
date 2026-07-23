@@ -76,6 +76,11 @@ BASE_URL="http://localhost:$PORT" node scripts/settings_ui_test.mjs
 SETTINGS_OK=$?
 if [ "$SETTINGS_OK" -ne 0 ]; then echo "settings styling e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Cross-view continuity smoke (local)"
+BASE_URL="http://localhost:$PORT" node scripts/continuity_smoke_test.mjs
+CONTINUITY_OK=$?
+if [ "$CONTINUITY_OK" -ne 0 ]; then echo "continuity smoke FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 kill "$SRV" 2>/dev/null
 
 if [ "$UI_OK" -ne 0 ]; then echo "UI e2e FAILED"; exit 1; fi
