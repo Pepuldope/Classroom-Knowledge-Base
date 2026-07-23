@@ -1167,6 +1167,7 @@ function openSettingsModal() {
 function switchSettingsTab(name) {
   document.querySelectorAll(".settings-tab").forEach((t) => {
     t.classList.toggle("active", t.dataset.tab === name);
+    t.setAttribute("aria-selected", t.dataset.tab === name ? "true" : "false");
   });
   document.querySelectorAll(".settings-pane").forEach((p) => {
     p.hidden = p.dataset.pane !== name;

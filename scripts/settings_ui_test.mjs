@@ -60,6 +60,18 @@ try {
   assert.equal(await page.locator("#kbSwitchAccount").count(), 1, "Settings should offer account switching");
   assert.equal(await page.locator("#kbSignOut").count(), 1, "Settings should offer sign out");
 
+  // Settings tabs must expose their selected pane to keyboard and assistive-technology users.
+  await page.evaluate(() => {
+    const tabs = [...document.querySelectorAll(".settings-tab")];
+    const target = tabs.find((tab) => tab.dataset.tab === "knowledge-base");
+    if (!target) throw new Error("Knowledge Base settings tab is missing");
+    target.click();
+  });
+  const activeTab = page.locator('.settings-tab[data-tab="knowledge-base"]');
+  assert.equal(await activeTab.getAttribute("aria-selected"), "true", "selected Settings tab should expose aria-selected=true");
+  assert.equal(await page.locator('.settings-tab[data-tab="classes"]').getAttribute("aria-selected"), "false", "inactive Settings tab should expose aria-selected=false");
+  assert.equal(await page.locator('[data-pane="knowledge-base"]').getAttribute("aria-labelledby"), await activeTab.getAttribute("id"), "selected pane should be labelled by its tab");
+
   const privacy = page.locator("#kbPrivacySummary");
   assert.equal(await privacy.count(), 1, "Knowledge Base settings should explain local storage and tutor sharing");
   assert.match(await privacy.textContent(), /stay in this browser/i);

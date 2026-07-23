@@ -284,20 +284,20 @@
       <h3>Settings</h3>
       <button id="settingsClose" aria-label="Close">×</button>
     </header>
-    <nav class="settings-tabs">
-      <button class="settings-tab active" data-tab="classes">Classes</button>
-      <button class="settings-tab" data-tab="ai">AI</button>
-      <button class="settings-tab" data-tab="display">Display</button>
-      <button class="settings-tab" data-tab="archive">Archive</button>
-      <button class="settings-tab" data-tab="knowledge-base">Knowledge Base</button>
-      <button class="settings-tab" data-tab="about">About</button>
+    <nav class="settings-tabs" role="tablist" aria-label="Settings sections">
+      <button id="settingsTab-classes" role="tab" aria-controls="settingsPane-classes" aria-selected="true" class="settings-tab active" data-tab="classes">Classes</button>
+      <button id="settingsTab-ai" role="tab" aria-controls="settingsPane-ai" aria-selected="false" class="settings-tab" data-tab="ai">AI</button>
+      <button id="settingsTab-display" role="tab" aria-controls="settingsPane-display" aria-selected="false" class="settings-tab" data-tab="display">Display</button>
+      <button id="settingsTab-archive" role="tab" aria-controls="settingsPane-archive" aria-selected="false" class="settings-tab" data-tab="archive">Archive</button>
+      <button id="settingsTab-knowledge-base" role="tab" aria-controls="settingsPane-knowledge-base" aria-selected="false" class="settings-tab" data-tab="knowledge-base">Knowledge Base</button>
+      <button id="settingsTab-about" role="tab" aria-controls="settingsPane-about" aria-selected="false" class="settings-tab" data-tab="about">About</button>
     </nav>
     <div class="settings-body">
-      <section class="settings-pane" data-pane="classes">
+      <section id="settingsPane-classes" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-classes" data-pane="classes">
         <p class="modal-sub">Pick which classes show up in your report. Hidden classes are still in Classroom — just not on this site.</p>
         <div id="classesList"></div>
       </section>
-      <section class="settings-pane" data-pane="ai" hidden>
+      <section id="settingsPane-ai" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-ai" data-pane="ai" hidden>
         <p class="modal-sub">AI model and personal API key. Bring your own OpenRouter key to bypass the daily limit.</p>
         <label class="settings-row">
           <span>AI model</span>
@@ -311,7 +311,7 @@
         </label>
         <p class="settings-hint">Coming soon — currently uses the shared default key with a daily limit.</p>
       </section>
-      <section class="settings-pane" data-pane="display" hidden>
+      <section id="settingsPane-display" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-display" data-pane="display" hidden>
         <p class="modal-sub">How the report looks and behaves.</p>
         <label class="settings-row settings-row-toggle">
           <span>Show submitted assignments in lists</span>
@@ -337,7 +337,7 @@
           </select>
         </label>
       </section>
-      <section class="settings-pane" data-pane="archive" hidden>
+      <section id="settingsPane-archive" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-archive" data-pane="archive" hidden>
         <p class="modal-sub">Load a personal archive.json bundle — a past-years export of your Obsidian vault built by a separate pipeline — to search old notes and let the AI reference what you've already learned. Nothing here is ever uploaded; it stays in this browser.</p>
         <div id="archiveStatus" class="archive-status">No archive loaded.</div>
         <label class="settings-row">
@@ -349,7 +349,7 @@
           <button id="archiveRemoveBtn" type="button" hidden>Remove archive</button>
         </div>
       </section>
-      <section class="settings-pane" data-pane="knowledge-base" hidden>
+      <section id="settingsPane-knowledge-base" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-knowledge-base" data-pane="knowledge-base" hidden>
         <p class="modal-sub">Your knowledge base is stored only in this browser. Tutor requests send only the notes needed for the current question.</p>
         <div class="settings-account" role="status">
           <strong id="kbAccountStatus">Not signed in</strong>
@@ -377,7 +377,7 @@
         <div class="settings-row"><button id="kbPrefExport" type="button">Download my KB</button><button id="kbPrefExportBook" type="button">Download study book</button><button id="kbPrefClear" type="button">Clear local KB</button></div>
         <p class="settings-hint" id="kbPrefStatus" role="status"></p>
       </section>
-      <section class="settings-pane" data-pane="about" hidden>
+      <section id="settingsPane-about" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-about" data-pane="about" hidden>
         <p class="modal-sub">Classroom Analyzer · personal study dashboard with AI tutor.</p>
         <p class="settings-hint">Built on top of Google Classroom + OpenRouter. Source on GitHub.</p>
       </section>
