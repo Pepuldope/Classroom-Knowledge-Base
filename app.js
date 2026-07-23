@@ -1436,6 +1436,9 @@ async function onSignedIn() {
   } catch (e) {
     if (epoch === sessionEpoch) setStatus(e.message, true);
   }
+  if (epoch === sessionEpoch) {
+    import("./kb.js").then(({ maybeAutoBuildKb }) => maybeAutoBuildKb()).catch(() => {});
+  }
 }
 
 function dueDateObj(a) {

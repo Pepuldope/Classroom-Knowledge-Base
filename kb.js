@@ -371,6 +371,17 @@ export function shouldProbeLegacyKb(bundle) {
   return !Array.isArray(bundle?.notes) || bundle.notes.length === 0;
 }
 
+export function shouldAutoBuildKb(settings = {}, bundle = null) {
+  return settings?.autoBuild === true && (!Array.isArray(bundle?.notes) || bundle.notes.length === 0);
+}
+
+export async function maybeAutoBuildKb() {
+  const bundle = await loadKbBundle();
+  if (!shouldAutoBuildKb(loadKbSettings(), bundle)) return false;
+  startScrape();
+  return true;
+}
+
 export function showKbView() {
   wireKbEvents(); // ensure search/tutor listeners are attached (idempotent)
   markStudyActivity();
@@ -760,7 +771,7 @@ function currentAccessToken() {
   return (typeof window !== "undefined" && window.__cwaAccessToken) || loadKbToken() || null;
 }
 
-async function startScrape() {
+export async function startScrape() {
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
   const showStatus = (msg, isError) => {

@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
@@ -116,6 +116,13 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     autoBuild: true,
     speechRate: 1,
   });
+});
+
+test("auto-build only triggers when enabled and no local bundle exists", () => {
+  assert.equal(shouldAutoBuildKb({ autoBuild: true }, null), true);
+  assert.equal(shouldAutoBuildKb({ autoBuild: true }, { version: 1, notes: [] }), true);
+  assert.equal(shouldAutoBuildKb({ autoBuild: true }, { version: 1, notes: [{ t: "Existing" }] }), false);
+  assert.equal(shouldAutoBuildKb({ autoBuild: false }, null), false);
 });
 
 test("related notes use the configured local limit and clamp invalid values", () => {
