@@ -89,6 +89,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB Settings: make the existing Comfortable / Compact reading-density control change KB result spacing locally (2026-07-22).
 - [x] Settings: keep Knowledge Base range controls and local export/clear actions live across repeated visits (2026-07-22).
 - [x] Settings: opt-in auto-build starts a private Classroom KB after sign-in only when no local bundle exists (2026-07-23).
+- [x] KB: use relevance sorting for active searches while retaining newest-first on the browse surface (2026-07-23).
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

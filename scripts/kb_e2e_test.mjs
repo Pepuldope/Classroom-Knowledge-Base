@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
@@ -165,6 +165,13 @@ test("initial KB search state uses the saved Settings sort when no search state 
   assert.equal(initialKbSearchState(null, { defaultSort: "title" }).sort, "title");
   assert.equal(initialKbSearchState({}, { defaultSort: "course" }).sort, "course");
   assert.equal(initialKbSearchState({ sort: "recency", course: "Math" }, { defaultSort: "title" }).sort, "recency");
+});
+
+test("KB uses relevance for a query when recency is only the browse default", () => {
+  assert.equal(kbSortForQuery("", "recency"), "recency");
+  assert.equal(kbSortForQuery("Algebra", "recency"), "relevance");
+  assert.equal(kbSortForQuery("Algebra", "recency", { explicit: true }), "recency");
+  assert.equal(kbSortForQuery("Algebra", "title"), "title");
 });
 
 test("buildLocalSearchResponse searches a cached private bundle and applies facets locally", () => {

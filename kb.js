@@ -137,6 +137,12 @@ export function initialKbSearchState(saved, settings = {}) {
   return kbSearchStateModel({ sort: preferredSort });
 }
 
+/** Keep the browse default useful without overriding an explicit query sort. */
+export function kbSortForQuery(query, sort, { explicit = false } = {}) {
+  const selected = KB_SEARCH_SORTS.has(sort) ? sort : "relevance";
+  return String(query || "").trim() && selected === "recency" && !explicit ? "relevance" : selected;
+}
+
 export function loadKbSearchState() {
   try {
     const raw = JSON.parse(localStorage.getItem(KB_SEARCH_STATE_KEY) || "null");
@@ -671,12 +677,16 @@ let _kbWired = false;
 export function wireKbEvents() {
   if (_kbWired) return; // idempotent — safe to call multiple times
   _kbWired = true;
-  const savedSearchState = loadKbSearchState();
-  kbActiveCourse = savedSearchState.course;
-  kbActiveYear = savedSearchState.year;
-  kbActiveKind = savedSearchState.kind;
-  kbActiveFamily = savedSearchState.family;
-  kbActiveSort = savedSearchState.sort;
+  let savedSearchState = null;
+  try { savedSearchState = JSON.parse(localStorage.getItem(KB_SEARCH_STATE_KEY) || "null"); } catch {}
+  const sortWasSaved = savedSearchState && typeof savedSearchState === "object" && Object.keys(savedSearchState).length > 0;
+  kbSortExplicit = Boolean(sortWasSaved);
+  const loadedSearchState = loadKbSearchState();
+  kbActiveCourse = loadedSearchState.course;
+  kbActiveYear = loadedSearchState.year;
+  kbActiveKind = loadedSearchState.kind;
+  kbActiveFamily = loadedSearchState.family;
+  kbActiveSort = loadedSearchState.sort;
   const buildBtn = $("kbBuildBtn");
   const fileLink = $("kbLoadFileLink");
   const fileInput = $("kbFileInput");
@@ -712,6 +722,7 @@ export function wireKbEvents() {
   const sortSel = $("kbSort");
   if (sortSel) sortSel.value = kbActiveSort;
   sortSel?.addEventListener("change", () => {
+    kbSortExplicit = true;
     kbActiveSort = sortSel.value || "relevance";
     saveKbSearchState({ course: kbActiveCourse, year: kbActiveYear, kind: kbActiveKind, family: kbActiveFamily, sort: kbActiveSort });
     const input = $("kbSearchInput");
@@ -897,11 +908,15 @@ let kbActiveYear = "";
 let kbActiveKind = "";
 let kbActiveFamily = "";
 let kbActiveSort = "relevance";
+let kbSortExplicit = false;
 
 async function runKbSearch(query) {
   const results = $("kbResults");
   if (!results) return;
   query = (query || "").trim();
+  const effectiveSort = kbSortForQuery(query, kbActiveSort, { explicit: kbSortExplicit });
+  const sortSelect = $("kbSort");
+  if (sortSelect) sortSelect.value = effectiveSort;
   if (!query) {
     results.hidden = true;
     results.innerHTML = "";
@@ -924,7 +939,7 @@ async function runKbSearch(query) {
     if (kbActiveYear) params.set("year", kbActiveYear);
     if (kbActiveKind) params.set("kind", kbActiveKind);
     if (kbActiveFamily) params.set("family", kbActiveFamily);
-    if (kbActiveSort && kbActiveSort !== "relevance") params.set("sort", kbActiveSort);
+    if (effectiveSort && effectiveSort !== "relevance") params.set("sort", effectiveSort);
     let d;
     if (localKbBundle?.notes?.length) {
       d = buildLocalSearchResponse(localKbBundle, query, {
@@ -932,7 +947,7 @@ async function runKbSearch(query) {
         year: kbActiveYear,
         kind: kbActiveKind,
         family: kbActiveFamily,
-        sort: kbActiveSort,
+        sort: effectiveSort,
         limit: 8,
       });
     } else {
