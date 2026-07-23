@@ -30,7 +30,7 @@ import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
-import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
+import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } from "../api/tutor.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
 function makeReq(url, method = "GET") {
@@ -79,6 +79,20 @@ test("tutor language preference adds a bounded Slovak instruction and defaults t
   assert.equal(tutorLanguageInstruction(), "");
   assert.equal(tutorLanguageInstruction("sk"), "Reply in Slovak (slovenčina), while keeping note titles and quoted source text unchanged.");
   assert.equal(tutorLanguageInstruction("de"), "");
+});
+
+test("planner tutor messages ground the assignment and preserve multi-turn history", () => {
+  const messages = buildTutorMessages([
+    { role: "user", content: "What do I need to submit?" },
+    { role: "assistant", content: "Check the assignment note." },
+  ], [{ t: "Algebra worksheet", course: "Math", x: "Submit questions 1–5." }], "en");
+  assert.equal(messages[0].role, "system");
+  assert.match(messages[0].content, /Algebra worksheet/);
+  assert.match(messages[0].content, /Submit questions 1–5/);
+  assert.deepEqual(messages.slice(1), [
+    { role: "user", content: "What do I need to submit?" },
+    { role: "assistant", content: "Check the assignment note." },
+  ]);
 });
 
 test("tutorSpeechModel gives read-aloud controls stable labels and safe text", () => {

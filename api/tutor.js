@@ -50,6 +50,13 @@ function buildSystemPrompt(notes, language = "en") {
   ].join("\n");
 }
 
+/** Build the shared grounded conversation used by KB and Planner tutor clients. */
+export function buildTutorMessages(messages, notes, language = "en") {
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  const safeNotes = normalizeTutorNotes(notes);
+  return [{ role: "system", content: buildSystemPrompt(safeNotes, language) }, ...safeMessages];
+}
+
 export default async function handler(req) {
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
@@ -69,8 +76,7 @@ export default async function handler(req) {
   const notes = normalizeTutorNotes(body.notes);
   const language = body.language === "sk" ? "sk" : "en";
 
-  const systemPrompt = buildSystemPrompt(notes, language);
-  const messages = [{ role: "system", content: systemPrompt }, ...body.messages];
+  const messages = buildTutorMessages(body.messages, notes, language);
 
   // Build the source descriptors we'll surface as clickable chips (noteIndex
   // so the UI can open the full note). Emitted early as a control SSE event.
