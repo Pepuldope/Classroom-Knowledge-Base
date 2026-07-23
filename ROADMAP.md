@@ -91,12 +91,13 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Settings: opt-in auto-build starts a private Classroom KB after sign-in only when no local bundle exists (2026-07-23).
 - [x] KB: use relevance sorting for active searches while retaining newest-first on the browse surface (2026-07-23).
 - [x] Settings: improve Settings tab accessibility (tablist/tab/tabpanel + aria-selected sync; 2026-07-23).
-- [ ] Tutor: unify Planner assignment-help tutor with the KB tutor pipeline (shared streaming, provider rotation, multi-turn, privacy-bounded context) without breaking Planner cards.
+- [x] Tutor: unify Planner assignment-help tutor with the KB tutor pipeline (shared streaming, provider rotation, multi-turn, privacy-bounded context) without breaking Planner cards. Shipped 2026-07-23 in `da5a7e7`: Planner now sends bounded assignment/archive notes and its existing history through `/api/tutor`.
 - [x] Settings: wire default search scope (all / current course / pinned courses) into live local KB search behavior, not only the control UI. Shipped 2026-07-23: local scope filtering now honors persisted pinned-course selections from the Settings editor.
 - [ ] Perf: cut hosted legacy `/api/kb-search` cold latency toward <1s while keeping the private IndexedDB path instant (measure before/after; do not break local fast path).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
 - [x] Continuity: automated smoke that opens Archive + Planner + Settings after KB changes and fails the run if any view errors (extend existing browser gates). Shipped 2026-07-23: `scripts/continuity_smoke_test.mjs` now exercises the shared navigation and Settings modal, and runs in `scripts/test.sh`.
 - [ ] Tutor: optional local “study mode” that turns the last grounded answer into 3 short quiz questions without uploading extra notes beyond the answer context.
+- [ ] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question.
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
