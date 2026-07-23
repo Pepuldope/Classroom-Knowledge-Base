@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
@@ -36,6 +36,16 @@ import { normalizeTutorNotes, tutorLanguageInstruction } from "../api/tutor.js";
 function makeReq(url, method = "GET") {
   return new Request("http://localhost" + url, { method });
 }
+
+test("kbResultNavigationIndex wraps keyboard movement through result cards", () => {
+  assert.equal(kbResultNavigationIndex(-1, "ArrowDown", 3), 0);
+  assert.equal(kbResultNavigationIndex(-1, "ArrowUp", 3), 2);
+  assert.equal(kbResultNavigationIndex(2, "j", 3), 0);
+  assert.equal(kbResultNavigationIndex(0, "ArrowUp", 3), 2);
+  assert.equal(kbResultNavigationIndex(1, "k", 3), 0);
+  assert.equal(kbResultNavigationIndex(1, "PageDown", 3), null);
+  assert.equal(kbResultNavigationIndex(0, "ArrowDown", 0), null);
+});
 
 test("readShardedSlices starts all shard reads concurrently and preserves order", async () => {
   let active = 0;

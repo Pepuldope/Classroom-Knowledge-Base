@@ -28,6 +28,18 @@ export const INTERACTIVE_OAUTH_PROMPT = "select_account";
 const KB_TOKEN_KEY = "cwa_kb_token";
 export { highlightSnippet, bundleToMarkdown, bundleToCsv };
 
+/** Return the next result-card index for keyboard navigation, or null when unused. */
+export function kbResultNavigationIndex(current, key, count) {
+  if (!Number.isInteger(count) || count < 1) return null;
+  const forward = key === "ArrowDown" || key === "j";
+  const backward = key === "ArrowUp" || key === "k";
+  if (!forward && !backward) return null;
+  const index = Number.isInteger(current) ? current : -1;
+  if (index < 0) return forward ? 0 : count - 1;
+  const delta = forward ? 1 : -1;
+  return (index + delta + count) % count;
+}
+
 // ---------------------------------------------------------------------------
 // Pure filter model (no DOM): turn the raw facet lists from /api/kb-search
 // into a complete, untruncated list of courses + years with the active
@@ -750,6 +762,18 @@ export function wireKbEvents() {
     } else if (e.key === "Escape" && e.target && e.target.id === "kbSearchInput") {
       e.target.value = "";
       runKbSearch("");
+    }
+
+    const resultList = $("kbResults");
+    const cards = resultList ? [...resultList.querySelectorAll(".kb-result-card")] : [];
+    const activeCard = cards.indexOf(document.activeElement);
+    const fromSearch = e.target?.id === "kbSearchInput";
+    if (cards.length && (fromSearch || activeCard >= 0)) {
+      const next = kbResultNavigationIndex(fromSearch ? -1 : activeCard, e.key, cards.length);
+      if (next !== null) {
+        e.preventDefault();
+        cards[next].focus();
+      }
     }
   });
 

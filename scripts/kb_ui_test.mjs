@@ -154,6 +154,22 @@ try {
     assert.ok(n > 0, "expected at least one result card");
   });
 
+  await check("arrow keys move focus through result cards and Enter opens one", async () => {
+    await page.fill("#kbSearchInput", "cover letter");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelectorAll("#kbResults .kb-result-card").length > 0, null, { timeout: 10000 });
+    await page.click("#kbSearchInput");
+    await page.keyboard.press("ArrowDown");
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("kb-result-card")), true);
+    const firstIndex = await page.evaluate(() => document.activeElement?.dataset.noteIndex);
+    await page.keyboard.press("ArrowDown");
+    const secondIndex = await page.evaluate(() => document.activeElement?.dataset.noteIndex);
+    assert.notEqual(secondIndex, firstIndex, "ArrowDown should advance to the next result");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
+    await page.click("#kbNoteClose");
+  });
+
   // Regression guard for the 2026-07-14 stray-return bug: when the server
   // returns real result cards, a "No matches" empty state must NOT also be
   // rendered (a stray empty div + premature `return` once killed the result
