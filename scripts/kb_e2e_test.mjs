@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -711,6 +711,24 @@ test("tutorFeedbackModel keeps only local thumbs ratings and toggles the same ra
   assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "a1", rating: "down" }), { a1: "down" });
   assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "", rating: "down" }), { a1: "up" });
 });
+
+test("studyModeModel turns a grounded answer into three local quiz prompts", () => {
+  assert.deepEqual(studyModeModel("  Photosynthesis converts light into chemical energy.  "), {
+    title: "Study mode",
+    questions: [
+      "What is the main idea of this answer?",
+      "Which detail from this answer would you explain to a classmate?",
+      "How could you apply or check this idea?",
+    ],
+    source: "Photosynthesis converts light into chemical energy.",
+  });
+});
+
+test("studyModeModel rejects an empty answer", () => {
+  assert.equal(studyModeModel("   "), null);
+});
+
+
 
 // Tutor source attribution: the tutor must SHOW WHICH NOTES it used, as
 // clickable chips that jump to the note. The pure transform tutorSourceList()

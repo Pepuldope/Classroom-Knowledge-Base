@@ -491,6 +491,15 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-radius: 4px;
 }
 .msg-action:hover { background: rgba(0,0,0,0.08); color: var(--fg); }
+.ai-study-mode-panel {
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent-bg) 55%, transparent);
+  font-size: 0.88rem;
+}
+.ai-study-mode-panel ol { margin: 0.35rem 0; }
+.ai-study-mode-panel small { color: var(--muted); }
 @media (max-width: 640px) {
   .msg-actions { opacity: 1; }
 }

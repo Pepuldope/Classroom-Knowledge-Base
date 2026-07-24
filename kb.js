@@ -1494,6 +1494,20 @@ export function copyableTutorText(text) {
   return typeof text === "string" ? text.trim() : "";
 }
 
+export function studyModeModel(text) {
+  const source = copyableTutorText(text);
+  if (!source) return null;
+  return {
+    title: "Study mode",
+    questions: [
+      "What is the main idea of this answer?",
+      "Which detail from this answer would you explain to a classmate?",
+      "How could you apply or check this idea?",
+    ],
+    source,
+  };
+}
+
 export function tutorSpeechModel(text, speaking = false) {
   const clean = copyableTutorText(text);
   if (!clean) return null;
@@ -1652,6 +1666,38 @@ function addTutorStudyAction(messageEl, text) {
   messageEl.appendChild(button);
 }
 
+function addTutorStudyModeAction(messageEl, text) {
+  const model = studyModeModel(text);
+  if (!messageEl || !model || messageEl.querySelector(".ai-study-mode-btn")) return;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ai-study-mode-btn msg-action";
+  button.textContent = "Study mode";
+  button.title = "Turn this grounded answer into three local quiz questions";
+  const panel = document.createElement("div");
+  panel.className = "ai-study-mode-panel";
+  panel.hidden = true;
+  const heading = document.createElement("strong");
+  heading.textContent = model.title;
+  panel.appendChild(heading);
+  const list = document.createElement("ol");
+  for (const question of model.questions) {
+    const item = document.createElement("li");
+    item.textContent = question;
+    list.appendChild(item);
+  }
+  panel.appendChild(list);
+  const note = document.createElement("small");
+  note.textContent = "Generated locally from the answer already on this page — no extra notes were uploaded.";
+  panel.appendChild(note);
+  button.addEventListener("click", () => {
+    panel.hidden = !panel.hidden;
+    button.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+  });
+  button.setAttribute("aria-expanded", "false");
+  messageEl.append(button, panel);
+}
+
 function addTutorRetryAction(messageEl, prompt) {
   if (!messageEl || !prompt || messageEl.querySelector(".ai-retry-btn")) return;
   const button = document.createElement("button");
@@ -1784,6 +1830,7 @@ async function sendTutor(text, { retry = false } = {}) {
     addTutorCopyAction(assistantEl, acc);
     addTutorSpeechAction(assistantEl, acc);
     addTutorStudyAction(assistantEl, acc);
+    addTutorStudyModeAction(assistantEl, acc);
     addTutorFeedbackActions(assistantEl, acc);
     addTutorAttribution(assistantEl, provider, model);
     tutorMessages.push({ role: "assistant", content: acc });
