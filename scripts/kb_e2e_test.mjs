@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, studyModeProgressModel, toggleStudyPrompt, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, studyModeProgressModel, toggleStudyPrompt, copySearchContext, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -702,6 +702,14 @@ test("detectClassroomChanges reports courses absent from the cached bundle", () 
 test("copyableTutorText normalizes an answer for clipboard use", () => {
   assert.equal(copyableTutorText("  Answer with notes.  "), "Answer with notes.");
   assert.equal(copyableTutorText(null), "");
+});
+
+test("copySearchContext formats only selected note titles and snippets", () => {
+  assert.equal(copySearchContext([
+    { t: " Algebra basics ", course: "Math", y: "2025-26", _snippet: "Linear equations overview." },
+    { t: "Essay plan", course: "ELA", _snippet: "" },
+  ]), "Algebra basics — Math · 2025-26\nLinear equations overview.\n\nEssay plan — ELA");
+  assert.equal(copySearchContext([]), "");
 });
 
 test("tutorFeedbackModel keeps only local thumbs ratings and toggles the same rating off", () => {

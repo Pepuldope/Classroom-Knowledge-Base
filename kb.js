@@ -1099,6 +1099,31 @@ async function runKbSearch(query) {
       }
       return;
     }
+    const contextBar = document.createElement("div");
+    contextBar.className = "kb-result-actions";
+    const copyContext = document.createElement("button");
+    copyContext.id = "kbCopySearchContext";
+    copyContext.type = "button";
+    copyContext.className = "secondary kb-copy-context";
+    copyContext.textContent = "Copy search context";
+    const copyStatus = document.createElement("span");
+    copyStatus.id = "kbCopySearchStatus";
+    copyStatus.className = "sr-only";
+    copyStatus.setAttribute("role", "status");
+    copyStatus.setAttribute("aria-live", "assertive");
+    copyStatus.setAttribute("aria-atomic", "true");
+    copyContext.addEventListener("click", async () => {
+      const text = copySearchContext(d.results);
+      try {
+        if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(text);
+        copyStatus.textContent = `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`;
+      } catch {
+        copyStatus.textContent = "Could not copy search context. Check clipboard permissions and try again.";
+      }
+    });
+    contextBar.append(copyContext, copyStatus);
+    results.appendChild(contextBar);
     // "Did you mean" — when a typo returned nothing but a confident
     // correction exists in the corpus, offer a one-click retry.
     if (d.didYouMean) {
@@ -1511,6 +1536,18 @@ export function getTutorRetryPrompt(messages = []) {
 
 export function copyableTutorText(text) {
   return typeof text === "string" ? text.trim() : "";
+}
+
+/** Format the currently displayed result context without including full note bodies. */
+export function copySearchContext(notes = []) {
+  if (!Array.isArray(notes)) return "";
+  return notes.map((note) => {
+    const title = copyableTutorText(note?.t) || "(untitled)";
+    const meta = [note?.course, note?.y].filter(Boolean).join(" · ");
+    const heading = meta ? `${title} — ${meta}` : title;
+    const snippet = copyableTutorText(note?._snippet);
+    return snippet ? `${heading}\n${snippet}` : heading;
+  }).join("\n\n");
 }
 
 export function studyModeModel(text) {

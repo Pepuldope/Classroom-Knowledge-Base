@@ -154,6 +154,19 @@ try {
     assert.ok(n > 0, "expected at least one result card");
   });
 
+  await check("copy search context copies only visible titles and snippets", async () => {
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async (value) => { window.__copiedSearchContext = value; };
+    });
+    await page.waitForSelector("#kbCopySearchContext", { timeout: 5000 });
+    await page.click("#kbCopySearchContext");
+    await page.waitForFunction(() => typeof window.__copiedSearchContext === "string" && window.__copiedSearchContext.length > 0, null, { timeout: 5000 });
+    const copied = await page.evaluate(() => window.__copiedSearchContext);
+    assert.match(copied, /cover letter|course/i);
+    assert.doesNotMatch(copied, /full note body/i);
+    assert.match(await page.locator("#kbCopySearchStatus").getAttribute("role"), /status/);
+  });
+
   await check("arrow keys move focus through result cards and Enter opens one", async () => {
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
