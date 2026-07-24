@@ -107,6 +107,20 @@ test("planner tutor context model names the assignment and bounded sources", () 
     sources: ["Quadratic worksheet", "Formula sheet", "Practice video"],
   });
 });
+test("planner tutor source copy text is compact and readable", async () => {
+  const { plannerTutorSourcesText } = await import("../planner-tutor-context.js");
+  assert.equal(plannerTutorSourcesText({
+    title: "Quadratic worksheet",
+    courseName: "Algebra",
+    materials: [{ title: "Formula sheet" }, { title: "Practice video" }],
+  }), "Grounded in this assignment\nQuadratic worksheet · Algebra · 2 attached materials\nSources: Quadratic worksheet · Formula sheet · Practice video");
+});
+test("planner tutor grounding offers a compact copy action", async () => {
+  const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
+  const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  assert.match(html, /id="aiGroundingCopy"/);
+  assert.match(app, /navigator\.clipboard\.writeText/);
+});
 test("tutorSpeechModel gives read-aloud controls stable labels and safe text", () => {
   assert.deepEqual(tutorSpeechModel("  Read this answer aloud.  ", false), {
     text: "Read this answer aloud.", label: "Read aloud", title: "Read this answer aloud",

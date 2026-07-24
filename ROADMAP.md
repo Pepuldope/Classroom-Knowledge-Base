@@ -96,8 +96,10 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Perf: cut hosted legacy `/api/kb-search` cold latency toward <1s while keeping the private IndexedDB path instant (measure before/after; do not break local fast path).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
 - [x] Continuity: automated smoke that opens Archive + Planner + Settings after KB changes and fails the run if any view errors (extend existing browser gates). Shipped 2026-07-23: `scripts/continuity_smoke_test.mjs` now exercises the shared navigation and Settings modal, and runs in `scripts/test.sh`.
-- [ ] Planner tutor: add a compact copy-to-clipboard action for the assignment grounding sources on mobile.
-- [ ] Tutor: optional local “study mode” that turns the last grounded answer into 3 short quiz questions without uploading extra notes beyond the answer context.
+- [x] Planner tutor: add a compact copy-to-clipboard action for the assignment grounding sources on mobile. Shipped 2026-07-24: grounded assignment badge now copies a compact title/course/source summary locally.
+- [ ] Tutor: add a local “study mode” button that turns the last grounded answer into three short quiz questions without uploading extra notes.
+- [ ] Planner tutor: preserve copied grounding source status for keyboard and screen-reader users with an assertive confirmation.
+- [ ] KB: add a local “copy search context” action that copies only the currently selected note titles and snippets.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 

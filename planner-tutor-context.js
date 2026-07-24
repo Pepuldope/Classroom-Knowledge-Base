@@ -11,3 +11,8 @@ export function plannerTutorContextModel(assignment = {}) {
     sources: [title, ...materials],
   };
 }
+
+export function plannerTutorSourcesText(assignment = {}) {
+  const context = plannerTutorContextModel(assignment);
+  return `${context.badge}\n${context.summary}\nSources: ${context.sources.join(" · ")}`;
+}

@@ -1755,3 +1755,5 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-grounding-label { color: var(--accent); }
 .ai-grounding-summary { color: var(--fg); }
 .ai-grounding-sources { color: var(--muted); overflow-wrap: anywhere; white-space: normal; }
+.ai-grounding-copy { justify-self: start; padding: 0.25rem 0.55rem; font: inherit; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--fg); cursor: pointer; }
+.ai-grounding-copy:hover, .ai-grounding-copy:focus-visible { border-color: var(--accent); color: var(--accent); }

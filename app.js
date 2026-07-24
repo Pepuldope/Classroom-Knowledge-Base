@@ -14,7 +14,7 @@ import {
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 import { loadKbBundle, removeKbBundle } from "./kb-local.js";
 import { applyTheme, loadTheme } from "./theme.js";
-import { plannerTutorContextModel } from "./planner-tutor-context.js";
+import { plannerTutorContextModel, plannerTutorSourcesText } from "./planner-tutor-context.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -2263,6 +2263,19 @@ $("aiClose").addEventListener("click", () => {
   $("ai").hidden = true;
   activeAssignment = null;
   activeArchiveNotes = [];
+});
+
+$("aiGroundingCopy")?.addEventListener("click", async () => {
+  if (!activeAssignment || !navigator.clipboard?.writeText) return;
+  const button = $("aiGroundingCopy");
+  try {
+    await navigator.clipboard.writeText(plannerTutorSourcesText({ ...activeAssignment, materials: activeMaterials }));
+    button.textContent = "Copied";
+    setTimeout(() => { button.textContent = "Copy sources"; }, 1200);
+  } catch {
+    button.textContent = "Copy failed";
+    setTimeout(() => { button.textContent = "Copy sources"; }, 1600);
+  }
 });
 
 $("aiClearBtn").addEventListener("click", () => {
