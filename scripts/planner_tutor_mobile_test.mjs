@@ -23,6 +23,10 @@ try {
   });
   const badge = page.locator("#aiGroundingBadge");
   assert.equal(await badge.isVisible(), true, "grounding badge should be visible");
+  const status = page.locator("#aiGroundingCopyStatus");
+  assert.equal(await status.getAttribute("role"), "status", "copy status should expose a status role");
+  assert.equal(await status.getAttribute("aria-live"), "assertive", "copy status should be announced assertively");
+  assert.equal(await status.getAttribute("aria-atomic"), "true", "copy status should announce the complete outcome");
   const layout = await badge.evaluate((el) => {
     const summary = el.querySelector(".ai-grounding-summary");
     const sources = el.querySelector(".ai-grounding-sources");

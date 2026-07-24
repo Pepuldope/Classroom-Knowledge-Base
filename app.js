@@ -14,7 +14,7 @@ import {
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 import { loadKbBundle, removeKbBundle } from "./kb-local.js";
 import { applyTheme, loadTheme } from "./theme.js";
-import { plannerTutorContextModel, plannerTutorSourcesText } from "./planner-tutor-context.js";
+import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -2268,13 +2268,19 @@ $("aiClose").addEventListener("click", () => {
 $("aiGroundingCopy")?.addEventListener("click", async () => {
   if (!activeAssignment || !navigator.clipboard?.writeText) return;
   const button = $("aiGroundingCopy");
+  const status = $("aiGroundingCopyStatus");
+  const announce = (state) => {
+    const model = plannerTutorCopyStatusModel(state);
+    button.textContent = model.label;
+    if (status) status.textContent = model.announcement;
+  };
   try {
     await navigator.clipboard.writeText(plannerTutorSourcesText({ ...activeAssignment, materials: activeMaterials }));
-    button.textContent = "Copied";
-    setTimeout(() => { button.textContent = "Copy sources"; }, 1200);
+    announce("success");
+    setTimeout(() => announce("idle"), 1200);
   } catch {
-    button.textContent = "Copy failed";
-    setTimeout(() => { button.textContent = "Copy sources"; }, 1600);
+    announce("error");
+    setTimeout(() => announce("idle"), 1600);
   }
 });
 

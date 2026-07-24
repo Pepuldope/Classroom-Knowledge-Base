@@ -16,3 +16,9 @@ export function plannerTutorSourcesText(assignment = {}) {
   const context = plannerTutorContextModel(assignment);
   return `${context.badge}\n${context.summary}\nSources: ${context.sources.join(" · ")}`;
 }
+
+export function plannerTutorCopyStatusModel(status = "idle") {
+  if (status === "success") return { label: "Copied", announcement: "Grounding sources copied" };
+  if (status === "error") return { label: "Copy failed", announcement: "Could not copy grounding sources" };
+  return { label: "Copy sources", announcement: "" };
+}

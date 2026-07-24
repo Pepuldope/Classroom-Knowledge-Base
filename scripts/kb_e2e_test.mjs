@@ -29,7 +29,7 @@ import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
-import { plannerTutorContextModel } from "../planner-tutor-context.js";
+import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } from "../api/tutor.js";
 
@@ -114,6 +114,11 @@ test("planner tutor source copy text is compact and readable", async () => {
     courseName: "Algebra",
     materials: [{ title: "Formula sheet" }, { title: "Practice video" }],
   }), "Grounded in this assignment\nQuadratic worksheet · Algebra · 2 attached materials\nSources: Quadratic worksheet · Formula sheet · Practice video");
+});
+test("planner tutor copy status exposes an assertive success announcement", () => {
+  assert.deepEqual(plannerTutorCopyStatusModel("success"), { label: "Copied", announcement: "Grounding sources copied" });
+  assert.deepEqual(plannerTutorCopyStatusModel("error"), { label: "Copy failed", announcement: "Could not copy grounding sources" });
+  assert.deepEqual(plannerTutorCopyStatusModel("idle"), { label: "Copy sources", announcement: "" });
 });
 test("planner tutor grounding offers a compact copy action", async () => {
   const html = await readFile(new URL("../index.html", import.meta.url), "utf8");
