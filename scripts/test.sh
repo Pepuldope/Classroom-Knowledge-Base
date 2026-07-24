@@ -81,6 +81,11 @@ BASE_URL="http://localhost:$PORT" node scripts/continuity_smoke_test.mjs
 CONTINUITY_OK=$?
 if [ "$CONTINUITY_OK" -ne 0 ]; then echo "continuity smoke FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Planner tutor mobile grounding e2e"
+BASE_URL="http://localhost:$PORT" node scripts/planner_tutor_mobile_test.mjs
+PLANNER_MOBILE_OK=$?
+if [ "$PLANNER_MOBILE_OK" -ne 0 ]; then echo "planner tutor mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 kill "$SRV" 2>/dev/null
 
 if [ "$UI_OK" -ne 0 ]; then echo "UI e2e FAILED"; exit 1; fi

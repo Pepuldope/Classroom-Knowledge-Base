@@ -1754,4 +1754,4 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .ai-grounding-label { color: var(--accent); }
 .ai-grounding-summary { color: var(--fg); }
-.ai-grounding-sources { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ai-grounding-sources { color: var(--muted); overflow-wrap: anywhere; white-space: normal; }
