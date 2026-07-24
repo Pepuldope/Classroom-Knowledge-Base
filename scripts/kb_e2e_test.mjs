@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, studyModeProgressModel, toggleStudyPrompt, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -726,6 +726,30 @@ test("studyModeModel turns a grounded answer into three local quiz prompts", () 
 
 test("studyModeModel rejects an empty answer", () => {
   assert.equal(studyModeModel("   "), null);
+});
+
+test("studyModeProgressModel reports completed prompts as a bounded percentage", () => {
+  assert.deepEqual(studyModeProgressModel([0, 2, 2, "bad", 9], 3), {
+    completed: [0, 2],
+    completedCount: 2,
+    total: 3,
+    percent: 67,
+  });
+});
+
+test("toggleStudyPrompt adds and removes one valid prompt index", () => {
+  assert.deepEqual(toggleStudyPrompt([0], 1, 3), [0, 1]);
+  assert.deepEqual(toggleStudyPrompt([0, 1], 1, 3), [0]);
+  assert.deepEqual(toggleStudyPrompt([0], 3, 3), [0]);
+});
+
+test("studyModeProgressModel treats malformed or empty progress as zero", () => {
+  assert.deepEqual(studyModeProgressModel("bad", 0), {
+    completed: [],
+    completedCount: 0,
+    total: 0,
+    percent: 0,
+  });
 });
 
 

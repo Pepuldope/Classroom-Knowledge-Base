@@ -130,6 +130,7 @@ const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const STUDY_LIST_KEY = "cwa_tutor_study_list";
 const STUDY_ACTIVITY_KEY = "cwa_kb_study_activity";
 const STUDY_PROGRESS_KEY = "cwa_kb_note_progress";
+const STUDY_MODE_PROGRESS_KEY = "cwa_kb_study_mode_progress";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
 const KB_PINNED_COURSES_KEY = "cwa_kb_pinned_courses";
 
@@ -239,6 +240,24 @@ function saveStudyList(value) {
   const list = studyListModel(value);
   try { localStorage.setItem(STUDY_LIST_KEY, JSON.stringify(list)); } catch {}
   return list;
+}
+
+function loadStudyModeProgress(answerId, total) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STUDY_MODE_PROGRESS_KEY) || "{}");
+    return studyModeProgressModel(saved?.[answerId], total);
+  } catch {
+    return studyModeProgressModel([], total);
+  }
+}
+
+function saveStudyModeProgress(answerId, completed) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STUDY_MODE_PROGRESS_KEY) || "{}");
+    const next = saved && typeof saved === "object" && !Array.isArray(saved) ? saved : {};
+    next[answerId] = completed;
+    localStorage.setItem(STUDY_MODE_PROGRESS_KEY, JSON.stringify(next));
+  } catch {}
 }
 
 const DEFAULT_KB_SETTINGS = Object.freeze({
@@ -1508,6 +1527,27 @@ export function studyModeModel(text) {
   };
 }
 
+export function studyModeProgressModel(completed, total) {
+  const count = Number.isInteger(total) && total > 0 ? total : 0;
+  const valid = Array.isArray(completed)
+    ? [...new Set(completed.filter((index) => Number.isInteger(index) && index >= 0 && index < count))].sort((a, b) => a - b)
+    : [];
+  return {
+    completed: valid,
+    completedCount: valid.length,
+    total: count,
+    percent: count ? Math.round((valid.length / count) * 100) : 0,
+  };
+}
+
+export function toggleStudyPrompt(completed, index, total) {
+  const progress = studyModeProgressModel(completed, total);
+  if (!Number.isInteger(index) || index < 0 || index >= progress.total) return progress.completed;
+  return progress.completed.includes(index)
+    ? progress.completed.filter((item) => item !== index)
+    : [...progress.completed, index].sort((a, b) => a - b);
+}
+
 export function tutorSpeechModel(text, speaking = false) {
   const clean = copyableTutorText(text);
   if (!clean) return null;
@@ -1649,7 +1689,6 @@ function addTutorSpeechAction(messageEl, text) {
   });
   messageEl.appendChild(button);
 }
-
 function addTutorStudyAction(messageEl, text) {
   if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-save-btn")) return;
   const button = document.createElement("button");
@@ -1680,12 +1719,37 @@ function addTutorStudyModeAction(messageEl, text) {
   const heading = document.createElement("strong");
   heading.textContent = model.title;
   panel.appendChild(heading);
+  const progressEl = document.createElement("div");
+  progressEl.className = "ai-study-progress";
+  progressEl.setAttribute("role", "status");
+  progressEl.setAttribute("aria-live", "polite");
+  panel.appendChild(progressEl);
   const list = document.createElement("ol");
-  for (const question of model.questions) {
+  const answerId = tutorAnswerId(text);
+  let progress = loadStudyModeProgress(answerId, model.questions.length);
+  const renderProgress = () => {
+    progressEl.textContent = `${progress.completedCount} of ${progress.total} completed (${progress.percent}%)`;
+    for (const item of list.querySelectorAll("button[data-prompt-index]")) {
+      const completed = progress.completed.includes(Number(item.dataset.promptIndex));
+      item.classList.toggle("completed", completed);
+      item.setAttribute("aria-pressed", completed ? "true" : "false");
+    }
+  };
+  model.questions.forEach((question, index) => {
     const item = document.createElement("li");
-    item.textContent = question;
+    const prompt = document.createElement("button");
+    prompt.type = "button";
+    prompt.className = "ai-study-prompt";
+    prompt.dataset.promptIndex = String(index);
+    prompt.textContent = question;
+    prompt.addEventListener("click", () => {
+      progress = studyModeProgressModel(toggleStudyPrompt(progress.completed, index, model.questions.length), model.questions.length);
+      saveStudyModeProgress(answerId, progress.completed);
+      renderProgress();
+    });
+    item.appendChild(prompt);
     list.appendChild(item);
-  }
+  });
   panel.appendChild(list);
   const note = document.createElement("small");
   note.textContent = "Generated locally from the answer already on this page — no extra notes were uploaded.";
@@ -1693,6 +1757,7 @@ function addTutorStudyModeAction(messageEl, text) {
   button.addEventListener("click", () => {
     panel.hidden = !panel.hidden;
     button.setAttribute("aria-expanded", panel.hidden ? "false" : "true");
+    if (!panel.hidden) renderProgress();
   });
   button.setAttribute("aria-expanded", "false");
   messageEl.append(button, panel);

@@ -100,7 +100,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Tutor: add a local “study mode” button that turns the last grounded answer into three short quiz questions without uploading extra notes. Shipped 2026-07-24: generates three prompts locally from the rendered answer and keeps note privacy unchanged.
 - [x] Planner tutor: preserve copied grounding source status for keyboard and screen-reader users with an assertive confirmation. Shipped 2026-07-24: copy success/failure now updates an assertive status region.
 - [ ] KB: add a local “copy search context” action that copies only the currently selected note titles and snippets.
-- [ ] KB: let students mark individual study-mode prompts as completed locally and show a small progress indicator.
+- [x] KB: let students mark individual study-mode prompts as completed locally and show a small progress indicator (2026-07-24).
 - [ ] KB: add a keyboard shortcut to open study mode for the latest tutor answer.
 - [x] KB: announce active filter and sort changes in a polite result-status region for keyboard users (2026-07-24).
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
