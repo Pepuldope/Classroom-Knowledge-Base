@@ -14,6 +14,9 @@ import {
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 import { loadKbBundle, removeKbBundle } from "./kb-local.js";
 import { applyTheme, loadTheme } from "./theme.js";
+import { plannerTutorContextModel } from "./planner-tutor-context.js";
+
+export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
 applyTheme(loadTheme());
 
@@ -2238,6 +2241,14 @@ async function openAi(a) {
     ctxParts.push(`<details class="original-desc"><summary>Original from Classroom</summary><div class="original-desc-body">${renderAssignmentDescription(a.description)}</div></details>`);
   }
   $("aiContext").innerHTML = ctxParts.join("<br>");
+  const tutorContext = plannerTutorContextModel({ ...a, materials: activeMaterials });
+  const grounding = $("aiGroundingBadge");
+  if (grounding) {
+    grounding.hidden = false;
+    grounding.querySelector(".ai-grounding-label").textContent = tutorContext.badge;
+    grounding.querySelector(".ai-grounding-summary").textContent = tutorContext.summary;
+    grounding.querySelector(".ai-grounding-sources").textContent = `Sources: ${tutorContext.sources.join(" · ")}`;
+  }
   renderArchiveStrip(a);
   renderChatHistory();
   $("aiInput").placeholder = a.kind === "material" ? "Ask about this material…" : "Ask about this assignment…";

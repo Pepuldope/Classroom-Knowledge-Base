@@ -1744,3 +1744,14 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-source-chip { display: inline-flex; flex-direction: column; align-items: flex-start; text-align: left; line-height: 1.15; gap: 0.05rem; max-width: 220px; }
 .kb-chip-title { font-weight: 600; font-size: 0.82rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
 .kb-chip-sub { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+
+/* Assignment tutor grounding is visible before a student sends a question. */
+.ai-grounding-badge {
+  display: grid; gap: 0.15rem; margin: 0.55rem 0; padding: 0.6rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, transparent);
+  font-size: 0.8rem;
+}
+.ai-grounding-label { color: var(--accent); }
+.ai-grounding-summary { color: var(--fg); }
+.ai-grounding-sources { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

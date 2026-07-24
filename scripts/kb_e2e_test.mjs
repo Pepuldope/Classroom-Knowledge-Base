@@ -29,6 +29,7 @@ import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
+import { plannerTutorContextModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } from "../api/tutor.js";
 
@@ -95,6 +96,17 @@ test("planner tutor messages ground the assignment and preserve multi-turn histo
   ]);
 });
 
+test("planner tutor context model names the assignment and bounded sources", () => {
+  assert.deepEqual(plannerTutorContextModel({
+    title: "Quadratic worksheet",
+    courseName: "Algebra",
+    materials: [{ title: "Formula sheet" }, { title: "Practice video" }],
+  }), {
+    badge: "Grounded in this assignment",
+    summary: "Quadratic worksheet · Algebra · 2 attached materials",
+    sources: ["Quadratic worksheet", "Formula sheet", "Practice video"],
+  });
+});
 test("tutorSpeechModel gives read-aloud controls stable labels and safe text", () => {
   assert.deepEqual(tutorSpeechModel("  Read this answer aloud.  ", false), {
     text: "Read this answer aloud.", label: "Read aloud", title: "Read this answer aloud",

@@ -97,7 +97,8 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
 - [x] Continuity: automated smoke that opens Archive + Planner + Settings after KB changes and fails the run if any view errors (extend existing browser gates). Shipped 2026-07-23: `scripts/continuity_smoke_test.mjs` now exercises the shared navigation and Settings modal, and runs in `scripts/test.sh`.
 - [ ] Tutor: optional local “study mode” that turns the last grounded answer into 3 short quiz questions without uploading extra notes beyond the answer context.
-- [ ] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question.
+- [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
+- [ ] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion.
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
