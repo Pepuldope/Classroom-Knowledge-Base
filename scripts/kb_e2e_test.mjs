@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -46,6 +46,17 @@ test("kbResultNavigationIndex wraps keyboard movement through result cards", () 
   assert.equal(kbResultNavigationIndex(1, "k", 3), 0);
   assert.equal(kbResultNavigationIndex(1, "PageDown", 3), null);
   assert.equal(kbResultNavigationIndex(0, "ArrowDown", 0), null);
+});
+
+test("buildFilterAnnouncement describes active filters and sort for screen readers", () => {
+  assert.equal(
+    buildFilterAnnouncement({ shown: 8, total: 42, course: "Math", kind: "assignment", family: "STEM", sort: "recency" }),
+    "Showing 8 of 42 notes. Filters: course Math, type assignment, class type STEM. Sorted by newest first.",
+  );
+  assert.equal(
+    buildFilterAnnouncement({ shown: 3, total: 3, sort: "relevance" }),
+    "Showing 3 of 3 notes. No active filters. Sorted by relevance.",
+  );
 });
 
 test("readShardedSlices starts all shard reads concurrently and preserves order", async () => {

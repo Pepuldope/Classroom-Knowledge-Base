@@ -100,7 +100,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Tutor: add a local “study mode” button that turns the last grounded answer into three short quiz questions without uploading extra notes.
 - [x] Planner tutor: preserve copied grounding source status for keyboard and screen-reader users with an assertive confirmation. Shipped 2026-07-24: copy success/failure now updates an assertive status region.
 - [ ] KB: add a local “copy search context” action that copies only the currently selected note titles and snippets.
-- [ ] KB: announce active filter and sort changes in a polite result-status region for keyboard users.
+- [x] KB: announce active filter and sort changes in a polite result-status region for keyboard users (2026-07-24).
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 

@@ -573,6 +573,26 @@ export function buildResultSummary({ shown, total, course = "", year = "" }) {
   return filters.length ? `${base} (filtered by ${filters.join(", ")})` : base;
 }
 
+const FILTER_SORT_LABELS = {
+  relevance: "relevance",
+  recency: "newest first",
+  course: "course",
+  title: "title",
+};
+
+/** Build a concise polite live-region announcement after KB filter/sort changes. */
+export function buildFilterAnnouncement({ shown = 0, total = 0, course = "", year = "", kind = "", family = "", sort = "relevance" } = {}) {
+  const filters = [
+    course && `course ${course}`,
+    year && `year ${year}`,
+    kind && `type ${kind}`,
+    family && `class type ${family}`,
+  ].filter(Boolean);
+  const filterText = filters.length ? `Filters: ${filters.join(", ")}.` : "No active filters.";
+  const sortText = FILTER_SORT_LABELS[sort] || FILTER_SORT_LABELS.relevance;
+  return `Showing ${shown} of ${total} ${total === 1 ? "note" : "notes"}. ${filterText} Sorted by ${sortText}.`;
+}
+
 // ---------------------------------------------------------------------------
 // Export (private — the bundle lives in the user's own browser, exported
 // only to their device; nothing is read from or written to a shared server DB)
@@ -1431,15 +1451,21 @@ function renderFilterChips(filters) {
 // ROADMAP #55: show "Showing N of M notes" above the results, narrowing M when
 // a course/year filter is active, plus a "Clear filters" control that resets
 // the active facet(s) and re-runs the search.
-function renderResultCount(data, { course, year }) {
+function renderResultCount(data, { course, year, kind = kbActiveKind, family = kbActiveFamily, sort = kbActiveSort }) {
   const el = $("kbResultCount");
+  const status = $("kbFilterStatus");
   if (!el) return;
   const hidden = !data || !Array.isArray(data.results) || data.results.length === 0;
-  if (hidden) { el.hidden = true; el.innerHTML = ""; return; }
+  if (hidden) {
+    el.hidden = true; el.innerHTML = "";
+    if (status) status.textContent = "No matching notes. " + buildFilterAnnouncement({ shown: 0, total: data?.filteredCount || data?.meta?.noteCount || 0, course, year, kind, family, sort });
+    return;
+  }
   el.hidden = false;
   const shown = data.results.length;
   const total = typeof data.filteredCount === "number" ? data.filteredCount : (data.meta?.noteCount ?? shown);
   el.textContent = buildResultSummary({ shown, total, course, year });
+  if (status) status.textContent = buildFilterAnnouncement({ shown, total, course, year, kind, family, sort });
 }
 
 // ---------------------------------------------------------------------------

@@ -228,6 +228,14 @@ try {
     assert.ok(opts.length >= 4, "sort dropdown has at least 4 orderings");
   });
 
+  await check("filter changes have a polite screen-reader status region", async () => {
+    const status = page.locator("#kbFilterStatus");
+    await page.waitForSelector("#kbFilterStatus[role=\"status\"]", { timeout: 5000 });
+    assert.equal(await status.getAttribute("aria-live"), "polite");
+    const box = await status.boundingBox();
+    assert.ok(!box || box.width <= 2, "status region should be visually hidden");
+  });
+
   await check("changing sort dropdown re-runs the search", async () => {
     await page.selectOption("#kbSort", "recency");
     // A real search with sort should still return result cards (not error out).
