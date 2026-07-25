@@ -29,14 +29,16 @@ them. If a change violates any rule, it is aborted and rolled back.
   pinned @mention to Pepuldo first.
 
 ## 3. Quality gates (all must pass BEFORE a commit)
-1. `node --check` on every changed `.js` / `.mjs`.
-2. `node scripts/kb_e2e_test.mjs` returns exit 0 (retrieval + filter sanity).
-3. **Visual check**: run the dev server (`scripts/dev-server.mjs`), open the
-   KB tab in the browser, perform a search, and capture a screenshot. The
-   screenshot must show results + filter chips (no blank/error state). If the
-   screenshot shows an error, abort.
-   **Screenshots alone are NOT a visual/a11y pass.** Every UI-affecting run must
-   also run the **common-sense visual gate** (light AND dark at minimum):
+These layers together answer **“is the feature working?”** — not just “did one test file exit 0.”
+1. `node --check` on every changed `.js` / `.mjs` (syntax).
+2. `node scripts/kb_e2e_test.mjs` returns exit 0 (retrieval + filter / logic sanity).
+   Run the rest of `bash scripts/test.sh` / focused unit + interaction e2e as
+   appropriate for the change (UI flows, loading, settings, continuity, live).
+3. **Visual common-sense check (standing UI layer of “feature works”)** — run the
+   dev server (`scripts/dev-server.mjs`), exercise the changed surface end-to-end
+   in the browser, capture a smoke screenshot (results + chips / expected UI;
+   abort on blank/error). **Screenshots alone are NOT enough.** Every UI-affecting
+   commit must also run the **common-sense visual gate** (light AND dark at minimum):
    - **Contrast:** computed fg/bg luminance on representative text; fail normal
      text below 4.5:1 (large/UI text below 3:1).
    - **Control states:** primary/secondary/nav/chips/icon/Settings controls must
@@ -46,8 +48,11 @@ them. If a change violates any rule, it is aborted and rolled back.
    - **Layout hygiene:** text must not spill past its box; no horizontal page
      overflow; no clipped labels/controls; no zero-size clickable text targets;
      no obvious overlapping interactive hits.
-   Never report “visual OK” / “screenshot verified” from a light-theme-only PNG
-   or from geometry-only gates (border-radius / centering / non-transparent bg).
+   Use this gate to confirm the feature is usable in general (readable, clickable
+   states look right, nothing broken/clipped) — same stack as code/e2e, not a
+   separate pretty-pass. Never report “visual OK” / “screenshot verified” from a
+   light-theme-only PNG or geometry-only gates (border-radius / centering /
+   non-transparent bg).
 4. The change addresses exactly one ROADMAP.md item.
 
 ## 4. Reporting
