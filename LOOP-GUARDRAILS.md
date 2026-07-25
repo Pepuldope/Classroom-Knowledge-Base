@@ -35,11 +35,19 @@ them. If a change violates any rule, it is aborted and rolled back.
    KB tab in the browser, perform a search, and capture a screenshot. The
    screenshot must show results + filter chips (no blank/error state). If the
    screenshot shows an error, abort.
-   **Screenshots alone are NOT a contrast/a11y pass.** Also force light AND dark
-   themes (`data-theme` / Settings theme) and run the contrast e2e (computed
-   fg/bg luminance ratio on representative text; fail below 4.5:1). Never report
-   “visual OK” from a light-theme-only screenshot or from geometry-only gates
-   (border-radius / centering / non-transparent background).
+   **Screenshots alone are NOT a visual/a11y pass.** Every UI-affecting run must
+   also run the **common-sense visual gate** (light AND dark at minimum):
+   - **Contrast:** computed fg/bg luminance on representative text; fail normal
+     text below 4.5:1 (large/UI text below 3:1).
+   - **Control states:** primary/secondary/nav/chips/icon/Settings controls must
+     show distinct styling for default, `:hover`, `:active` (pressed),
+     `:focus-visible`, and `:disabled` where those states exist (visible
+     bg/border/color change; real focus ring; disabled de-emphasized).
+   - **Layout hygiene:** text must not spill past its box; no horizontal page
+     overflow; no clipped labels/controls; no zero-size clickable text targets;
+     no obvious overlapping interactive hits.
+   Never report “visual OK” / “screenshot verified” from a light-theme-only PNG
+   or from geometry-only gates (border-radius / centering / non-transparent bg).
 4. The change addresses exactly one ROADMAP.md item.
 
 ## 4. Reporting
