@@ -112,7 +112,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: let students choose whether copied search context uses compact or line-separated formatting locally (2026-07-25).
 - [ ] KB: show a local “copied from N results” history entry without storing note bodies.
 - [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
-- [ ] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies.
+- [x] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies (2026-07-25).
 - [ ] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button.
 - [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.

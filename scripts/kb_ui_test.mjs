@@ -170,6 +170,16 @@ try {
     assert.match(await page.locator("#kbCopySearchStatus").textContent(), /Copied \d+ notes?/);
   });
 
+  await check("copy again repeats the latest local context without a new search", async () => {
+    await page.evaluate(() => { window.__copiedSearchContext = ""; });
+    await page.click("#kbCopySearchAgain");
+    await page.waitForFunction(() => typeof window.__copiedSearchContext === "string" && window.__copiedSearchContext.length > 0, null, { timeout: 5000 });
+    const copiedAgain = await page.evaluate(() => window.__copiedSearchContext);
+    assert.match(copiedAgain, /cover letter|course/i);
+    assert.doesNotMatch(copiedAgain, /full note body/i);
+    assert.match(await page.locator("#kbCopySearchStatus").textContent(), /Copied \d+ notes? again\./);
+  });
+
   await check("arrow keys move focus through result cards and Enter opens one", async () => {
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");

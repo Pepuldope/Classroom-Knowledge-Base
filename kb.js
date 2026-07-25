@@ -127,6 +127,7 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
 
 const KB_SETTINGS_KEY = "cwa_kb_settings";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
+const KB_COPY_HISTORY_KEY = "cwa_kb_copy_history";
 const STUDY_LIST_KEY = "cwa_tutor_study_list";
 const STUDY_ACTIVITY_KEY = "cwa_kb_study_activity";
 const STUDY_PROGRESS_KEY = "cwa_kb_note_progress";
@@ -1130,6 +1131,13 @@ async function runKbSearch(query) {
     copyContext.type = "button";
     copyContext.className = "secondary kb-copy-context";
     copyContext.textContent = "Copy search context";
+    const copyAgain = document.createElement("button");
+    copyAgain.id = "kbCopySearchAgain";
+    copyAgain.type = "button";
+    copyAgain.className = "secondary kb-copy-context";
+    const copyHistory = loadCopySearchContextHistory();
+    copyAgain.textContent = copyHistory.count > 0 ? `Copy again (${copyHistory.count})` : "Copy again";
+    copyAgain.hidden = !copyHistory.text;
     const copyStatus = document.createElement("span");
     copyStatus.id = "kbCopySearchStatus";
     copyStatus.className = "kb-copy-status";
@@ -1141,12 +1149,25 @@ async function runKbSearch(query) {
       try {
         if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
         await navigator.clipboard.writeText(text);
+        saveCopySearchContextHistory(text, d.results.length);
+        copyAgain.textContent = `Copy again (${d.results.length})`;
+        copyAgain.hidden = false;
         copyStatus.textContent = `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`;
       } catch {
         copyStatus.textContent = "Could not copy search context. Check clipboard permissions and try again.";
       }
     });
-    contextBar.append(copyContext, copyStatus);
+    copyAgain.addEventListener("click", async () => {
+      const latest = loadCopySearchContextHistory();
+      try {
+        if (!latest.text || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(latest.text);
+        copyStatus.textContent = `Copied ${latest.count} note${latest.count === 1 ? "" : "s"} again.`;
+      } catch {
+        copyStatus.textContent = "Could not copy the latest search context. Check clipboard permissions and try again.";
+      }
+    });
+    contextBar.append(copyContext, copyAgain, copyStatus);
     results.appendChild(contextBar);
     // "Did you mean" — when a typo returned nothing but a confident
     // correction exists in the corpus, offer a one-click retry.
@@ -1579,6 +1600,28 @@ export function copySearchContext(notes = [], { format = "lines" } = {}) {
     if (!snippet) return heading;
     return compact ? `${heading} — ${snippet}` : `${heading}\n${snippet}`;
   }).join(compact ? "\n" : "\n\n");
+}
+
+/** Keep only the latest browser-local copy payload and its result count. */
+export function copySearchContextHistoryModel(value = {}) {
+  const input = value && typeof value === "object" ? value : {};
+  const text = typeof input.text === "string" ? input.text : "";
+  const count = Number.isInteger(input.count) && input.count > 0 ? input.count : 0;
+  return { text, count };
+}
+
+function loadCopySearchContextHistory() {
+  try {
+    return copySearchContextHistoryModel(JSON.parse(localStorage.getItem(KB_COPY_HISTORY_KEY) || "{}"));
+  } catch {
+    return copySearchContextHistoryModel();
+  }
+}
+
+function saveCopySearchContextHistory(text, count) {
+  try {
+    localStorage.setItem(KB_COPY_HISTORY_KEY, JSON.stringify(copySearchContextHistoryModel({ text, count })));
+  } catch {}
 }
 
 export function studyModeModel(text) {

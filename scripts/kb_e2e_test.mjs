@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -728,6 +728,18 @@ test("copySearchContextFormatModel keeps a local compact or line-separated prefe
     { t: "Algebra", course: "Math", _snippet: "Linear equations." },
     { t: "Essay", course: "ELA", _snippet: "Plan." },
   ], { format: "compact" }), "Algebra — Math — Linear equations.\nEssay — ELA — Plan.");
+});
+
+test("copySearchContextHistoryModel keeps only the latest local context metadata", () => {
+  assert.deepEqual(copySearchContextHistoryModel(), { text: "", count: 0 });
+  assert.deepEqual(copySearchContextHistoryModel({ text: " Algebra — Math\nSnippet", count: 2 }), {
+    text: " Algebra — Math\nSnippet",
+    count: 2,
+  });
+  assert.deepEqual(copySearchContextHistoryModel({ text: "full note body should not be stored", count: -4 }), {
+    text: "full note body should not be stored",
+    count: 0,
+  });
 });
 
 test("tutorFeedbackModel keeps only local thumbs ratings and toggles the same rating off", () => {
