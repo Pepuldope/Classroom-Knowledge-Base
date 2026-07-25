@@ -164,7 +164,10 @@ try {
     const copied = await page.evaluate(() => window.__copiedSearchContext);
     assert.match(copied, /cover letter|course/i);
     assert.doesNotMatch(copied, /full note body/i);
+    await page.waitForFunction(() => /Copied \d+ notes?/.test(document.querySelector("#kbCopySearchStatus")?.textContent || ""), null, { timeout: 5000 });
     assert.match(await page.locator("#kbCopySearchStatus").getAttribute("role"), /status/);
+    assert.equal(await page.locator("#kbCopySearchStatus").isVisible(), true, "copy confirmation should be visible inline");
+    assert.match(await page.locator("#kbCopySearchStatus").textContent(), /Copied \d+ notes?/);
   });
 
   await check("arrow keys move focus through result cards and Enter opens one", async () => {

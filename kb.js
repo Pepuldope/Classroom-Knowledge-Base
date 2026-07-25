@@ -1120,7 +1120,7 @@ async function runKbSearch(query) {
     copyContext.textContent = "Copy search context";
     const copyStatus = document.createElement("span");
     copyStatus.id = "kbCopySearchStatus";
-    copyStatus.className = "sr-only";
+    copyStatus.className = "kb-copy-status";
     copyStatus.setAttribute("role", "status");
     copyStatus.setAttribute("aria-live", "assertive");
     copyStatus.setAttribute("aria-atomic", "true");

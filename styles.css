@@ -1717,8 +1717,8 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-export-label { font-size: 0.85rem; color: var(--muted); }
 .kb-export-bar .ghost-btn { font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0.32rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--fg); transition: background 0.12s, border-color 0.12s, color 0.12s; }
 .kb-export-bar .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
-.kb-export-status { font-size: 0.8rem; color: var(--muted); margin-left: 0.25rem; }
-.kb-export-status.error { color: var(--danger); }
+.kb-copy-status { font-size: 0.82rem; color: var(--muted); min-height: 1.25rem; }
+.kb-copy-status:not(:empty) { color: var(--ok); }
 .kb-tutor-wrap { margin-top: 1.5rem; text-align: center; }
 .ai-context-note { display: block; font-size: 0.8rem; color: var(--muted); padding: 0.4rem 0.6rem; background: var(--accent-bg); border-radius: 8px; margin-bottom: 0.5rem; }
 .ai-attribution { display: block; margin-top: 0.55rem; color: var(--muted); font-size: 0.72rem; }
