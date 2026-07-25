@@ -452,6 +452,12 @@ export function shouldAutoBuildKb(settings = {}, bundle = null) {
   return settings?.autoBuild === true && (!Array.isArray(bundle?.notes) || bundle.notes.length === 0);
 }
 
+/** Decide which KB surface is safe before/after private bundle discovery. */
+export function kbBuildSurfaceModel({ state = "loading" } = {}) {
+  const showBuildCard = state === "empty";
+  return { showBuildCard, showMain: !showBuildCard };
+}
+
 export async function maybeAutoBuildKb() {
   const bundle = await loadKbBundle();
   if (!shouldAutoBuildKb(loadKbSettings(), bundle)) return false;
@@ -491,6 +497,13 @@ async function refreshKb() {
   const main = $("kbMain");
   const buildPanel = $("kbBuildPanel");
   const metaBar = $("kbMetaBar");
+  const loadingSurface = kbBuildSurfaceModel({ state: "loading" });
+  // Do not flash a build/scrape card while IndexedDB is deciding whether a
+  // private bundle exists. A populated bundle must show study UI immediately;
+  // the build card is revealed only after a confirmed empty result.
+  if (onboarding) onboarding.hidden = !loadingSurface.showBuildCard;
+  if (main) main.hidden = !loadingSurface.showMain;
+  if (buildPanel) buildPanel.hidden = true;
   renderStudyStreak(loadStudyActivity());
   // Explicit loading state (owner #1/#2): show that the KB is FETCHING, not
   // empty, so the user can always tell "still loading" from "nothing there".
@@ -525,10 +538,9 @@ async function refreshKb() {
     } catch {}
   }
   const hasDb = !!(meta && meta.noteCount > 0);
-  if (onboarding) onboarding.hidden = hasDb && !buildPanel.hidden ? false : hasDb;
-  // If a DB exists, show the main search/tutor surface; else show onboarding.
-  if (main) main.hidden = !hasDb;
-  if (onboarding) onboarding.hidden = hasDb;
+  const surface = kbBuildSurfaceModel({ state: hasDb ? "populated" : "empty" });
+  if (onboarding) onboarding.hidden = !surface.showBuildCard;
+  if (main) main.hidden = !surface.showMain;
   if (hasDb) {
     renderKbMeta(meta);
     void checkForClassroomChanges(localKbBundle);

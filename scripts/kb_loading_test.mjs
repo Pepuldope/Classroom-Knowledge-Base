@@ -25,6 +25,27 @@ try {
   await page.waitForSelector("#kbSearchInput", { timeout: 10000 });
   await page.waitForTimeout(800);
 
+  // Regression: legacy metadata is intentionally delayed so the browser is
+  // observed during bundle discovery, not after the server response finishes.
+  const delayedProbe = async (route) => {
+    if (route.request().url().includes("q=__ping__")) await new Promise((r) => setTimeout(r, 1400));
+    await route.fallback();
+  };
+  await page.route("**/api/kb-search**", delayedProbe);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
+  await check("build card stays hidden while an existing KB is being discovered", async () => {
+    const state = await page.evaluate(() => ({
+      onboardingHidden: document.querySelector("#kbOnboarding")?.hidden,
+      mainVisible: !document.querySelector("#kbMain")?.hidden,
+      loadingText: document.querySelector("#kbMetaBar")?.textContent || "",
+    }));
+    assert.equal(state.onboardingHidden, true, "build/onboarding card must hide during discovery");
+    assert.equal(state.mainVisible, true, "study surface must remain visible during discovery");
+    assert.match(state.loadingText, /Loading your knowledge base/);
+  });
+  await page.unroute("**/api/kb-search**", delayedProbe);
+
   // Slow the search route so the in-flight loading state is observable.
   await page.route("**/api/kb-search**", async (route) => {
     await new Promise((r) => setTimeout(r, 1400));

@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -201,9 +201,15 @@ test("related notes use the configured local limit and clamp invalid values", ()
 });
 
 test("local KB bundles skip the legacy server probe while empty state keeps the fallback", () => {
-  assert.equal(shouldProbeLegacyKb({ version: 1, notes: [{ t: "Algebra" }] }), false);
-  assert.equal(shouldProbeLegacyKb(null), true);
+  assert.equal(shouldProbeLegacyKb({ version: 1, notes: [{ t: "one" }] }), false);
   assert.equal(shouldProbeLegacyKb({ version: 1, notes: [] }), true);
+  assert.equal(shouldProbeLegacyKb(null), true);
+});
+
+test("build surface stays hidden while bundle state is unknown or loading, and only reveals for a known empty state", () => {
+  assert.deepEqual(kbBuildSurfaceModel({ state: "loading" }), { showBuildCard: false, showMain: true });
+  assert.deepEqual(kbBuildSurfaceModel({ state: "populated" }), { showBuildCard: false, showMain: true });
+  assert.deepEqual(kbBuildSurfaceModel({ state: "empty" }), { showBuildCard: true, showMain: false });
 });
 
 test("kbSearchStateModel keeps only valid local filter and sort choices", () => {
