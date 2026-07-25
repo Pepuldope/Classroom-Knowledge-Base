@@ -19,8 +19,13 @@ function withFamily(n) {
   const f = deriveFamily(n.course);
   return f ? { ...n, family: f } : n;
 }
+function timedJsonResponse(start, body, status = 200, metric = "kb-search") {
+  return jsonResponse(body, status, { "Server-Timing": `${metric};dur=${Date.now() - start}` });
+}
+
 export default async function handler(req) {
-  if (req.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405);
+  const start = Date.now();
+  if (req.method !== "GET") return timedJsonResponse(start, { error: "Method not allowed" }, 405);
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") || "").trim();
   const limit = Math.min(20, Math.max(1, Number(url.searchParams.get("limit")) || 8));
@@ -29,11 +34,14 @@ export default async function handler(req) {
   const kindFilter = (url.searchParams.get("kind") || "").trim();
   const familyFilter = (url.searchParams.get("family") || "").trim();
   const sort = (url.searchParams.get("sort") || "relevance").trim();
-  if (!q) return jsonResponse({ error: "q required" }, 400);
+  if (!q) return timedJsonResponse(start, { error: "q required" }, 400);
 
   const bundle = await getBundle();
   if (!bundle || !Array.isArray(bundle.notes) || bundle.notes.length === 0) {
-    return jsonResponse({ meta: await getMeta(), results: [], filters: { courses: [], years: [], kinds: [], families: [] }, empty: true }, 200);
+    return timedJsonResponse(
+      start,
+      { meta: await getMeta(), results: [], filters: { courses: [], years: [], kinds: [], families: [] }, empty: true }
+    );
   }
 
   // Derive the distinct course/year/kind/family facets so the UI can render
@@ -84,5 +92,5 @@ export default async function handler(req) {
     const suggestion = suggestCorrection(notes, q);
     if (suggestion) response.didYouMean = suggestion;
   }
-  return jsonResponse(response, 200);
+  return timedJsonResponse(start, response, 200);
 }
