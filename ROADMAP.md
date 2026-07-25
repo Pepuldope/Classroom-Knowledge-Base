@@ -36,6 +36,11 @@ These came straight from user feedback. Prefer these over speculative polish.
   opt-in. Pure resolver `resolveNoteOpenAction()` in kb.js + 5 unit tests + browser e2e.
 - [x] Visual styles / theme switching in Settings. Shipped 2026-07-19: Display → Theme (System / Light / Dark) persists locally and applies CSS variables live. Covered by `scripts/theme_test.mjs`.
 
+## 🐛 Reported by Pepuldo (2026-07-25) — fix before new features
+Fresh user reports from live use. **Prefer these over Agent-Proposed polish.**
+- [ ] Theme/contrast: after a recent style change, some text is white-on-white (or otherwise unreadable). Audit light + dark + system themes across KB, Archive, Planner, Settings, modals, empty/loading states, and cards. Fix contrast so body/secondary/muted labels, buttons, chips, and status text remain readable on their backgrounds. Add a focused visual/regression check so it cannot regress.
+- [ ] KB build card: when a local knowledge-base bundle already exists / is already loading course content into the KB, hide the entire "Generate database" / "Build my knowledge base" / scrape-onboarding card **instantly** — do not wait for full note content to finish loading. If IndexedDB (or equivalent) already has a non-empty bundle or an in-progress load of an existing bundle, show only the search/study surface + loading UI. Reveal the build/generate card only in a true empty state (no bundle yet). Extend `kb_loading_test.mjs` (or equivalent) so the card is absent as soon as "already has data / loading existing" is known.
+
 ## 🧠 Soon
 - [x] KB: "Did you mean" typo-tolerance — suggest a corrected spelling when a search returns nothing (query-side fuzzy spelling).
 - [x] Tutor: conversation memory across messages, a "new topic" reset, and a "clear chat" action (clear-chat shipped 2026-07-20).
