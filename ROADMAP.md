@@ -105,6 +105,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: announce active filter and sort changes in a polite result-status region for keyboard users (2026-07-24).
 - [x] KB: let students choose whether copied search context uses compact or line-separated formatting locally (2026-07-25).
 - [ ] KB: show a local “copied from N results” history entry without storing note bodies.
+- [ ] KB: add a visible inline confirmation for copied search context with the result count.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 
