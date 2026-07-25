@@ -1094,6 +1094,7 @@ async function configureKbSettingsUi() {
   set("kbPrefRelatedCount", s.relatedCount);
   set("kbPrefRelatedCountValue", s.relatedCount, "textContent");
   set("kbPrefDensity", s.density);
+  set("kbPrefCopyFormat", s.copyFormat);
   set("kbPrefSpeechRate", s.speechRate);
   set("kbPrefSpeechRateValue", `${s.speechRate}×`, "textContent");
   set("kbPrefAutoBuild", s.autoBuild, "checked");
@@ -1228,6 +1229,7 @@ async function saveSettingsAndReload() {
       defaultSort: $("kbPrefSort")?.value,
       relatedCount: $("kbPrefRelatedCount")?.value,
       density: $("kbPrefDensity")?.value,
+      copyFormat: $("kbPrefCopyFormat")?.value,
       speechRate: $("kbPrefSpeechRate")?.value,
       autoBuild: $("kbPrefAutoBuild")?.checked,
     });

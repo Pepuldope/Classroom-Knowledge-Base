@@ -32,6 +32,9 @@ try {
   const bookButton = await page.locator("#kbPrefExportBook");
   assert.equal(await bookButton.count(), 1, "Settings should offer a readable study-book export");
   assert.match(await bookButton.textContent(), /study book/i);
+  const copyFormat = page.locator("#kbPrefCopyFormat");
+  assert.equal(await copyFormat.count(), 1, "Settings should offer a local copied-context format");
+  assert.equal(await copyFormat.inputValue(), "lines");
 
   // Regression: range output listeners must survive repeated changes in one
   // settings visit, not disappear after the first input event.

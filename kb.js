@@ -267,6 +267,7 @@ const DEFAULT_KB_SETTINGS = Object.freeze({
   defaultSort: "recency",
   relatedCount: 3,
   density: "comfortable",
+  copyFormat: "lines",
   autoBuild: false,
   speechRate: 1,
 });
@@ -286,6 +287,7 @@ export function kbSettingsModel(value = {}) {
     defaultSort: sorts.has(input.defaultSort) ? input.defaultSort : DEFAULT_KB_SETTINGS.defaultSort,
     relatedCount: Number.isFinite(relatedCount) ? Math.min(8, Math.max(1, Math.round(relatedCount))) : DEFAULT_KB_SETTINGS.relatedCount,
     density: input.density === "compact" ? "compact" : DEFAULT_KB_SETTINGS.density,
+    copyFormat: input.copyFormat === "compact" ? "compact" : DEFAULT_KB_SETTINGS.copyFormat,
     autoBuild: input.autoBuild === true,
     speechRate: Number.isFinite(speechRate) ? Math.min(2, Math.max(0.5, speechRate)) : DEFAULT_KB_SETTINGS.speechRate,
   };
@@ -1123,7 +1125,7 @@ async function runKbSearch(query) {
     copyStatus.setAttribute("aria-live", "assertive");
     copyStatus.setAttribute("aria-atomic", "true");
     copyContext.addEventListener("click", async () => {
-      const text = copySearchContext(d.results);
+      const text = copySearchContext(d.results, { format: loadKbSettings().copyFormat });
       try {
         if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
         await navigator.clipboard.writeText(text);
@@ -1548,16 +1550,23 @@ export function copyableTutorText(text) {
   return typeof text === "string" ? text.trim() : "";
 }
 
+/** Normalize the local search-context clipboard layout preference. */
+export function copySearchContextFormatModel(value) {
+  return value === "compact" ? "compact" : "lines";
+}
+
 /** Format the currently displayed result context without including full note bodies. */
-export function copySearchContext(notes = []) {
+export function copySearchContext(notes = [], { format = "lines" } = {}) {
   if (!Array.isArray(notes)) return "";
+  const compact = copySearchContextFormatModel(format) === "compact";
   return notes.map((note) => {
     const title = copyableTutorText(note?.t) || "(untitled)";
-    const meta = [note?.course, note?.y].filter(Boolean).join(" · ");
+    const meta = [note?.course, note?.y].filter(Boolean).join(compact ? " · " : " · ");
     const heading = meta ? `${title} — ${meta}` : title;
     const snippet = copyableTutorText(note?._snippet);
-    return snippet ? `${heading}\n${snippet}` : heading;
-  }).join("\n\n");
+    if (!snippet) return heading;
+    return compact ? `${heading} — ${snippet}` : `${heading}\n${snippet}`;
+  }).join(compact ? "\n" : "\n\n");
 }
 
 export function studyModeModel(text) {

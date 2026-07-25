@@ -103,7 +103,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: let students mark individual study-mode prompts as completed locally and show a small progress indicator (2026-07-24).
 - [x] KB: add a keyboard shortcut to open study mode for the latest tutor answer (Ctrl/Cmd+Shift+S; 2026-07-25).
 - [x] KB: announce active filter and sort changes in a polite result-status region for keyboard users (2026-07-24).
-- [ ] KB: let students choose whether copied search context uses compact or line-separated formatting locally.
+- [x] KB: let students choose whether copied search context uses compact or line-separated formatting locally (2026-07-25).
 - [ ] KB: show a local “copied from N results” history entry without storing note bodies.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).

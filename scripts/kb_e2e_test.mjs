@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -169,6 +169,7 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     defaultSort: "recency",
     relatedCount: 3,
     density: "comfortable",
+    copyFormat: "lines",
     autoBuild: false,
     speechRate: 1,
   });
@@ -179,6 +180,7 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     defaultSort: "recency",
     relatedCount: 8,
     density: "compact",
+    copyFormat: "lines",
     autoBuild: true,
     speechRate: 1,
   });
@@ -710,6 +712,16 @@ test("copySearchContext formats only selected note titles and snippets", () => {
     { t: "Essay plan", course: "ELA", _snippet: "" },
   ]), "Algebra basics — Math · 2025-26\nLinear equations overview.\n\nEssay plan — ELA");
   assert.equal(copySearchContext([]), "");
+});
+
+test("copySearchContextFormatModel keeps a local compact or line-separated preference", () => {
+  assert.equal(copySearchContextFormatModel(), "lines");
+  assert.equal(copySearchContextFormatModel("compact"), "compact");
+  assert.equal(copySearchContextFormatModel("invalid"), "lines");
+  assert.equal(copySearchContext([
+    { t: "Algebra", course: "Math", _snippet: "Linear equations." },
+    { t: "Essay", course: "ELA", _snippet: "Plan." },
+  ], { format: "compact" }), "Algebra — Math — Linear equations.\nEssay — ELA — Plan.");
 });
 
 test("tutorFeedbackModel keeps only local thumbs ratings and toggles the same rating off", () => {
