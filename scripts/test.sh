@@ -20,10 +20,6 @@ node scripts/theme_test.mjs
 THEME_OK=$?
 if [ "$THEME_OK" -ne 0 ]; then echo "theme tests FAILED"; exit 1; fi
 
-echo "==> Theme contrast browser tests"
-node scripts/theme_contrast_test.mjs
-THEME_CONTRAST_OK=$?
-if [ "$THEME_CONTRAST_OK" -ne 0 ]; then echo "theme contrast tests FAILED"; exit 1; fi
 
 echo "==> Study streak model tests"
 node scripts/study_streak_test.mjs
@@ -66,6 +62,15 @@ done
 
 echo "==> Seeding dev data"
 node scripts/seed-dev.mjs "$PORT" 400 >/dev/null 2>&1
+echo "==> Theme contrast browser tests"
+BASE_URL="http://localhost:$PORT" node scripts/theme_contrast_test.mjs
+THEME_CONTRAST_OK=$?
+if [ "$THEME_CONTRAST_OK" -ne 0 ]; then echo "theme contrast tests FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Visual common-sense browser gate (light + dark)"
+BASE_URL="http://localhost:$PORT" node scripts/visual_common_sense_test.mjs
+VISUAL_OK=$?
+if [ "$VISUAL_OK" -ne 0 ]; then echo "visual common-sense tests FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
 echo "==> Browser UI e2e (local)"
 BASE_URL="http://localhost:$PORT" node scripts/kb_ui_test.mjs

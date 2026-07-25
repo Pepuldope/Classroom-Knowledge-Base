@@ -181,6 +181,8 @@ button {
 button:hover { background: #f3f4f6; }
 button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
 button.primary:hover { background: #1d4ed8; }
+:root[data-theme="dark"] button.primary,
+:root[data-theme="dark"] .view-toggle-btn.active { color: #0f172a; }
 
 main { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
 
@@ -869,7 +871,8 @@ summary::-webkit-details-marker { color: var(--muted); }
   cursor: pointer;
   transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s;
 }
-.settings-row select.settings-select:hover { border-color: var(--accent); }
+.settings-row select.settings-select:hover { border-color: var(--accent); background: var(--accent-bg); }
+.settings-row select.settings-select:active { border-color: var(--accent); background: var(--accent-bg); }
 .settings-row select.settings-select:focus-visible {
   outline: none;
   border-color: var(--accent);
@@ -1185,6 +1188,10 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-radius: 8px;
   background: var(--card);
 }
+#archiveSearchInput:hover,
+#kbSearchInput:hover { border-color: var(--accent); background: var(--accent-bg); }
+#archiveSearchInput:active,
+#kbSearchInput:active { border-color: var(--accent); background: var(--accent-bg); }
 #archiveSearchInput:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 
 .archive-snippet { color: var(--muted); }
