@@ -5,7 +5,8 @@ import { relatedNotes } from "./kb-retrieval.js";
 export const config = { runtime: "edge" };
 
 function timedJsonResponse(start, body, status = 200) {
-  return jsonResponse(body, status, { "Server-Timing": `kb-related;dur=${Date.now() - start}` });
+  const timing = `kb-related;dur=${Date.now() - start}`;
+  return jsonResponse(body, status, { "Server-Timing": timing, "X-Server-Timing": timing });
 }
 
 /**

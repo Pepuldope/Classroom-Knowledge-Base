@@ -17,6 +17,11 @@ test("/api/kb-search includes Server-Timing header with duration", async () => {
   );
 });
 
+test("/api/kb-search includes a platform-survivable timing header", async () => {
+  const resp = await kbSearch(makeReq("/api/kb-search?q=test&limit=1"));
+  assert.match(resp.headers.get("X-Server-Timing") || "", /^kb-search;dur=\d+$/);
+});
+
 test("/api/kb-search includes Server-Timing on validation errors", async () => {
   const resp = await kbSearch(makeReq("/api/kb-search"));
   assert.equal(resp.status, 400);

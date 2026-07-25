@@ -20,7 +20,8 @@ function withFamily(n) {
   return f ? { ...n, family: f } : n;
 }
 function timedJsonResponse(start, body, status = 200, metric = "kb-search") {
-  return jsonResponse(body, status, { "Server-Timing": `${metric};dur=${Date.now() - start}` });
+  const timing = `${metric};dur=${Date.now() - start}`;
+  return jsonResponse(body, status, { "Server-Timing": timing, "X-Server-Timing": timing });
 }
 
 export default async function handler(req) {
