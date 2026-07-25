@@ -105,7 +105,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: announce active filter and sort changes in a polite result-status region for keyboard users (2026-07-24).
 - [x] KB: let students choose whether copied search context uses compact or line-separated formatting locally (2026-07-25).
 - [ ] KB: show a local “copied from N results” history entry without storing note bodies.
-- [ ] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content.
+- [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
 - [ ] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies.
 - [ ] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button.
 - [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
