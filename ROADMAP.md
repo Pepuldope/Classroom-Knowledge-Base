@@ -101,7 +101,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Planner tutor: preserve copied grounding source status for keyboard and screen-reader users with an assertive confirmation. Shipped 2026-07-24: copy success/failure now updates an assertive status region.
 - [x] KB: add a local “copy search context” action that copies only the currently selected note titles and snippets (2026-07-24).
 - [x] KB: let students mark individual study-mode prompts as completed locally and show a small progress indicator (2026-07-24).
-- [ ] KB: add a keyboard shortcut to open study mode for the latest tutor answer.
+- [x] KB: add a keyboard shortcut to open study mode for the latest tutor answer (Ctrl/Cmd+Shift+S; 2026-07-25).
 - [x] KB: announce active filter and sort changes in a polite result-status region for keyboard users (2026-07-24).
 - [ ] KB: let students choose whether copied search context uses compact or line-separated formatting locally.
 - [ ] KB: show a local “copied from N results” history entry without storing note bodies.

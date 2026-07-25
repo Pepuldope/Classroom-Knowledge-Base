@@ -841,6 +841,16 @@ export function wireKbEvents() {
       runKbSearch("");
     }
 
+    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "s") {
+      const tutorModal = $("kbTutorModal");
+      const studyButtons = $("kbTutorMessages")?.querySelectorAll(".ai-study-mode-btn");
+      const studyButton = studyButtons?.[studyButtons.length - 1];
+      if (tutorModal && !tutorModal.hidden && studyButton && latestTutorAnswer(tutorMessages)) {
+        e.preventDefault();
+        studyButton.click();
+      }
+    }
+
     const resultList = $("kbResults");
     const cards = resultList ? [...resultList.querySelectorAll(".kb-result-card")] : [];
     const activeCard = cards.indexOf(document.activeElement);
@@ -1562,6 +1572,18 @@ export function studyModeModel(text) {
     ],
     source,
   };
+}
+
+/** Return the latest non-empty assistant answer for local tutor actions. */
+export function latestTutorAnswer(messages = []) {
+  if (!Array.isArray(messages)) return "";
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role !== "assistant") continue;
+    const text = copyableTutorText(message.content);
+    if (text) return text;
+  }
+  return "";
 }
 
 export function studyModeProgressModel(completed, total) {

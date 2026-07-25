@@ -537,6 +537,9 @@ try {
     await page.waitForSelector("#kbTutorMessages .ai-study-mode-panel:not([hidden])", { timeout: 4000 });
     assert.equal(await page.locator("#kbTutorMessages .ai-study-mode-panel li").count(), 3, "study mode should show three quiz prompts");
     assert.match(await page.locator("#kbTutorMessages .ai-study-mode-panel").textContent(), /no extra notes were uploaded/i);
+    await page.locator("#kbTutorMessages .ai-study-mode-btn").click();
+    await page.keyboard.press("Control+Shift+S");
+    await page.waitForSelector("#kbTutorMessages .ai-study-mode-panel:not([hidden])", { timeout: 4000 });
     await page.locator("#kbTutorMessages .ai-save-btn").click();
     assert.equal(await page.locator("#kbTutorMessages .ai-save-btn").textContent(), "Saved", "answer should be saved locally");
     // Clicking a chip must open the note detail modal.
