@@ -175,6 +175,9 @@ try {
   });
 
   await check("wide copy actions show a compact keyboard shortcut hint", async () => {
+    await page.fill("#kbSearchInput", "cover letter");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading") && document.querySelector("#kbCopyShortcutHint"), null, { timeout: 10000 });
     const hint = page.locator("#kbCopyShortcutHint");
     try {
       await page.waitForSelector("#kbCopyShortcutHint", { state: "attached", timeout: 5000 });
@@ -209,6 +212,8 @@ try {
   });
 
   await check("arrow keys move focus through result cards and Enter opens one", async () => {
+    const clearFilters = page.locator("#kbFilterChips .kb-clear-filters");
+    if (await clearFilters.count() && await clearFilters.isVisible()) await clearFilters.click();
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
     await page.waitForFunction(() => document.querySelectorAll("#kbResults .kb-result-card").length > 0, null, { timeout: 10000 });
