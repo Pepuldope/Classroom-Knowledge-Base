@@ -7,7 +7,7 @@
   --accent-bg: #eff6ff;
   --danger: #dc2626;
   --warn: #d97706;
-  --ok: #16a34a;
+  --ok: #15803d;
   --card: #ffffff;
   --surface-subtle: #f9fafb;
   --surface-assistant: #f3f4f6;
@@ -1733,7 +1733,8 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-export-label { font-size: 0.85rem; color: var(--muted); }
 .kb-export-bar .ghost-btn { font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0.32rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--fg); transition: background 0.12s, border-color 0.12s, color 0.12s; }
 .kb-export-bar .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
-.kb-copy-status { font-size: 0.82rem; color: var(--muted); min-height: 1.25rem; }
+.kb-result-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 0.45rem; margin: 0.5rem 0 0.75rem; }
+.kb-copy-status { flex: 1 1 16rem; min-width: 12rem; overflow-wrap: anywhere; font-size: 0.82rem; color: var(--muted); min-height: 1.25rem; }
 .kb-copy-shortcut-hint { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
 .kb-copy-status:not(:empty) { color: var(--ok); }
 .kb-copy-history-entry { display: block; flex-basis: 100%; min-height: 1.1rem; color: var(--muted); font-size: 0.78rem; }

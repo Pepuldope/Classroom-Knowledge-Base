@@ -47,12 +47,19 @@ async function forceHarnessStates() {
     if (meta) meta.innerHTML = '<span class="kb-loading-inline">Loading your knowledge base…</span>';
     ["kbSearchInput", "archiveSearchInput"].forEach((id) => { const el = document.getElementById(id); if (el) el.hidden = false; });
     const results = document.getElementById("kbResults");
+    if (results) results.hidden = false;
     if (results && !results.children.length) {
       const card = document.createElement("button");
       card.className = "assignment kb-result-card";
       card.type = "button";
       card.textContent = "Readable representative knowledge-base result";
       results.append(card);
+    }
+    if (results && !results.querySelector(".kb-result-actions")) {
+      const actions = document.createElement("div");
+      actions.className = "kb-result-actions";
+      actions.innerHTML = '<button class="secondary kb-copy-context" type="button">Copy search context</button><button class="secondary kb-copy-context" type="button">Copy again</button><span class="kb-copy-status" role="status" aria-live="assertive">Copied 12 notes of titles and snippets.</span>';
+      results.append(actions);
     }
     const archive = document.getElementById("archiveMain"); if (archive) archive.hidden = false;
     const pane = document.querySelector('[data-pane="knowledge-base"]'); if (pane) pane.hidden = false;
@@ -65,6 +72,7 @@ async function checkContrast(theme) {
     ["status", ".status"], ["view toggle", ".view-toggle-btn"], ["KB search", "#kbSearchInput"],
     ["settings label", ".settings-pane:not([hidden]) .settings-row > span"],
     ["modal copy", ".modal:not([hidden]) .modal-sub"], ["primary control", "button.primary"],
+    ["copy confirmation", ".kb-copy-status"],
   ];
   for (const [name, selector] of samples) {
     const loc = await visible(selector);
@@ -156,11 +164,34 @@ async function checkLayout() {
   for (const issue of issues) fail(issue);
 }
 
+async function checkCopyStatusLayout(theme) {
+  await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
+  const data = await page.locator(".kb-result-actions .kb-copy-status").evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    return {
+      visible: r.width > 0 && r.height > 0,
+      fits: el.scrollWidth <= el.clientWidth + 2,
+      width: r.width,
+      flexGrow: s.flexGrow,
+      minWidth: s.minWidth,
+      overflowWrap: s.overflowWrap,
+      color: s.color,
+    };
+  });
+  if (!data.visible) fail(`${theme}: copy confirmation status is not visible in the action row`);
+  if (!data.fits) fail(`${theme}: copy confirmation status text is clipped (${data.width}px box)`);
+  if (data.flexGrow === "0") fail(`${theme}: copy confirmation status does not yield compact action-row space`);
+  if (data.minWidth === "auto") fail(`${theme}: copy confirmation status has no shrink-safe minimum width`);
+  if (!["anywhere", "break-word", "break-all"].includes(data.overflowWrap)) fail(`${theme}: copy confirmation status cannot wrap long text`);
+}
+
 try {
   await page.goto(`${BASE}/index.html`, { waitUntil: "networkidle", timeout: 30000 });
   await page.waitForSelector("#viewToggle", { timeout: 10000 });
   await forceHarnessStates();
   for (const theme of ["light", "dark"]) await checkContrast(theme);
+  for (const theme of ["light", "dark"]) await checkCopyStatusLayout(theme);
   await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
   await checkControlStates();
   await checkLayout();

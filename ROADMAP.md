@@ -100,7 +100,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Tutor: unify Planner assignment-help tutor with the KB tutor pipeline (shared streaming, provider rotation, multi-turn, privacy-bounded context) without breaking Planner cards. Shipped 2026-07-23 in `da5a7e7`: Planner now sends bounded assignment/archive notes and its existing history through `/api/tutor`.
 - [x] Settings: wire default search scope (all / current course / pinned courses) into live local KB search behavior, not only the control UI. Shipped 2026-07-23: local scope filtering now honors persisted pinned-course selections from the Settings editor.
 - [x] KB: add a compact keyboard shortcut hint beside copy actions on wide screens (2026-07-26).
-- [ ] KB: add a compact copy-action status layout check to the dark-theme visual gate.
+- [x] KB: add a compact copy-action status layout check to the dark-theme visual gate. Shipped 2026-07-26: the standing light/dark gate now verifies wrapping, shrink-safe flex sizing, visibility, and contrast for inline copy confirmation; tightened light success green to WCAG AA.
 - [ ] Perf: add a cache-warm probe to the hosted legacy search latency test.
 - [ ] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button.
 - [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
