@@ -111,7 +111,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: announce active filter and sort changes in a polite result-status region for keyboard users (2026-07-24).
 - [x] KB: let students choose whether copied search context uses compact or line-separated formatting locally (2026-07-25).
 - [x] KB: show a local “copied from N results” history entry without storing note bodies. Shipped 2026-07-26: persisted history now stores only count/query/timestamp metadata; copy-again text stays in memory for the current page.
-- [ ] KB: let students dismiss a stale copy-history entry locally without touching their bundle.
+- [x] KB: let students dismiss a stale copy-history entry locally without touching their bundle (2026-07-26).
 - [ ] KB: add a compact keyboard shortcut hint beside copy actions on wide screens.
 - [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
 - [x] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies (2026-07-25).

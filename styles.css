@@ -1736,6 +1736,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-copy-status { font-size: 0.82rem; color: var(--muted); min-height: 1.25rem; }
 .kb-copy-status:not(:empty) { color: var(--ok); }
 .kb-copy-history-entry { display: block; flex-basis: 100%; min-height: 1.1rem; color: var(--muted); font-size: 0.78rem; }
+.kb-copy-history-dismiss { font-size: 0.78rem; padding: 0.25rem 0.55rem; }
 .kb-tutor-wrap { margin-top: 1.5rem; text-align: center; }
 .ai-context-note { display: block; font-size: 0.8rem; color: var(--muted); padding: 0.4rem 0.6rem; background: var(--accent-bg); border-radius: 8px; margin-bottom: 0.5rem; }
 .ai-attribution { display: block; margin-top: 0.55rem; color: var(--muted); font-size: 0.72rem; }

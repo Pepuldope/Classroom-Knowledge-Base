@@ -183,6 +183,15 @@ try {
     assert.match(await page.locator("#kbCopySearchStatus").textContent(), /Copied \d+ notes? again\./);
   });
 
+  await check("copy history can be dismissed without changing the local bundle", async () => {
+    await page.click("#kbDismissCopyHistory");
+    assert.equal(await page.locator("#kbCopySearchAgain").isVisible(), false, "copy-again should hide after dismissal");
+    assert.equal(await page.locator("#kbDismissCopyHistory").isVisible(), false, "dismiss action should hide after dismissal");
+    assert.match(await page.locator("#kbCopySearchStatus").textContent(), /dismissed from this browser/i);
+    assert.equal(await page.evaluate(() => localStorage.getItem("cwa_kb_copy_history")), null, "only copy metadata should be cleared");
+    assert.ok(await page.locator("#kbResults .kb-result-card").count() > 0, "KB results should remain visible");
+  });
+
   await check("arrow keys move focus through result cards and Enter opens one", async () => {
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");

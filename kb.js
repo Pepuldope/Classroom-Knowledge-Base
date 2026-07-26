@@ -1150,6 +1150,13 @@ async function runKbSearch(query) {
     copyHistoryEntry.className = "kb-copy-history-entry";
     copyHistoryEntry.setAttribute("aria-label", "Latest copied search context");
     copyHistoryEntry.textContent = loadCopySearchContextHistoryEntry().label;
+    copyHistoryEntry.hidden = !copyHistory.count;
+    const dismissCopyHistory = document.createElement("button");
+    dismissCopyHistory.id = "kbDismissCopyHistory";
+    dismissCopyHistory.type = "button";
+    dismissCopyHistory.className = "secondary kb-copy-history-dismiss";
+    dismissCopyHistory.textContent = "Dismiss";
+    dismissCopyHistory.hidden = !copyHistory.count;
     copyContext.addEventListener("click", async () => {
       const text = copySearchContext(d.results, { format: loadKbSettings().copyFormat });
       try {
@@ -1159,6 +1166,8 @@ async function runKbSearch(query) {
         copyAgain.textContent = `Copy again (${d.results.length})`;
         copyAgain.hidden = false;
         copyHistoryEntry.textContent = copySearchContextHistoryEntryModel({ count: d.results.length, query: $("kbSearchInput")?.value || "", copiedAt: Date.now() }).label;
+        copyHistoryEntry.hidden = false;
+        dismissCopyHistory.hidden = false;
         copyStatus.textContent = `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`;
       } catch {
         copyStatus.textContent = "Could not copy search context. Check clipboard permissions and try again.";
@@ -1174,7 +1183,15 @@ async function runKbSearch(query) {
         copyStatus.textContent = "Could not copy the latest search context. Check clipboard permissions and try again.";
       }
     });
-    contextBar.append(copyContext, copyAgain, copyStatus, copyHistoryEntry);
+    dismissCopyHistory.addEventListener("click", () => {
+      latestCopySearchContextText = "";
+      try { localStorage.removeItem(KB_COPY_HISTORY_KEY); } catch {}
+      copyAgain.hidden = true;
+      copyHistoryEntry.hidden = true;
+      dismissCopyHistory.hidden = true;
+      copyStatus.textContent = "Copy history dismissed from this browser.";
+    });
+    contextBar.append(copyContext, copyAgain, copyStatus, copyHistoryEntry, dismissCopyHistory);
     results.appendChild(contextBar);
     // "Did you mean" — when a typo returned nothing but a confident
     // correction exists in the corpus, offer a one-click retry.
@@ -1633,6 +1650,11 @@ export function copySearchContextHistoryModel(value = {}) {
   const input = value && typeof value === "object" ? value : {};
   const count = Number.isInteger(input.count) && input.count > 0 ? input.count : 0;
   return { text: "", count };
+}
+
+/** Clear the browser-local copy payload and metadata without touching the KB bundle. */
+export function copySearchContextHistoryDismissModel() {
+  return { text: "", count: 0 };
 }
 
 function loadCopySearchContextHistory() {
