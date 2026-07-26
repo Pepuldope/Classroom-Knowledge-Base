@@ -51,6 +51,11 @@ node scripts/kb_e2e_test.mjs
 API_OK=$?
 if [ "$API_OK" -ne 0 ]; then echo "API tests FAILED"; exit 1; fi
 
+echo "==> Hosted latency model tests"
+node --test tests/kb-latency-model.test.js
+LATENCY_MODEL_OK=$?
+if [ "$LATENCY_MODEL_OK" -ne 0 ]; then echo "latency model tests FAILED"; exit 1; fi
+
 echo "==> Starting dev server on :$PORT"
 node scripts/dev-server.mjs "$PORT" > /tmp/kb_dev.log 2>&1 &
 SRV=$!

@@ -19,6 +19,24 @@ export function summarizeSamples(samples) {
   };
 }
 
+export function compareLatency(localSummary, hostedSummary) {
+  const localWarmAverageMs = Number(localSummary?.warmAverageMs);
+  const hostedWarmAverageMs = Number(hostedSummary?.warmAverageMs);
+  if (!Number.isFinite(localWarmAverageMs) || !Number.isFinite(hostedWarmAverageMs)) {
+    throw new Error("latency comparison needs warm summaries");
+  }
+  if (localWarmAverageMs <= 0 || hostedWarmAverageMs <= 0) {
+    throw new Error("latency comparison needs positive warm averages");
+  }
+  const round = (value) => Math.round(value * 100) / 100;
+  return {
+    localWarmAverageMs: round(localWarmAverageMs),
+    hostedWarmAverageMs: round(hostedWarmAverageMs),
+    hostedMinusLocalMs: round(hostedWarmAverageMs - localWarmAverageMs),
+    hostedToLocalRatio: round(hostedWarmAverageMs / localWarmAverageMs),
+  };
+}
+
 async function timedSearch(base, query) {
   const started = performance.now();
   const response = await fetch(`${base}/api/kb-search?q=${encodeURIComponent(query)}&limit=8`);
@@ -36,6 +54,7 @@ async function timedSearch(base, query) {
 
 async function main() {
   const base = (process.env.KB_LIVE_URL || "https://classroom-knowledge-google.vercel.app").replace(/\/$/, "");
+  const localBase = process.env.KB_LOCAL_URL?.replace(/\/$/, "");
   const query = process.env.KB_LATENCY_QUERY || "cover letter";
   const budgetMs = Number(process.env.KB_LATENCY_BUDGET_MS || 1000);
   const samples = [];
@@ -46,6 +65,17 @@ async function main() {
   }
   const summary = summarizeSamples(samples);
   const report = { base, query, ...summary, noteCount: details.noteCount, resultCount: details.resultCount, budgetMs };
+  if (localBase) {
+    const localSamples = [];
+    let localDetails;
+    for (let i = 0; i < 3; i += 1) {
+      localDetails = await timedSearch(localBase, query);
+      localSamples.push(Math.round(localDetails.elapsedMs * 100) / 100);
+    }
+    const localSummary = summarizeSamples(localSamples);
+    report.local = { base: localBase, ...localSummary, noteCount: localDetails.noteCount, resultCount: localDetails.resultCount };
+    report.localVsHosted = compareLatency(localSummary, summary);
+  }
   console.log(JSON.stringify(report, null, 2));
   if (summary.warmMaxMs > budgetMs) {
     console.error(`warm legacy search exceeds ${budgetMs}ms budget`);
