@@ -152,6 +152,7 @@ try {
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
+    await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading"), null, { timeout: 10000 });
     const n = await page.locator("#kbResults .kb-result-card").count();
     assert.ok(n > 0, "expected at least one result card");
   });
@@ -176,6 +177,7 @@ try {
   await check("wide copy actions show a compact keyboard shortcut hint", async () => {
     const hint = page.locator("#kbCopyShortcutHint");
     try {
+      await page.waitForSelector("#kbCopyShortcutHint", { state: "attached", timeout: 5000 });
       assert.equal(await hint.count(), 1, "copy actions should expose a shortcut hint");
       assert.equal(await hint.isVisible(), true, "shortcut hint should be visible on wide screens");
       assert.match(await hint.textContent(), /\//);

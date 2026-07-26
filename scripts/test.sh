@@ -72,6 +72,11 @@ BASE_URL="http://localhost:$PORT" node scripts/visual_common_sense_test.mjs
 VISUAL_OK=$?
 if [ "$VISUAL_OK" -ne 0 ]; then echo "visual common-sense tests FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> KB copy confirmation mobile e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_copy_mobile_test.mjs
+COPY_MOBILE_OK=$?
+if [ "$COPY_MOBILE_OK" -ne 0 ]; then echo "KB copy mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Browser UI e2e (local)"
 BASE_URL="http://localhost:$PORT" node scripts/kb_ui_test.mjs
 UI_OK=$?

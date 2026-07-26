@@ -102,7 +102,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: add a compact keyboard shortcut hint beside copy actions on wide screens (2026-07-26).
 - [x] KB: add a compact copy-action status layout check to the dark-theme visual gate. Shipped 2026-07-26: the standing light/dark gate now verifies wrapping, shrink-safe flex sizing, visibility, and contrast for inline copy confirmation; tightened light success green to WCAG AA.
 - [x] Perf: add a cache-warm probe to the hosted legacy search latency test. Shipped 2026-07-26: `scripts/kb_latency_test.mjs` records cold vs two warm requests, corpus/result counts, and reports the measured warm-budget breach without logging note content.
-- [ ] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button.
+- [x] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button (2026-07-26).
 - [ ] KB: exercise a long copied-status message at narrow mobile width without clipping or horizontal overflow.
 - [ ] Perf: expose a bounded local-vs-hosted latency comparison in the status report.
 - [ ] Continuity: verify copy confirmation remains announced after a second keyboard-triggered copy.
