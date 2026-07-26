@@ -68,6 +68,8 @@ try {
       };
     }));
     await page.reload({ waitUntil: "networkidle" });
+    await page.evaluate(() => localStorage.removeItem("cwa_kb_copy_history"));
+    await page.reload({ waitUntil: "networkidle" });
   });
 
   await check("KB view is revealed by showKbView()", async () => {
@@ -168,6 +170,7 @@ try {
     assert.match(await page.locator("#kbCopySearchStatus").getAttribute("role"), /status/);
     assert.equal(await page.locator("#kbCopySearchStatus").isVisible(), true, "copy confirmation should be visible inline");
     assert.match(await page.locator("#kbCopySearchStatus").textContent(), /Copied \d+ notes?/);
+    assert.match(await page.locator("#kbCopySearchHistoryEntry").textContent(), /Copied \d+ results? · cover letter/i);
   });
 
   await check("copy again repeats the latest local context without a new search", async () => {

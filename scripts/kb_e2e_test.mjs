@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
@@ -733,12 +733,26 @@ test("copySearchContextFormatModel keeps a local compact or line-separated prefe
 test("copySearchContextHistoryModel keeps only the latest local context metadata", () => {
   assert.deepEqual(copySearchContextHistoryModel(), { text: "", count: 0 });
   assert.deepEqual(copySearchContextHistoryModel({ text: " Algebra — Math\nSnippet", count: 2 }), {
-    text: " Algebra — Math\nSnippet",
+    text: "",
     count: 2,
   });
   assert.deepEqual(copySearchContextHistoryModel({ text: "full note body should not be stored", count: -4 }), {
-    text: "full note body should not be stored",
+    text: "", count: 0,
+  });
+});
+
+test("copySearchContextHistoryEntryModel describes copied result metadata without note content", () => {
+  assert.deepEqual(copySearchContextHistoryEntryModel({ count: 4, query: "cover letter", copiedAt: 1710000000000 }), {
+    count: 4,
+    query: "cover letter",
+    copiedAt: 1710000000000,
+    label: "Copied 4 results · cover letter",
+  });
+  assert.deepEqual(copySearchContextHistoryEntryModel({ count: 0, query: "full note body" }), {
     count: 0,
+    query: "",
+    copiedAt: 0,
+    label: "",
   });
 });
 
