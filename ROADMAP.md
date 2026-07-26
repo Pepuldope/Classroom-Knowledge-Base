@@ -99,7 +99,13 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Settings: improve Settings tab accessibility (tablist/tab/tabpanel + aria-selected sync; 2026-07-23).
 - [x] Tutor: unify Planner assignment-help tutor with the KB tutor pipeline (shared streaming, provider rotation, multi-turn, privacy-bounded context) without breaking Planner cards. Shipped 2026-07-23 in `da5a7e7`: Planner now sends bounded assignment/archive notes and its existing history through `/api/tutor`.
 - [x] Settings: wire default search scope (all / current course / pinned courses) into live local KB search behavior, not only the control UI. Shipped 2026-07-23: local scope filtering now honors persisted pinned-course selections from the Settings editor.
-- [ ] Perf: cut hosted legacy `/api/kb-search` cold latency toward <1s while keeping the private IndexedDB path instant (measure before/after; do not break local fast path).
+- [x] KB: add a compact keyboard shortcut hint beside copy actions on wide screens (2026-07-26).
+- [ ] KB: add a compact copy-action status layout check to the dark-theme visual gate.
+- [ ] Perf: add a cache-warm probe to the hosted legacy search latency test.
+- [ ] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button.
+- [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
+- [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
+- [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
 - [x] Continuity: automated smoke that opens Archive + Planner + Settings after KB changes and fails the run if any view errors (extend existing browser gates). Shipped 2026-07-23: `scripts/continuity_smoke_test.mjs` now exercises the shared navigation and Settings modal, and runs in `scripts/test.sh`.
 - [x] Planner tutor: add a compact copy-to-clipboard action for the assignment grounding sources on mobile. Shipped 2026-07-24: grounded assignment badge now copies a compact title/course/source summary locally.
@@ -112,14 +118,8 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: let students choose whether copied search context uses compact or line-separated formatting locally (2026-07-25).
 - [x] KB: show a local “copied from N results” history entry without storing note bodies. Shipped 2026-07-26: persisted history now stores only count/query/timestamp metadata; copy-again text stays in memory for the current page.
 - [x] KB: let students dismiss a stale copy-history entry locally without touching their bundle (2026-07-26).
-- [ ] KB: add a compact keyboard shortcut hint beside copy actions on wide screens.
 - [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
 - [x] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies (2026-07-25).
-- [ ] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button.
-- [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
-- [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
-- [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
-
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item

@@ -1139,6 +1139,11 @@ async function runKbSearch(query) {
     const copyHistory = loadCopySearchContextHistory();
     copyAgain.textContent = copyHistory.count > 0 ? `Copy again (${copyHistory.count})` : "Copy again";
     copyAgain.hidden = !copyHistory.text;
+    const copyShortcutHint = document.createElement("span");
+    copyShortcutHint.id = "kbCopyShortcutHint";
+    copyShortcutHint.className = "kb-copy-shortcut-hint";
+    copyShortcutHint.textContent = "Shortcuts: / search · Esc clear";
+    copyShortcutHint.title = "Press / to focus search or Esc to clear it";
     const copyStatus = document.createElement("span");
     copyStatus.id = "kbCopySearchStatus";
     copyStatus.className = "kb-copy-status";
@@ -1191,7 +1196,7 @@ async function runKbSearch(query) {
       dismissCopyHistory.hidden = true;
       copyStatus.textContent = "Copy history dismissed from this browser.";
     });
-    contextBar.append(copyContext, copyAgain, copyStatus, copyHistoryEntry, dismissCopyHistory);
+    contextBar.append(copyContext, copyAgain, copyShortcutHint, copyStatus, copyHistoryEntry, dismissCopyHistory);
     results.appendChild(contextBar);
     // "Did you mean" — when a typo returned nothing but a confident
     // correction exists in the corpus, offer a one-click retry.

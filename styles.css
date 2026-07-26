@@ -1734,6 +1734,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-export-bar .ghost-btn { font: inherit; font-size: 0.82rem; cursor: pointer; padding: 0.32rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--fg); transition: background 0.12s, border-color 0.12s, color 0.12s; }
 .kb-export-bar .ghost-btn:hover { border-color: var(--accent); color: var(--accent); }
 .kb-copy-status { font-size: 0.82rem; color: var(--muted); min-height: 1.25rem; }
+.kb-copy-shortcut-hint { color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
 .kb-copy-status:not(:empty) { color: var(--ok); }
 .kb-copy-history-entry { display: block; flex-basis: 100%; min-height: 1.1rem; color: var(--muted); font-size: 0.78rem; }
 .kb-copy-history-dismiss { font-size: 0.78rem; padding: 0.25rem 0.55rem; }
@@ -1811,3 +1812,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-grounding-sources { color: var(--muted); overflow-wrap: anywhere; white-space: normal; }
 .ai-grounding-copy { justify-self: start; padding: 0.25rem 0.55rem; font: inherit; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--fg); cursor: pointer; }
 .ai-grounding-copy:hover, .ai-grounding-copy:focus-visible { border-color: var(--accent); color: var(--accent); }
+
+@media (max-width: 640px) {
+  .kb-copy-shortcut-hint { display: none; }
+}

@@ -173,6 +173,20 @@ try {
     assert.match(await page.locator("#kbCopySearchHistoryEntry").textContent(), /Copied \d+ results? · cover letter/i);
   });
 
+  await check("wide copy actions show a compact keyboard shortcut hint", async () => {
+    const hint = page.locator("#kbCopyShortcutHint");
+    try {
+      assert.equal(await hint.count(), 1, "copy actions should expose a shortcut hint");
+      assert.equal(await hint.isVisible(), true, "shortcut hint should be visible on wide screens");
+      assert.match(await hint.textContent(), /\//);
+      assert.match(await hint.textContent(), /Esc/i);
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.equal(await hint.isVisible(), false, "shortcut hint should stay compact on mobile");
+    } finally {
+      await page.setViewportSize({ width: 1280, height: 900 });
+    }
+  });
+
   await check("copy again repeats the latest local context without a new search", async () => {
     await page.evaluate(() => { window.__copiedSearchContext = ""; });
     await page.click("#kbCopySearchAgain");
