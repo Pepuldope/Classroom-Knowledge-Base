@@ -87,6 +87,11 @@ BASE_URL="http://localhost:$PORT" node scripts/kb_copy_history_mobile_test.mjs
 COPY_HISTORY_MOBILE_OK=$?
 if [ "$COPY_HISTORY_MOBILE_OK" -ne 0 ]; then echo "KB copy history mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> KB result-card mobile e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_result_card_mobile_test.mjs
+RESULT_CARD_MOBILE_OK=$?
+if [ "$RESULT_CARD_MOBILE_OK" -ne 0 ]; then echo "KB result-card mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Browser UI e2e (local)"
 BASE_URL="http://localhost:$PORT" node scripts/kb_ui_test.mjs
 UI_OK=$?

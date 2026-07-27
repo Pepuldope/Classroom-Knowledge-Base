@@ -380,7 +380,12 @@ summary::-webkit-details-marker { color: var(--muted); }
   background: var(--muted);
   opacity: 0.5;
 }
-.assignment .title { font-weight: 500; display: inline; }
+.assignment .title {
+  font-weight: 500;
+  display: inline;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .assignment .summary {
   font-size: 0.85rem;
   color: var(--muted);
@@ -390,6 +395,8 @@ summary::-webkit-details-marker { color: var(--muted); }
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
   color: var(--muted);
   font-size: 0.8rem;
   margin-top: 0.4rem;
