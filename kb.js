@@ -129,6 +129,14 @@ const KB_SETTINGS_KEY = "cwa_kb_settings";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const KB_COPY_HISTORY_KEY = "cwa_kb_copy_history";
 let latestCopySearchContextText = "";
+
+function announceCopyStatus(element, message) {
+  if (!element) return;
+  const next = (Number(element.dataset.announcement) || 0) + 1;
+  element.textContent = "";
+  element.dataset.announcement = String(next);
+  element.textContent = message;
+}
 const STUDY_LIST_KEY = "cwa_tutor_study_list";
 const STUDY_ACTIVITY_KEY = "cwa_kb_study_activity";
 const STUDY_PROGRESS_KEY = "cwa_kb_note_progress";
@@ -1173,9 +1181,9 @@ async function runKbSearch(query) {
         copyHistoryEntry.textContent = copySearchContextHistoryEntryModel({ count: d.results.length, query: $("kbSearchInput")?.value || "", copiedAt: Date.now() }).label;
         copyHistoryEntry.hidden = false;
         dismissCopyHistory.hidden = false;
-        copyStatus.textContent = `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`;
+        announceCopyStatus(copyStatus, `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`);
       } catch {
-        copyStatus.textContent = "Could not copy search context. Check clipboard permissions and try again.";
+        announceCopyStatus(copyStatus, "Could not copy search context. Check clipboard permissions and try again.");
       }
     });
     copyAgain.addEventListener("click", async () => {
@@ -1183,9 +1191,9 @@ async function runKbSearch(query) {
       try {
         if (!latest.text || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
         await navigator.clipboard.writeText(latest.text);
-        copyStatus.textContent = `Copied ${latest.count} note${latest.count === 1 ? "" : "s"} again.`;
+        announceCopyStatus(copyStatus, `Copied ${latest.count} note${latest.count === 1 ? "" : "s"} again.`);
       } catch {
-        copyStatus.textContent = "Could not copy the latest search context. Check clipboard permissions and try again.";
+        announceCopyStatus(copyStatus, "Could not copy the latest search context. Check clipboard permissions and try again.");
       }
     });
     dismissCopyHistory.addEventListener("click", () => {
@@ -1194,7 +1202,7 @@ async function runKbSearch(query) {
       copyAgain.hidden = true;
       copyHistoryEntry.hidden = true;
       dismissCopyHistory.hidden = true;
-      copyStatus.textContent = "Copy history dismissed from this browser.";
+      announceCopyStatus(copyStatus, "Copy history dismissed from this browser.");
     });
     contextBar.append(copyContext, copyAgain, copyShortcutHint, copyStatus, copyHistoryEntry, dismissCopyHistory);
     results.appendChild(contextBar);

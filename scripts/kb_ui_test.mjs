@@ -158,10 +158,14 @@ try {
   });
 
   await check("copy search context copies only visible titles and snippets", async () => {
+    await page.fill("#kbSearchInput", "cover letter");
+    await page.waitForResponse((response) => response.url().includes("/api/kb-search") && response.ok(), { timeout: 10000 });
+    await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading"), null, { timeout: 10000 });
     await page.evaluate(() => {
       navigator.clipboard.writeText = async (value) => { window.__copiedSearchContext = value; };
     });
     await page.waitForSelector("#kbCopySearchContext", { timeout: 5000 });
+    await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading"), null, { timeout: 10000 });
     await page.click("#kbCopySearchContext");
     await page.waitForFunction(() => typeof window.__copiedSearchContext === "string" && window.__copiedSearchContext.length > 0, null, { timeout: 5000 });
     const copied = await page.evaluate(() => window.__copiedSearchContext);
@@ -174,9 +178,22 @@ try {
     assert.match(await page.locator("#kbCopySearchHistoryEntry").textContent(), /Copied \d+ results? · cover letter/i);
   });
 
+  await check("repeated keyboard copy advances the live announcement", async () => {
+    const copyButton = page.locator("#kbCopySearchContext");
+    await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading"), null, { timeout: 10000 });
+    await copyButton.focus();
+    const before = await page.evaluate(() => Number(document.querySelector("#kbCopySearchStatus")?.dataset.announcement || 0));
+    await copyButton.press("Enter");
+    await page.waitForFunction((expected) => document.querySelector("#kbCopySearchStatus")?.dataset.announcement === String(expected), before + 1, { timeout: 5000 });
+    await copyButton.press("Enter");
+    await page.waitForFunction((expected) => document.querySelector("#kbCopySearchStatus")?.dataset.announcement === String(expected), before + 2, { timeout: 5000 });
+    assert.equal(await page.locator("#kbCopySearchStatus").getAttribute("aria-live"), "assertive");
+    assert.equal(await page.locator("#kbCopySearchStatus").getAttribute("aria-atomic"), "true");
+  });
+
   await check("wide copy actions show a compact keyboard shortcut hint", async () => {
     await page.fill("#kbSearchInput", "cover letter");
-    await page.keyboard.press("Enter");
+    await page.waitForResponse((response) => response.url().includes("/api/kb-search") && response.ok(), { timeout: 10000 });
     await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading") && document.querySelector("#kbCopyShortcutHint"), null, { timeout: 10000 });
     const hint = page.locator("#kbCopyShortcutHint");
     try {
@@ -199,11 +216,13 @@ try {
     const copiedAgain = await page.evaluate(() => window.__copiedSearchContext);
     assert.match(copiedAgain, /cover letter|course/i);
     assert.doesNotMatch(copiedAgain, /full note body/i);
+    await page.waitForFunction(() => /Copied \d+ notes? again\./.test(document.querySelector("#kbCopySearchStatus")?.textContent || ""), null, { timeout: 5000 });
     assert.match(await page.locator("#kbCopySearchStatus").textContent(), /Copied \d+ notes? again\./);
   });
 
   await check("copy history can be dismissed without changing the local bundle", async () => {
     await page.click("#kbDismissCopyHistory");
+    await page.waitForFunction(() => /dismissed from this browser/i.test(document.querySelector("#kbCopySearchStatus")?.textContent || ""), null, { timeout: 5000 });
     assert.equal(await page.locator("#kbCopySearchAgain").isVisible(), false, "copy-again should hide after dismissal");
     assert.equal(await page.locator("#kbDismissCopyHistory").isVisible(), false, "dismiss action should hide after dismissal");
     assert.match(await page.locator("#kbCopySearchStatus").textContent(), /dismissed from this browser/i);
