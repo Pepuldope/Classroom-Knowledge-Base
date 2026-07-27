@@ -107,8 +107,9 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Perf: expose a bounded local-vs-hosted latency comparison in the status report (2026-07-26): `KB_LOCAL_URL` adds local warm metrics, delta, and hosted/local ratio to the privacy-safe latency JSON report.
 - [x] Continuity: verify copy confirmation remains announced after a second keyboard-triggered copy (2026-07-27).
 - [ ] KB: add a narrow-screen result-card fixture with long course and topic labels.
-- [ ] KB: assert the copy-status fixture remains readable when both copy actions and history metadata are visible together.
+- [x] KB: assert the copy-status fixture remains readable when both copy actions and history metadata are visible together. Shipped 2026-07-27: history metadata now shrink-wraps safely and wraps long labels on mobile.
 - [ ] KB: add a keyboard-only retry path for failed clipboard permissions with an assertive status check.
+- [ ] KB: verify copy-history dismissal remains keyboard reachable after a long metadata message wraps.
 - [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
