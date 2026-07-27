@@ -29,6 +29,8 @@ try {
     const history = results.querySelector(".kb-copy-history-entry");
     const dismiss = results.querySelector(".kb-copy-history-dismiss");
     const historyRect = history.getBoundingClientRect();
+    dismiss.focus();
+    const dismissStyle = getComputedStyle(dismiss);
     const style = getComputedStyle(history);
     return {
       pageWidth: document.documentElement.clientWidth,
@@ -39,6 +41,8 @@ try {
       historyScrollWidth: history.scrollWidth,
       historyHeight: historyRect.height,
       dismissVisible: dismiss.getBoundingClientRect().width > 0,
+      dismissFocused: document.activeElement === dismiss,
+      dismissFocusRing: dismissStyle.outlineStyle === "solid" && dismissStyle.outlineWidth === "2px" && dismissStyle.outlineColor !== "rgb(16, 16, 16)",
       minWidth: style.minWidth,
       overflowWrap: style.overflowWrap,
     };
@@ -46,6 +50,8 @@ try {
 
   assert.ok(data.historyWidth > 0 && data.historyHeight > 0, "copy history should have a visible box on mobile");
   assert.equal(data.dismissVisible, true, "dismiss history control should remain visible beside the metadata");
+  assert.equal(data.dismissFocused, true, "dismiss history control should be keyboard focusable");
+  assert.equal(data.dismissFocusRing, true, "focused dismiss history control should show a visible focus ring");
   assert.ok(data.pageScrollWidth <= data.pageWidth + 1, `page overflows horizontally: ${data.pageScrollWidth}px > ${data.pageWidth}px`);
   assert.ok(data.rowScrollWidth <= data.rowWidth + 1, `copy history row overflows: ${data.rowScrollWidth}px > ${data.rowWidth}px`);
   assert.ok(data.historyScrollWidth <= data.historyWidth + 1, `long copy history is clipped: ${data.historyScrollWidth}px > ${data.historyWidth}px`);
