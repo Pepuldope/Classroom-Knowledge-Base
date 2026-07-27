@@ -391,6 +391,8 @@ summary::-webkit-details-marker { color: var(--muted); }
   font-size: 0.85rem;
   color: var(--muted);
   margin-top: 0.2rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 .assignment .meta {
   display: flex;

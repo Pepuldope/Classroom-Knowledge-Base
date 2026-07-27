@@ -20,12 +20,17 @@ try {
         <div class="assignment-body">
           <div class="title">A very long unbroken note title for responsive result-card coverage</div>
           <div class="meta">EngineeringAndLanguageIntegrationCourseWithAnExtremelyLongIdentifier · 2026 · AdvancedTopicWithAnUnusuallyLongLabel</div>
-          <div class="summary archive-snippet">A realistic result snippet that should wrap without pushing the card wider than the phone viewport.</div>
+          <div class="summary archive-snippet">AReallyLongUnbrokenSnippetTokenThatMustWrapWhenTheRelatedNotesPreviewArrivesAsynchronouslyWithoutClippingOrPushingTheCardOutsideThePhoneViewport</div>
+          <div class="kb-related-preview">
+            <span class="kb-related-preview-label">Related:</span>
+            <button class="kb-chip kb-related-preview-chip" type="button">A related note preview that arrives after the long snippet</button>
+          </div>
         </div>
       </div>`;
     const card = results.querySelector(".kb-result-card");
     const body = results.querySelector(".assignment-body");
     const meta = results.querySelector(".meta");
+    const snippet = results.querySelector(".archive-snippet");
     const rect = card.getBoundingClientRect();
     return {
       pageWidth: document.documentElement.clientWidth,
@@ -37,6 +42,9 @@ try {
       metaScrollWidth: meta.scrollWidth,
       metaWidth: meta.getBoundingClientRect().width,
       metaOverflowWrap: getComputedStyle(meta).overflowWrap,
+      snippetScrollWidth: snippet.scrollWidth,
+      snippetWidth: snippet.getBoundingClientRect().width,
+      snippetOverflowWrap: getComputedStyle(snippet).overflowWrap,
     };
   });
 
@@ -46,6 +54,8 @@ try {
   assert.ok(data.bodyScrollWidth <= data.bodyWidth + 1, `result body overflows: ${data.bodyScrollWidth}px > ${data.bodyWidth}px`);
   assert.ok(data.metaScrollWidth <= data.metaWidth + 1, `long course/topic metadata is clipped: ${data.metaScrollWidth}px > ${data.metaWidth}px`);
   assert.equal(data.metaOverflowWrap, "anywhere", "course/topic metadata should wrap long labels");
+  assert.ok(data.snippetScrollWidth <= data.snippetWidth + 1, `long result snippet is clipped after related preview load: ${data.snippetScrollWidth}px > ${data.snippetWidth}px`);
+  assert.equal(data.snippetOverflowWrap, "anywhere", "long result snippets should wrap when related previews load");
   console.log(`✓ KB result card fits at 390px (${data.cardWidth}px card)`);
 } finally {
   await browser.close();

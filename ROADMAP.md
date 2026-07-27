@@ -112,7 +112,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: add a narrow-screen result-card fixture with long course and topic labels. Shipped 2026-07-27: result-card mobile gate now exercises long unbroken title/course/topic labels and enforces no page/card overflow.
 - [x] KB: verify copy-history dismissal remains keyboard reachable after a long metadata message wraps. Shipped 2026-07-27: narrow mobile gate now focuses the real dismissal control and requires the app's visible 2px focus ring.
 - [x] KB: announce successful clipboard retry separately from the initial copy failure. Shipped 2026-07-27: retry success now gets its own assertive “Copied N notes after retry.” announcement and hides the retry control.
-- [ ] KB: keep long result snippets readable when related-note previews load asynchronously.
+- [x] KB: keep long result snippets readable when related-note previews load asynchronously. Shipped 2026-07-27: result summaries now wrap safely with async related-preview content, covered by the 390px mobile overflow gate.
 - [ ] KB: add a keyboard focus-ring check for long-label result cards on narrow screens.
 - [ ] Continuity: verify mobile navigation remains horizontally scroll-safe after opening a long-label KB result.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
