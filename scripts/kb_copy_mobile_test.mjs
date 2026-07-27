@@ -12,14 +12,16 @@ try {
   await page.goto(`${BASE}/kb-test-harness.html`, { waitUntil: "networkidle", timeout: 30000 });
   await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
   const data = await page.evaluate(() => {
+    const kbMain = document.getElementById("kbMain");
     const results = document.getElementById("kbResults");
-    if (!results) throw new Error("KB results surface is missing");
+    if (!kbMain || !results) throw new Error("KB results surface is missing");
+    kbMain.hidden = false;
     results.hidden = false;
     results.innerHTML = `
       <div class="kb-result-actions">
         <button class="secondary" type="button">Copy search context</button>
         <span class="kb-copy-status" role="status" aria-live="assertive">
-          Could not copy search context. Check clipboard permissions and try again.
+          Could not copy search context. Check clipboard permissions and try again. This deliberately long fallback explains that clipboard permissions may be unavailable in a private browsing context and that the student can retry the copy action after granting access.
         </span>
       </div>`;
     const row = results.querySelector(".kb-result-actions");

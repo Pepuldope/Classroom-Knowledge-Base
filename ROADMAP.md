@@ -103,10 +103,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: add a compact copy-action status layout check to the dark-theme visual gate. Shipped 2026-07-26: the standing light/dark gate now verifies wrapping, shrink-safe flex sizing, visibility, and contrast for inline copy confirmation; tightened light success green to WCAG AA.
 - [x] Perf: add a cache-warm probe to the hosted legacy search latency test. Shipped 2026-07-26: `scripts/kb_latency_test.mjs` records cold vs two warm requests, corpus/result counts, and reports the measured warm-budget breach without logging note content.
 - [x] Continuity: add a mobile browser assertion that inline copy confirmation remains readable beside the action button (2026-07-26).
-- [ ] KB: exercise a long copied-status message at narrow mobile width without clipping or horizontal overflow.
+- [x] KB: exercise a long copied-status message at narrow mobile width without clipping or horizontal overflow. Shipped 2026-07-27: the mobile gate now reveals the real KB result surface and uses a deliberately long clipboard-failure message, so it catches zero-size and wrapping regressions instead of passing a hidden fixture.
 - [x] Perf: expose a bounded local-vs-hosted latency comparison in the status report (2026-07-26): `KB_LOCAL_URL` adds local warm metrics, delta, and hosted/local ratio to the privacy-safe latency JSON report.
 - [ ] Continuity: verify copy confirmation remains announced after a second keyboard-triggered copy.
 - [ ] KB: add a narrow-screen result-card fixture with long course and topic labels.
+- [ ] KB: assert the copy-status fixture remains readable when both copy actions and history metadata are visible together.
 - [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
