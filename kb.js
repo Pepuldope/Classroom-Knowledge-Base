@@ -1158,6 +1158,13 @@ async function runKbSearch(query) {
     copyStatus.setAttribute("role", "status");
     copyStatus.setAttribute("aria-live", "assertive");
     copyStatus.setAttribute("aria-atomic", "true");
+    const copyRetry = document.createElement("button");
+    copyRetry.id = "kbCopySearchRetry";
+    copyRetry.type = "button";
+    copyRetry.className = "secondary kb-copy-context";
+    copyRetry.textContent = "Retry copy";
+    copyRetry.setAttribute("aria-label", "Retry clipboard copy");
+    copyRetry.hidden = true;
     const copyHistoryEntry = document.createElement("span");
     copyHistoryEntry.id = "kbCopySearchHistoryEntry";
     copyHistoryEntry.className = "kb-copy-history-entry";
@@ -1170,7 +1177,7 @@ async function runKbSearch(query) {
     dismissCopyHistory.className = "secondary kb-copy-history-dismiss";
     dismissCopyHistory.textContent = "Dismiss";
     dismissCopyHistory.hidden = !copyHistory.count;
-    copyContext.addEventListener("click", async () => {
+    const copySearchContextToClipboard = async () => {
       const text = copySearchContext(d.results, { format: loadKbSettings().copyFormat });
       try {
         if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
@@ -1178,19 +1185,27 @@ async function runKbSearch(query) {
         saveCopySearchContextHistory(text, d.results.length, $("kbSearchInput")?.value || "");
         copyAgain.textContent = `Copy again (${d.results.length})`;
         copyAgain.hidden = false;
+        copyRetry.hidden = true;
         copyHistoryEntry.textContent = copySearchContextHistoryEntryModel({ count: d.results.length, query: $("kbSearchInput")?.value || "", copiedAt: Date.now() }).label;
         copyHistoryEntry.hidden = false;
         dismissCopyHistory.hidden = false;
         announceCopyStatus(copyStatus, `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`);
+        return true;
       } catch {
+        copyRetry.hidden = false;
         announceCopyStatus(copyStatus, "Could not copy search context. Check clipboard permissions and try again.");
+        copyRetry.focus();
+        return false;
       }
-    });
+    };
+    copyContext.addEventListener("click", copySearchContextToClipboard);
+    copyRetry.addEventListener("click", copySearchContextToClipboard);
     copyAgain.addEventListener("click", async () => {
       const latest = loadCopySearchContextHistory();
       try {
         if (!latest.text || !navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
         await navigator.clipboard.writeText(latest.text);
+        copyRetry.hidden = true;
         announceCopyStatus(copyStatus, `Copied ${latest.count} note${latest.count === 1 ? "" : "s"} again.`);
       } catch {
         announceCopyStatus(copyStatus, "Could not copy the latest search context. Check clipboard permissions and try again.");
@@ -1204,7 +1219,7 @@ async function runKbSearch(query) {
       dismissCopyHistory.hidden = true;
       announceCopyStatus(copyStatus, "Copy history dismissed from this browser.");
     });
-    contextBar.append(copyContext, copyAgain, copyShortcutHint, copyStatus, copyHistoryEntry, dismissCopyHistory);
+    contextBar.append(copyContext, copyAgain, copyShortcutHint, copyStatus, copyRetry, copyHistoryEntry, dismissCopyHistory);
     results.appendChild(contextBar);
     // "Did you mean" — when a typo returned nothing but a confident
     // correction exists in the corpus, offer a one-click retry.

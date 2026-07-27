@@ -106,11 +106,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: exercise a long copied-status message at narrow mobile width without clipping or horizontal overflow. Shipped 2026-07-27: the mobile gate now reveals the real KB result surface and uses a deliberately long clipboard-failure message, so it catches zero-size and wrapping regressions instead of passing a hidden fixture.
 - [x] Perf: expose a bounded local-vs-hosted latency comparison in the status report (2026-07-26): `KB_LOCAL_URL` adds local warm metrics, delta, and hosted/local ratio to the privacy-safe latency JSON report.
 - [x] Continuity: verify copy confirmation remains announced after a second keyboard-triggered copy (2026-07-27).
-- [ ] KB: add a narrow-screen result-card fixture with long course and topic labels.
+- [x] KB: add a keyboard-only retry path for failed clipboard permissions with an assertive status check. Shipped 2026-07-27: failed copy now reveals and focuses a local Retry copy button, with keyboard Enter coverage in `kb_ui_test.mjs`.
 - [x] KB: assert the copy-status fixture remains readable when both copy actions and history metadata are visible together. Shipped 2026-07-27: history metadata now shrink-wraps safely and wraps long labels on mobile.
-- [ ] KB: add a keyboard-only retry path for failed clipboard permissions with an assertive status check.
-- [ ] KB: verify copy-history dismissal remains keyboard reachable after a long metadata message wraps.
 - [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
+- [ ] KB: add a narrow-screen result-card fixture with long course and topic labels.
+- [ ] KB: verify copy-history dismissal remains keyboard reachable after a long metadata message wraps.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
@@ -127,6 +127,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: let students dismiss a stale copy-history entry locally without touching their bundle (2026-07-26).
 - [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
 - [x] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies (2026-07-25).
+- [ ] KB: announce successful clipboard retry separately from the initial copy failure.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item

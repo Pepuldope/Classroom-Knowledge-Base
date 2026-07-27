@@ -191,6 +191,24 @@ try {
     assert.equal(await page.locator("#kbCopySearchStatus").getAttribute("aria-atomic"), "true");
   });
 
+  await check("clipboard failure exposes a keyboard retry and assertive status", async () => {
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async () => { throw new Error("permission denied"); };
+    });
+    const copyButton = page.locator("#kbCopySearchContext");
+    await copyButton.focus();
+    await copyButton.press("Enter");
+    await page.waitForFunction(() => document.querySelector("#kbCopySearchRetry:not([hidden])"), null, { timeout: 5000 });
+    const retry = page.locator("#kbCopySearchRetry");
+    assert.equal(await retry.getAttribute("type"), "button");
+    assert.match(await retry.getAttribute("aria-label"), /retry.*clipboard/i);
+    assert.equal(await page.locator("#kbCopySearchStatus").getAttribute("aria-live"), "assertive");
+    await retry.focus();
+    await retry.press("Enter");
+    await page.waitForFunction(() => /Could not copy search context/i.test(document.querySelector("#kbCopySearchStatus")?.textContent || ""), null, { timeout: 5000 });
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "kbCopySearchRetry");
+  });
+
   await check("wide copy actions show a compact keyboard shortcut hint", async () => {
     await page.fill("#kbSearchInput", "cover letter");
     await page.waitForResponse((response) => response.url().includes("/api/kb-search") && response.ok(), { timeout: 10000 });
