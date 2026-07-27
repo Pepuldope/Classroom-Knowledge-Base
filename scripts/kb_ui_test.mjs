@@ -203,10 +203,13 @@ try {
     assert.equal(await retry.getAttribute("type"), "button");
     assert.match(await retry.getAttribute("aria-label"), /retry.*clipboard/i);
     assert.equal(await page.locator("#kbCopySearchStatus").getAttribute("aria-live"), "assertive");
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = async (value) => { window.__copiedSearchContext = value; };
+    });
     await retry.focus();
     await retry.press("Enter");
-    await page.waitForFunction(() => /Could not copy search context/i.test(document.querySelector("#kbCopySearchStatus")?.textContent || ""), null, { timeout: 5000 });
-    assert.equal(await page.evaluate(() => document.activeElement?.id), "kbCopySearchRetry");
+    await page.waitForFunction(() => /Copied \d+ notes? after retry\./.test(document.querySelector("#kbCopySearchStatus")?.textContent || ""), null, { timeout: 5000 });
+    assert.equal(await retry.isVisible(), false, "retry control should hide after a successful retry");
   });
 
   await check("wide copy actions show a compact keyboard shortcut hint", async () => {

@@ -111,7 +111,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: add a visible inline confirmation for copied search context with the result count (2026-07-25).
 - [x] KB: add a narrow-screen result-card fixture with long course and topic labels. Shipped 2026-07-27: result-card mobile gate now exercises long unbroken title/course/topic labels and enforces no page/card overflow.
 - [ ] KB: verify copy-history dismissal remains keyboard reachable after a long metadata message wraps.
-- [ ] KB: announce successful clipboard retry separately from the initial copy failure.
+- [x] KB: announce successful clipboard retry separately from the initial copy failure. Shipped 2026-07-27: retry success now gets its own assertive “Copied N notes after retry.” announcement and hides the retry control.
 - [ ] KB: keep long result snippets readable when related-note previews load asynchronously.
 - [ ] KB: add a keyboard focus-ring check for long-label result cards on narrow screens.
 - [ ] Continuity: verify mobile navigation remains horizontally scroll-safe after opening a long-label KB result.

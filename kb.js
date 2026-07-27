@@ -1177,7 +1177,7 @@ async function runKbSearch(query) {
     dismissCopyHistory.className = "secondary kb-copy-history-dismiss";
     dismissCopyHistory.textContent = "Dismiss";
     dismissCopyHistory.hidden = !copyHistory.count;
-    const copySearchContextToClipboard = async () => {
+    const copySearchContextToClipboard = async ({ retry = false } = {}) => {
       const text = copySearchContext(d.results, { format: loadKbSettings().copyFormat });
       try {
         if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
@@ -1189,7 +1189,9 @@ async function runKbSearch(query) {
         copyHistoryEntry.textContent = copySearchContextHistoryEntryModel({ count: d.results.length, query: $("kbSearchInput")?.value || "", copiedAt: Date.now() }).label;
         copyHistoryEntry.hidden = false;
         dismissCopyHistory.hidden = false;
-        announceCopyStatus(copyStatus, `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`);
+        announceCopyStatus(copyStatus, retry
+          ? `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} after retry.`
+          : `Copied ${d.results.length} note${d.results.length === 1 ? "" : "s"} of titles and snippets.`);
         return true;
       } catch {
         copyRetry.hidden = false;
@@ -1198,8 +1200,8 @@ async function runKbSearch(query) {
         return false;
       }
     };
-    copyContext.addEventListener("click", copySearchContextToClipboard);
-    copyRetry.addEventListener("click", copySearchContextToClipboard);
+    copyContext.addEventListener("click", () => copySearchContextToClipboard());
+    copyRetry.addEventListener("click", () => copySearchContextToClipboard({ retry: true }));
     copyAgain.addEventListener("click", async () => {
       const latest = loadCopySearchContextHistory();
       try {
