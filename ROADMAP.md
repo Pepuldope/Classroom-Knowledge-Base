@@ -121,9 +121,10 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Perf: add a warm local related-preview timing assertion so regressions are caught before hosted latency checks. Shipped 2026-07-28: cached per-note related-token sets and a 400-note/40-preview warm budget gate keep the local path under 100ms on the test fixture.
 - [x] KB: add a scoped retry action when related-note previews fail, preserving the parent result card state. Shipped 2026-07-28: keyboard retry recovers the preview without opening the parent card.
 - [ ] Continuity: verify reduced-motion related-preview errors remain readable in the Archive and Planner theme surfaces.
-- [ ] Perf: expose a local related-preview cache hit/miss diagnostic in development-only timing output without logging note content.
-- [x] KB: add a keyboard-accessible “retry related notes” action with focus restoration after a preview error. Shipped 2026-07-28: retry restores focus to the parent result card after the async preview recovers.
+- [x] Perf: expose a local related-preview cache hit/miss diagnostic in development-only timing output without logging note content (2026-07-28).
 - [ ] Continuity: add a mobile related-preview retry focus-ring smoke across Archive and Planner theme surfaces.
+- [ ] Perf: add a bounded local related-preview cache reset control to the development harness without exposing it in production.
+- [x] KB: add a keyboard-accessible “retry related notes” action with focus restoration after a preview error. Shipped 2026-07-28: retry restores focus to the parent result card after the async preview recovers.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).

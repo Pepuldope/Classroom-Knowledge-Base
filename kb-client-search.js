@@ -205,10 +205,27 @@ function dropStopwords(tokens) {
 // search result page can ask for dozens of previews over the same bundle; keeping
 // this per-note cache avoids re-tokenizing every note for every card.
 const relatedTokenCache = new WeakMap();
+let relatedTokenCacheHits = 0;
+let relatedTokenCacheMisses = 0;
+
+/** Return/reset development diagnostics for the content-free related-token cache. */
+export function relatedTokenCacheStats({ reset = false } = {}) {
+  const stats = { hits: relatedTokenCacheHits, misses: relatedTokenCacheMisses };
+  if (reset) {
+    relatedTokenCacheHits = 0;
+    relatedTokenCacheMisses = 0;
+  }
+  return stats;
+}
+
 function relatedTokens(note) {
   if (!note || typeof note !== "object") return dropStopwords(tokenize("")).filter(Boolean);
   const cached = relatedTokenCache.get(note);
-  if (cached) return cached;
+  if (cached) {
+    relatedTokenCacheHits += 1;
+    return cached;
+  }
+  relatedTokenCacheMisses += 1;
   const tokens = dropStopwords(tokenize([note.t, note.s, note.x].filter(Boolean).join(" ")));
   relatedTokenCache.set(note, tokens);
   return tokens;

@@ -29,6 +29,7 @@ import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
+import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } from "../api/tutor.js";
@@ -956,6 +957,22 @@ test("local related-preview batch stays warm under the 1s interaction budget", (
   const elapsed = performance.now() - started;
   assert.equal(previewCount, 120, "each local preview should retain its configured limit");
   assert.ok(elapsed < 250, `40 local related previews should stay under 250ms warm, took ${elapsed.toFixed(2)}ms`);
+});
+
+test("related token cache diagnostics report hits and misses without note content", () => {
+  const notes = [
+    { t: "Quadratic practice", s: "Algebra examples", x: "Solve equations", course: "Math" },
+    { t: "Linear practice", s: "Algebra examples", x: "Solve equations", course: "Math" },
+  ];
+  relatedTokenCacheStats({ reset: true });
+  clientRelatedNotesPreview(notes, 0, { limit: 1 });
+  const afterFirst = relatedTokenCacheStats();
+  clientRelatedNotesPreview(notes, 0, { limit: 1 });
+  const afterSecond = relatedTokenCacheStats();
+  assert.ok(afterFirst.misses > 0, "first preview should record token-cache misses");
+  assert.ok(afterSecond.hits > afterFirst.hits, "repeat preview should record token-cache hits");
+  assert.deepEqual(Object.keys(afterSecond).sort(), ["hits", "misses"]);
+  assert.equal(Object.prototype.hasOwnProperty.call(afterSecond, "notes"), false);
 });
 
 // ---------------------------------------------------------------------------
