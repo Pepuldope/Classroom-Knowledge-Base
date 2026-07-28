@@ -1481,14 +1481,18 @@ function renderRelatedPreviewError(container, retry) {
   button.setAttribute("aria-label", action.ariaLabel);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
-    renderRelatedPreview(container, retry);
+    renderRelatedPreview(container, retry, { restoreFocus: true });
   });
   button.addEventListener("keydown", (event) => event.stopPropagation());
   container.appendChild(button);
 }
 
-async function renderRelatedPreview(container, noteIndex) {
+async function renderRelatedPreview(container, noteIndex, { restoreFocus = false } = {}) {
   if (!container) return;
+  const parentCard = container.closest(".kb-result-card");
+  const restoreParentFocus = () => {
+    if (restoreFocus && parentCard?.isConnected) parentCard.focus();
+  };
   try {
     let related;
     const limit = relatedNotesLimit(loadKbSettings());
@@ -1507,6 +1511,7 @@ async function renderRelatedPreview(container, noteIndex) {
       container.hidden = !state.visible;
       container.classList.remove("is-loading", "is-error");
       container.textContent = "";
+      restoreParentFocus();
       return;
     }
     const state = relatedPreviewSurfaceModel({ state: "ready" });
@@ -1531,6 +1536,7 @@ async function renderRelatedPreview(container, noteIndex) {
       });
       container.appendChild(b);
     }
+    restoreParentFocus();
   } catch {
     renderRelatedPreviewError(container);
   }

@@ -192,6 +192,7 @@ try {
       await retry.press("Enter");
       await page.waitForFunction(() => !document.querySelector(".kb-related-preview-retry"), null, { timeout: 10000 });
       assert.equal(await page.locator("#kbResults .kb-result-card").count(), parentCount, "retry must not rerender away the parent card");
+      assert.equal(await page.evaluate(() => document.activeElement?.closest(".kb-result-card")?.classList.contains("kb-result-card") || false), true, "retry should restore focus to the parent result card");
     } finally {
       await page.unroute("**/api/kb-related**");
     }
