@@ -1331,7 +1331,23 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-top: 1px dashed var(--border, #eee);
   min-height: 1.35rem;
 }
-.kb-related-preview.is-loading { color: var(--muted); font-size: 0.72rem; }
+.kb-related-preview.is-loading {
+  color: var(--muted); font-size: 0.72rem;
+  display: inline-flex; align-items: center; gap: 0.35rem;
+}
+.kb-related-preview.is-loading::before {
+  content: ""; width: 0.65rem; height: 0.65rem; flex: 0 0 auto;
+  border: 1.5px solid currentColor; border-top-color: transparent;
+  border-radius: 50%; animation: kb-related-spin 0.8s linear infinite;
+}
+@keyframes kb-related-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .kb-related-preview.is-loading::before {
+    animation: none;
+    border-top-color: currentColor;
+    opacity: 0.65;
+  }
+}
 .kb-related-preview-label { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
 .kb-related-preview-chip {
   font-size: 0.72rem; padding: 0.15rem 0.5rem; max-width: 220px;
