@@ -468,6 +468,12 @@ export function kbBuildSurfaceModel({ state = "loading" } = {}) {
   return { showBuildCard, showMain: !showBuildCard };
 }
 
+/** Keep async related-note previews from collapsing while local notes resolve. */
+export function relatedPreviewSurfaceModel({ state = "loading" } = {}) {
+  if (state === "empty") return { visible: false, loading: false };
+  return { visible: true, loading: state === "loading" };
+}
+
 export async function maybeAutoBuildKb() {
   const bundle = await loadKbBundle();
   if (!shouldAutoBuildKb(loadKbSettings(), bundle)) return false;
@@ -1271,7 +1277,8 @@ async function runKbSearch(query) {
       // student can hop between related notes without opening each one.
       const preview = document.createElement("div");
       preview.className = "kb-related-preview";
-      preview.hidden = true;
+      preview.classList.add("is-loading");
+      preview.textContent = "Loading related notes…";
       body.appendChild(preview);
       row.appendChild(body);
       const open = () => {
@@ -1464,11 +1471,26 @@ async function renderRelatedPreview(container, noteIndex) {
       related = localRelatedFromBundle(localKbBundle, noteIndex, { limit });
     } else {
       const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=${limit}`);
-      if (!r.ok) return;
+      if (!r.ok) {
+        const state = relatedPreviewSurfaceModel({ state: "empty" });
+        container.hidden = !state.visible;
+        container.classList.remove("is-loading");
+        container.textContent = "";
+        return;
+      }
       related = (await r.json()).related || [];
     }
-    if (!related.length) return;
-    container.hidden = false;
+    if (!related.length) {
+      const state = relatedPreviewSurfaceModel({ state: "empty" });
+      container.hidden = !state.visible;
+      container.classList.remove("is-loading");
+      container.textContent = "";
+      return;
+    }
+    const state = relatedPreviewSurfaceModel({ state: "ready" });
+    container.hidden = !state.visible;
+    container.classList.toggle("is-loading", state.loading);
+    container.textContent = "";
     const tag = document.createElement("span");
     tag.className = "kb-related-preview-label";
     tag.textContent = "Related:";
@@ -1487,7 +1509,10 @@ async function renderRelatedPreview(container, noteIndex) {
       container.appendChild(b);
     }
   } catch {
-    /* related preview is non-critical; ignore */
+    const state = relatedPreviewSurfaceModel({ state: "empty" });
+    container.hidden = !state.visible;
+    container.classList.remove("is-loading");
+    container.textContent = "";
   }
 }
 

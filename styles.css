@@ -1329,7 +1329,9 @@ summary::-webkit-details-marker { color: var(--muted); }
   display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;
   margin-top: 0.5rem; padding-top: 0.45rem;
   border-top: 1px dashed var(--border, #eee);
+  min-height: 1.35rem;
 }
+.kb-related-preview.is-loading { color: var(--muted); font-size: 0.72rem; }
 .kb-related-preview-label { font-size: 0.75rem; color: var(--muted); font-weight: 600; }
 .kb-related-preview-chip {
   font-size: 0.72rem; padding: 0.15rem 0.5rem; max-width: 220px;

@@ -113,9 +113,10 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: verify copy-history dismissal remains keyboard reachable after a long metadata message wraps. Shipped 2026-07-27: narrow mobile gate now focuses the real dismissal control and requires the app's visible 2px focus ring.
 - [x] KB: announce successful clipboard retry separately from the initial copy failure. Shipped 2026-07-27: retry success now gets its own assertive “Copied N notes after retry.” announcement and hides the retry control.
 - [x] KB: keep long result snippets readable when related-note previews load asynchronously. Shipped 2026-07-27: result summaries now wrap safely with async related-preview content, covered by the 390px mobile overflow gate.
+- [x] KB: keep the related-preview loading state height-stable while local notes resolve asynchronously. Shipped 2026-07-28: previews reserve a stable loading row and clear it on ready/empty/error.
+- [ ] KB: add a reduced-motion-friendly related-preview loading treatment for students who disable animation.
 - [ ] KB: add a keyboard focus-ring check for long-label result cards on narrow screens.
 - [ ] Continuity: verify mobile navigation remains horizontally scroll-safe after opening a long-label KB result.
-- [ ] KB: keep the related-preview loading state height-stable while local notes resolve asynchronously.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
