@@ -119,6 +119,8 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Continuity: verify mobile navigation remains horizontally scroll-safe after opening a long-label KB result.
 - [x] KB: show a non-animated reduced-motion label/icon state in the related-preview error path, not only loading. Shipped 2026-07-28: failed related-note previews now retain a labeled, static `!` marker under reduced motion.
 - [ ] Perf: add a warm local related-preview timing assertion so regressions are caught before hosted latency checks.
+- [ ] KB: add a scoped retry action when related-note previews fail, preserving the parent result card state.
+- [ ] Continuity: verify reduced-motion related-preview errors remain readable in the Archive and Planner theme surfaces.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
