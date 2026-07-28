@@ -116,7 +116,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: keep the related-preview loading state height-stable while local notes resolve asynchronously. Shipped 2026-07-28: previews reserve a stable loading row and clear it on ready/empty/error.
 - [x] KB: add a reduced-motion-friendly related-preview loading treatment for students who disable animation (2026-07-28): related previews now show a compact spinner normally and a static indicator under `prefers-reduced-motion: reduce`, covered by `kb_reduced_motion_test.mjs`.
 - [x] KB: add a keyboard focus-ring check for long-label result cards on narrow screens (2026-07-28): result cards now expose a deliberate accent 2px focus ring with offset, covered by `kb_result_card_focus_test.mjs`.
-- [ ] Continuity: verify mobile navigation remains horizontally scroll-safe after opening a long-label KB result.
+- [x] Continuity: verify mobile navigation remains horizontally scroll-safe after opening a long-label KB result. Shipped 2026-07-28: the shared mobile header now constrains the view switcher to an intentional horizontal scroll region, with a red/green Playwright regression gate.
 - [x] KB: show a non-animated reduced-motion label/icon state in the related-preview error path, not only loading. Shipped 2026-07-28: failed related-note previews now retain a labeled, static `!` marker under reduced motion.
 - [ ] Perf: add a warm local related-preview timing assertion so regressions are caught before hosted latency checks.
 - [ ] KB: add a scoped retry action when related-note previews fail, preserving the parent result card state.

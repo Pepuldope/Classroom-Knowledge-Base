@@ -1098,7 +1098,28 @@ summary::-webkit-details-marker { color: var(--muted); }
     flex-wrap: nowrap;
     gap: 0.5rem;
   }
-  header h1 { font-size: 1rem; }
+  header h1 {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 32%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 1rem;
+  }
+  /* Keep the shared view switcher inside the phone viewport. Long result
+     labels can make the navigation wider than the available header space;
+     the switcher is the intentional horizontal scroll region, not the page. */
+  .view-toggle {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    scrollbar-width: thin;
+  }
+  .view-toggle-btn { flex: 0 0 auto; }
 
   main { padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 

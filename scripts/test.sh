@@ -92,6 +92,11 @@ BASE_URL="http://localhost:$PORT" node scripts/kb_result_card_mobile_test.mjs
 RESULT_CARD_MOBILE_OK=$?
 if [ "$RESULT_CARD_MOBILE_OK" -ne 0 ]; then echo "KB result-card mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Mobile navigation overflow e2e"
+BASE_URL="http://localhost:$PORT" node scripts/mobile_navigation_overflow_test.mjs
+MOBILE_NAV_OK=$?
+if [ "$MOBILE_NAV_OK" -ne 0 ]; then echo "mobile navigation overflow e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> KB reduced-motion loading e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_reduced_motion_test.mjs
 REDUCED_MOTION_OK=$?
