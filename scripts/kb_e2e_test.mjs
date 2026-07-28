@@ -213,9 +213,10 @@ test("build surface stays hidden while bundle state is unknown or loading, and o
 });
 
 test("related preview reserves a stable loading row until async notes resolve", () => {
-  assert.deepEqual(relatedPreviewSurfaceModel({ state: "loading" }), { visible: true, loading: true });
-  assert.deepEqual(relatedPreviewSurfaceModel({ state: "ready" }), { visible: true, loading: false });
-  assert.deepEqual(relatedPreviewSurfaceModel({ state: "empty" }), { visible: false, loading: false });
+  assert.deepEqual(relatedPreviewSurfaceModel({ state: "loading" }), { visible: true, loading: true, error: false });
+  assert.deepEqual(relatedPreviewSurfaceModel({ state: "ready" }), { visible: true, loading: false, error: false });
+  assert.deepEqual(relatedPreviewSurfaceModel({ state: "empty" }), { visible: false, loading: false, error: false });
+  assert.deepEqual(relatedPreviewSurfaceModel({ state: "error" }), { visible: true, loading: false, error: true });
 });
 
 test("kbSearchStateModel keeps only valid local filter and sort choices", () => {

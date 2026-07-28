@@ -26,7 +26,19 @@ async function inspect(reducedMotion) {
         </div>`;
       const preview = results.querySelector(".kb-related-preview");
       const style = getComputedStyle(preview, "::before");
-      return { animationName: style.animationName, animationDuration: style.animationDuration };
+      const loadingAnimationName = style.animationName;
+      const loadingAnimationDuration = style.animationDuration;
+      preview.classList.remove("is-loading");
+      preview.classList.add("is-error");
+      preview.textContent = "Related notes unavailable";
+      const errorStyle = getComputedStyle(preview, "::before");
+      return {
+        animationName: loadingAnimationName,
+        animationDuration: loadingAnimationDuration,
+        errorContent: errorStyle.content,
+        errorAnimationName: errorStyle.animationName,
+        errorText: preview.textContent,
+      };
     });
   } finally {
     await context.close();
@@ -41,7 +53,15 @@ try {
     reduced.animationName === "none" || reduced.animationDuration === "0s",
     `reduced-motion loading treatment still animates (${reduced.animationName}, ${reduced.animationDuration})`,
   );
-  console.log("✓ related-preview loading is static under reduced motion");
+  for (const result of [normal, reduced]) {
+    assert.equal(result.errorText, "Related notes unavailable", "related-preview error needs an explicit label");
+    assert.notEqual(result.errorContent, "none", "related-preview error needs a visible icon marker");
+  }
+  assert.ok(
+    reduced.errorAnimationName === "none" || reduced.errorAnimationName === "",
+    `reduced-motion error treatment still animates (${reduced.errorAnimationName})`,
+  );
+  console.log("✓ related-preview loading and error states respect reduced motion");
 } finally {
   await browser.close();
 }
