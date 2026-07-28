@@ -157,6 +157,46 @@ try {
     assert.ok(n > 0, "expected at least one result card");
   });
 
+  await check("related preview error exposes scoped retry without losing the parent card", async () => {
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const req = indexedDB.open("cwa-archive", 1);
+      req.onsuccess = () => {
+        const tx = req.result.transaction("archive", "readwrite");
+        tx.objectStore("archive").delete("kb-bundle");
+        tx.oncomplete = () => { req.result.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+      req.onerror = () => reject(req.error);
+    }));
+    await page.reload({ waitUntil: "networkidle" });
+    await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
+    let failedOnce = false;
+    await page.route("**/api/kb-related**", async (route) => {
+      if (!failedOnce) {
+        failedOnce = true;
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary" }) });
+      } else {
+        await route.continue();
+      }
+    });
+    try {
+      await page.fill("#kbSearchInput", "cover letter");
+      await page.keyboard.press("Enter");
+      await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
+      await page.waitForSelector(".kb-related-preview-retry", { timeout: 10000 });
+      const parentCount = await page.locator("#kbResults .kb-result-card").count();
+      assert.ok(parentCount > 0, "parent result card must remain visible after preview failure");
+      const retry = page.locator(".kb-related-preview-retry").first();
+      assert.equal(await retry.getAttribute("aria-label"), "Retry loading related notes");
+      await retry.focus();
+      await retry.press("Enter");
+      await page.waitForFunction(() => !document.querySelector(".kb-related-preview-retry"), null, { timeout: 10000 });
+      assert.equal(await page.locator("#kbResults .kb-result-card").count(), parentCount, "retry must not rerender away the parent card");
+    } finally {
+      await page.unroute("**/api/kb-related**");
+    }
+  });
+
   await check("copy search context copies only visible titles and snippets", async () => {
     await page.fill("#kbSearchInput", "cover letter");
     await page.waitForResponse((response) => response.url().includes("/api/kb-search") && response.ok(), { timeout: 10000 });

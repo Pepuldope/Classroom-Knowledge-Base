@@ -1374,6 +1374,13 @@ summary::-webkit-details-marker { color: var(--muted); }
   border: 1px solid currentColor; border-radius: 50%;
   font-size: 0.6rem; font-weight: 700; line-height: 1;
 }
+.kb-related-preview-retry {
+  font-size: 0.72rem; padding: 0.15rem 0.45rem;
+  color: var(--accent, #2563eb); background: transparent;
+  border: 1px solid currentColor; border-radius: 0.35rem; cursor: pointer;
+}
+.kb-related-preview-retry:hover,
+.kb-related-preview-retry:focus-visible { transform: translateY(-1px); outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
 @keyframes kb-related-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .kb-related-preview.is-loading::before {

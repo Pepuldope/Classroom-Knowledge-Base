@@ -475,6 +475,10 @@ export function relatedPreviewSurfaceModel({ state = "loading" } = {}) {
   return { visible: true, loading: state === "loading", error: false };
 }
 
+export function relatedPreviewRetryModel() {
+  return { label: "Retry related notes", ariaLabel: "Retry loading related notes", focusable: true };
+}
+
 export async function maybeAutoBuildKb() {
   const bundle = await loadKbBundle();
   if (!shouldAutoBuildKb(loadKbSettings(), bundle)) return false;
@@ -1463,12 +1467,24 @@ async function openCourse(course) {
 
 // Render a compact related-notes preview inside a search-result card.
 // Reuses /api/kb-related so the cross-links match the detail-modal panel.
-function renderRelatedPreviewError(container) {
+function renderRelatedPreviewError(container, retry) {
   const state = relatedPreviewSurfaceModel({ state: "error" });
+  const action = relatedPreviewRetryModel();
   container.hidden = !state.visible;
   container.classList.remove("is-loading");
   container.classList.add("is-error");
   container.textContent = "Related notes unavailable";
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "kb-related-preview-retry";
+  button.textContent = action.label;
+  button.setAttribute("aria-label", action.ariaLabel);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    renderRelatedPreview(container, retry);
+  });
+  button.addEventListener("keydown", (event) => event.stopPropagation());
+  container.appendChild(button);
 }
 
 async function renderRelatedPreview(container, noteIndex) {
@@ -1481,7 +1497,7 @@ async function renderRelatedPreview(container, noteIndex) {
     } else {
       const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=${limit}`);
       if (!r.ok) {
-        renderRelatedPreviewError(container);
+        renderRelatedPreviewError(container, noteIndex);
         return;
       }
       related = (await r.json()).related || [];
