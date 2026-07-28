@@ -201,6 +201,19 @@ function dropStopwords(tokens) {
   return tokens.filter((t) => !RELATED_STOPWORDS.has(t) && !isUrlToken(t));
 }
 
+// Cache the normalized text tokens used by repeated local related previews. A
+// search result page can ask for dozens of previews over the same bundle; keeping
+// this per-note cache avoids re-tokenizing every note for every card.
+const relatedTokenCache = new WeakMap();
+function relatedTokens(note) {
+  if (!note || typeof note !== "object") return dropStopwords(tokenize("")).filter(Boolean);
+  const cached = relatedTokenCache.get(note);
+  if (cached) return cached;
+  const tokens = dropStopwords(tokenize([note.t, note.s, note.x].filter(Boolean).join(" ")));
+  relatedTokenCache.set(note, tokens);
+  return tokens;
+}
+
 /**
  * Find notes related to a given target note. A note relates if it shares the
  * target's course, shares its topic, or contains overlapping query tokens from
@@ -222,7 +235,8 @@ export function relatedNotes(notes, target, { limit = 5 } = {}) {
   // Drop stopwords from the target's tokens so common Classroom phrasing
   // ("please submit the assignment on Classroom") can't produce false overlap
   // with boilerplate. Specific vocabulary ("quantum", "entanglement") survives.
-  const targetTokens = dropStopwords(tokenize([target.t, target.s, target.x].filter(Boolean).join(" ")));
+  const targetTokens = relatedTokens(target);
+  const targetTokenSet = new Set(targetTokens);
   const targetCourse = target.course || "";
   const targetTopic = target.topic || "";
 
@@ -236,9 +250,9 @@ export function relatedNotes(notes, target, { limit = 5 } = {}) {
     // Exact token overlap with the target's own text (fast + precise). Both
     // sides are stopword-filtered so boilerplate can't inflate the score.
     if (targetTokens.length) {
-      const nTokens = dropStopwords(tokenize([n.t, n.s, n.x].filter(Boolean).join(" ")));
+      const nTokens = relatedTokens(n);
       let overlap = 0;
-      for (const t of nTokens) if (targetTokens.includes(t)) overlap++;
+      for (const t of nTokens) if (targetTokenSet.has(t)) overlap++;
       score += overlap;
     }
     if (score <= 0) continue; // unrelated — skip

@@ -118,9 +118,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: add a keyboard focus-ring check for long-label result cards on narrow screens (2026-07-28): result cards now expose a deliberate accent 2px focus ring with offset, covered by `kb_result_card_focus_test.mjs`.
 - [x] Continuity: verify mobile navigation remains horizontally scroll-safe after opening a long-label KB result. Shipped 2026-07-28: the shared mobile header now constrains the view switcher to an intentional horizontal scroll region, with a red/green Playwright regression gate.
 - [x] KB: show a non-animated reduced-motion label/icon state in the related-preview error path, not only loading. Shipped 2026-07-28: failed related-note previews now retain a labeled, static `!` marker under reduced motion.
-- [ ] Perf: add a warm local related-preview timing assertion so regressions are caught before hosted latency checks.
+- [x] Perf: add a warm local related-preview timing assertion so regressions are caught before hosted latency checks. Shipped 2026-07-28: cached per-note related-token sets and a 400-note/40-preview warm budget gate keep the local path under 100ms on the test fixture.
 - [ ] KB: add a scoped retry action when related-note previews fail, preserving the parent result card state.
 - [ ] Continuity: verify reduced-motion related-preview errors remain readable in the Archive and Planner theme surfaces.
+- [ ] Perf: expose a local related-preview cache hit/miss diagnostic in development-only timing output without logging note content.
+- [ ] KB: add a keyboard-accessible “retry related notes” action with focus restoration after a preview error.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).

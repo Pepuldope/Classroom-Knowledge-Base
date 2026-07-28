@@ -932,6 +932,24 @@ test("relatedNotesPreview is a wrapper that honours the same limit as relatedNot
   assert.ok(preview.length <= 1, "preview count must not exceed limit");
 });
 
+test("local related-preview batch stays warm under the 1s interaction budget", () => {
+  const notes = Array.from({ length: 400 }, (_, i) => ({
+    t: `Algebra note ${i}`,
+    course: `Course ${i % 3}`,
+    y: "2025-26",
+    s: "Quadratic equations and practice",
+    x: "Solve algebra problems and review examples.",
+  }));
+  const started = performance.now();
+  let previewCount = 0;
+  for (let i = 0; i < 40; i += 1) {
+    previewCount += relatedNotesPreview(notes, i, { limit: 3 }).length;
+  }
+  const elapsed = performance.now() - started;
+  assert.equal(previewCount, 120, "each local preview should retain its configured limit");
+  assert.ok(elapsed < 250, `40 local related previews should stay under 250ms warm, took ${elapsed.toFixed(2)}ms`);
+});
+
 // ---------------------------------------------------------------------------
 // Feature: "Browse by course" — a no-query entry point so students can
 // discover notes without already knowing a search term. GET /api/kb-browse
