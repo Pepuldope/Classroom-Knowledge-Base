@@ -97,6 +97,11 @@ BASE_URL="http://localhost:$PORT" node scripts/kb_reduced_motion_test.mjs
 REDUCED_MOTION_OK=$?
 if [ "$REDUCED_MOTION_OK" -ne 0 ]; then echo "KB reduced-motion e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> KB result-card focus-ring e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_result_card_focus_test.mjs
+RESULT_CARD_FOCUS_OK=$?
+if [ "$RESULT_CARD_FOCUS_OK" -ne 0 ]; then echo "KB result-card focus-ring e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Browser UI e2e (local)"
 BASE_URL="http://localhost:$PORT" node scripts/kb_ui_test.mjs
 UI_OK=$?
