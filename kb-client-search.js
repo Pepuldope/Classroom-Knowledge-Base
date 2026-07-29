@@ -204,9 +204,16 @@ function dropStopwords(tokens) {
 // Cache the normalized text tokens used by repeated local related previews. A
 // search result page can ask for dozens of previews over the same bundle; keeping
 // this per-note cache avoids re-tokenizing every note for every card.
-const relatedTokenCache = new WeakMap();
+let relatedTokenCache = new WeakMap();
 let relatedTokenCacheHits = 0;
 let relatedTokenCacheMisses = 0;
+
+/** Clear local related-preview tokens and content-free diagnostics. */
+export function resetRelatedTokenCache() {
+  relatedTokenCache = new WeakMap();
+  relatedTokenCacheHits = 0;
+  relatedTokenCacheMisses = 0;
+}
 
 /** Return/reset development diagnostics for the content-free related-token cache. */
 export function relatedTokenCacheStats({ reset = false } = {}) {

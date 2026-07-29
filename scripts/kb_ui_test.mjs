@@ -77,6 +77,12 @@ try {
     await page.waitForSelector("#kbSearchInput", { timeout: 10000 });
   });
 
+  await check("development harness reset control clears related-preview diagnostics", async () => {
+    await page.waitForSelector("#kbRelatedCacheReset", { timeout: 10000 });
+    await page.locator("#kbRelatedCacheReset").click();
+    await page.waitForFunction(() => document.querySelector("#kbRelatedCacheResetStatus")?.textContent === "Related-preview cache reset.");
+  });
+
   // --- "Browse by course" discovery panel (ROADMAP: rich empty state + entry point) ---
   // With a seeded DB and an empty search box, the browse panel + example chips
   // must be visible on load, listing the distinct courses as clickable cards.

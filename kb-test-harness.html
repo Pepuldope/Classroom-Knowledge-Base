@@ -24,6 +24,10 @@
       </div>
       <div id="kbMain" hidden>
         <div id="kbMetaBar" class="stat-bar"></div>
+        <div class="kb-dev-tools" data-dev-only>
+          <button id="kbRelatedCacheReset" class="ghost-btn" type="button">Reset related-preview cache</button>
+          <span id="kbRelatedCacheResetStatus" class="sr-only" role="status" aria-live="polite"></span>
+        </div>
         <div id="kbStudyProgress" class="kb-study-progress" role="status" aria-live="polite"></div>
         <section id="kbReviewDigest" class="kb-review-digest" aria-labelledby="kbReviewDigestTitle" hidden></section>
         <div class="kb-export-bar">
@@ -106,6 +110,18 @@
 
   <script type="module">
     import { showKbView } from "/kb.js";
+    import { resetRelatedTokenCache } from "/kb-client-search.js";
+    const resetButton = document.getElementById("kbRelatedCacheReset");
+    const resetStatus = document.getElementById("kbRelatedCacheResetStatus");
+    const localHarness = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    if (!localHarness) {
+      resetButton?.remove();
+    } else {
+      resetButton?.addEventListener("click", () => {
+        resetRelatedTokenCache();
+        if (resetStatus) resetStatus.textContent = "Related-preview cache reset.";
+      });
+    }
     // Wire events + reveal the KB surface (equivalent to setView('kb') in app.js).
     showKbView();
   </script>

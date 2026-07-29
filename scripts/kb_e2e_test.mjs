@@ -29,7 +29,7 @@ import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
-import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats } from "../kb-client-search.js";
+import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } from "../api/tutor.js";
@@ -973,6 +973,31 @@ test("related token cache diagnostics report hits and misses without note conten
   assert.ok(afterSecond.hits > afterFirst.hits, "repeat preview should record token-cache hits");
   assert.deepEqual(Object.keys(afterSecond).sort(), ["hits", "misses"]);
   assert.equal(Object.prototype.hasOwnProperty.call(afterSecond, "notes"), false);
+});
+
+test("resetRelatedTokenCache clears cached tokens and diagnostics", () => {
+  const notes = [
+    { t: "Quadratic practice", s: "Algebra examples", x: "Solve equations", course: "Math" },
+    { t: "Linear practice", s: "Algebra examples", x: "Solve equations", course: "Math" },
+  ];
+  resetRelatedTokenCache();
+  clientRelatedNotesPreview(notes, 0, { limit: 1 });
+  const warm = relatedTokenCacheStats();
+  resetRelatedTokenCache();
+  assert.deepEqual(relatedTokenCacheStats(), { hits: 0, misses: 0 });
+  clientRelatedNotesPreview(notes, 0, { limit: 1 });
+  const cold = relatedTokenCacheStats();
+  assert.equal(cold.hits, 0, "reset should remove the prior target-token hit");
+  assert.ok(cold.misses > 0 && cold.misses >= warm.misses, "reset preview should tokenize again");
+});
+
+test("development harness exposes a bounded related-cache reset control", async () => {
+  const source = await readFile(new URL("../kb-test-harness.html", import.meta.url), "utf8");
+  assert.match(source, /id="kbRelatedCacheReset"/);
+  assert.match(source, /Reset related-preview cache/);
+  assert.match(source, /resetRelatedTokenCache/);
+  assert.match(source, /location\.hostname/);
+  assert.match(source, /resetButton\?\.remove\(\)/);
 });
 
 // ---------------------------------------------------------------------------
