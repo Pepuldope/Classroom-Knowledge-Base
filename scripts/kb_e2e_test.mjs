@@ -991,9 +991,18 @@ test("resetRelatedTokenCache clears cached tokens and diagnostics", () => {
   assert.ok(cold.misses > 0 && cold.misses >= warm.misses, "reset preview should tokenize again");
 });
 
+test("related cache summary formats bounded content-free diagnostics", async () => {
+  const { formatRelatedTokenCacheStats } = await import("../kb-client-search.js");
+  assert.equal(formatRelatedTokenCacheStats({ hits: 7, misses: 3 }), "Related-preview cache: 7 hits · 3 misses");
+  assert.equal(formatRelatedTokenCacheStats({ hits: "bad", misses: -1 }), "Related-preview cache: 0 hits · 0 misses");
+  assert.doesNotMatch(formatRelatedTokenCacheStats({ hits: 7, misses: 3 }), /Quadratic|notes|body/i);
+});
+
 test("development harness exposes a bounded related-cache reset control", async () => {
   const source = await readFile(new URL("../kb-test-harness.html", import.meta.url), "utf8");
   assert.match(source, /id="kbRelatedCacheReset"/);
+  assert.match(source, /id="kbRelatedCacheStats"/);
+  assert.match(source, /formatRelatedTokenCacheStats/);
   assert.match(source, /Reset related-preview cache/);
   assert.match(source, /resetRelatedTokenCache/);
   assert.match(source, /location\.hostname/);

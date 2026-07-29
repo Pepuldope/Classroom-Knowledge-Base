@@ -225,6 +225,12 @@ export function relatedTokenCacheStats({ reset = false } = {}) {
   return stats;
 }
 
+/** Format cache diagnostics without exposing note text or unbounded data. */
+export function formatRelatedTokenCacheStats(stats = {}) {
+  const count = (value) => Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+  return `Related-preview cache: ${count(stats.hits)} hits · ${count(stats.misses)} misses`;
+}
+
 function relatedTokens(note) {
   if (!note || typeof note !== "object") return dropStopwords(tokenize("")).filter(Boolean);
   const cached = relatedTokenCache.get(note);
