@@ -136,6 +136,11 @@ BASE_URL="http://localhost:$PORT" node scripts/continuity_smoke_test.mjs
 CONTINUITY_OK=$?
 if [ "$CONTINUITY_OK" -ne 0 ]; then echo "continuity smoke FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Production cache diagnostics isolation smoke (local integrated + harness)"
+BASE_URL="http://localhost:$PORT" node scripts/cache_diagnostics_isolation_test.mjs
+CACHE_ISOLATION_OK=$?
+if [ "$CACHE_ISOLATION_OK" -ne 0 ]; then echo "cache diagnostics isolation smoke FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Planner tutor mobile grounding e2e"
 BASE_URL="http://localhost:$PORT" node scripts/planner_tutor_mobile_test.mjs
 PLANNER_MOBILE_OK=$?
