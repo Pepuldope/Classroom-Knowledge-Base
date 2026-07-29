@@ -112,6 +112,11 @@ BASE_URL="http://localhost:$PORT" node scripts/cross_view_retry_focus_test.mjs
 CROSS_VIEW_RETRY_FOCUS_OK=$?
 if [ "$CROSS_VIEW_RETRY_FOCUS_OK" -ne 0 ]; then echo "cross-view mobile retry focus-ring e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> KB reduced-motion keyboard retry-focus e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_related_retry_reduced_motion_test.mjs
+KB_RETRY_REDUCED_MOTION_OK=$?
+if [ "$KB_RETRY_REDUCED_MOTION_OK" -ne 0 ]; then echo "KB reduced-motion keyboard retry-focus e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> KB result-card focus-ring e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_result_card_focus_test.mjs
 RESULT_CARD_FOCUS_OK=$?

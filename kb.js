@@ -1524,6 +1524,7 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
       const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=${limit}`);
       if (!r.ok) {
         renderRelatedPreviewError(container, noteIndex);
+        restoreParentFocus();
         return;
       }
       related = (await r.json()).related || [];

@@ -128,7 +128,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Perf: add a bounded local related-preview cache hit/miss summary to the development harness without showing note content. Shipped 2026-07-29: the localhost-only harness now refreshes a content-free hit/miss label and keeps the production surface unchanged.
 - [x] KB: add a keyboard-accessible “retry related notes” action with focus restoration after a preview error. Shipped 2026-07-28: retry restores focus to the parent result card after the async preview recovers.
 - [x] Continuity: verify related-preview error announcements remain distinct after repeated retry failures in the KB, Archive, and Planner surfaces. Shipped 2026-07-29: KB retry announcements now identify repeated failures ("still unavailable after N attempts") and the browser gate exercises two failures before recovery.
-- [ ] Accessibility: add a reduced-motion keyboard smoke for related-preview retry focus restoration on 390px screens.
+- [x] Accessibility: add a reduced-motion keyboard smoke for related-preview retry focus restoration on 390px screens. Shipped 2026-07-29: the focused browser gate drives a real failed retry with reduced motion and requires parent-card focus restoration.
 - [ ] Continuity: add a live browser smoke for repeated related-preview retry announcements in Archive and Planner assignment cards.
 - [ ] Continuity: add a production-safe browser timing summary for the local related-preview path without exposing diagnostics to students.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
