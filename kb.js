@@ -486,6 +486,16 @@ export function relatedPreviewRetryModel() {
   return { label: "Retry related notes", ariaLabel: "Retry loading related notes", focusable: true };
 }
 
+export function relatedPreviewErrorModel(attempt = 1) {
+  const count = Number.isFinite(attempt) && attempt > 1 ? Math.floor(attempt) : 1;
+  const message = count === 1 ? "Related notes unavailable" : "Related notes still unavailable";
+  const suffix = count === 1 ? "" : ` after ${count} attempts`;
+  return {
+    message,
+    announcement: `${message}${suffix}. Retry loading related notes.`,
+  };
+}
+
 export async function maybeAutoBuildKb() {
   const bundle = await loadKbBundle();
   if (!shouldAutoBuildKb(loadKbSettings(), bundle)) return false;
@@ -1477,12 +1487,15 @@ async function openCourse(course) {
 function renderRelatedPreviewError(container, retry) {
   const state = relatedPreviewSurfaceModel({ state: "error" });
   const action = relatedPreviewRetryModel();
+  const attempt = (Number(container.dataset.relatedRetryAttempts) || 0) + 1;
+  container.dataset.relatedRetryAttempts = String(attempt);
+  const error = relatedPreviewErrorModel(attempt);
   container.hidden = !state.visible;
   container.classList.remove("is-loading");
   container.classList.add("is-error");
   container.setAttribute("role", "status");
   container.setAttribute("aria-live", "polite");
-  container.textContent = "Related notes unavailable";
+  container.textContent = error.announcement;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "kb-related-preview-retry";
@@ -1519,6 +1532,7 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
       const state = relatedPreviewSurfaceModel({ state: "empty" });
       container.hidden = !state.visible;
       container.classList.remove("is-loading", "is-error");
+      delete container.dataset.relatedRetryAttempts;
       container.textContent = "";
       restoreParentFocus();
       return;
@@ -1527,6 +1541,7 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
     container.hidden = !state.visible;
     container.classList.remove("is-error");
     container.classList.toggle("is-loading", state.loading);
+    delete container.dataset.relatedRetryAttempts;
     container.textContent = "";
     const tag = document.createElement("span");
     tag.className = "kb-related-preview-label";

@@ -27,7 +27,7 @@ import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
@@ -225,6 +225,17 @@ test("related preview error model exposes a scoped keyboard retry action", () =>
     label: "Retry related notes",
     ariaLabel: "Retry loading related notes",
     focusable: true,
+  });
+});
+
+test("repeated related-preview failures announce the retry attempt distinctly", () => {
+  assert.deepEqual(relatedPreviewErrorModel(1), {
+    message: "Related notes unavailable",
+    announcement: "Related notes unavailable. Retry loading related notes.",
+  });
+  assert.deepEqual(relatedPreviewErrorModel(2), {
+    message: "Related notes still unavailable",
+    announcement: "Related notes still unavailable after 2 attempts. Retry loading related notes.",
   });
 });
 

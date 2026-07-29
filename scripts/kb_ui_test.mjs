@@ -176,10 +176,12 @@ try {
     }));
     await page.reload({ waitUntil: "networkidle" });
     await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
-    let failedOnce = false;
+    const failuresByNote = new Map();
     await page.route("**/api/kb-related**", async (route) => {
-      if (!failedOnce) {
-        failedOnce = true;
+      const id = new URL(route.request().url()).searchParams.get("id") || "unknown";
+      const failures = failuresByNote.get(id) || 0;
+      if (failures < 2) {
+        failuresByNote.set(id, failures + 1);
         await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary" }) });
       } else {
         await route.continue();
@@ -194,9 +196,19 @@ try {
       assert.ok(parentCount > 0, "parent result card must remain visible after preview failure");
       const retry = page.locator(".kb-related-preview-retry").first();
       assert.equal(await retry.getAttribute("aria-label"), "Retry loading related notes");
+      const targetPreview = retry.locator("..");
       await retry.focus();
       await retry.press("Enter");
-      await page.waitForFunction(() => !document.querySelector(".kb-related-preview-retry"), null, { timeout: 10000 });
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const text = await targetPreview.textContent();
+        if (text?.includes("after 2 attempts")) break;
+        await page.waitForTimeout(100);
+      }
+      assert.match(await targetPreview.textContent(), /still unavailable after 2 attempts/i, "a repeated failure should announce its attempt count");
+      const retryAgain = targetPreview.locator(".kb-related-preview-retry");
+      await retryAgain.focus();
+      await retryAgain.press("Enter");
+      await page.waitForFunction((preview) => preview.hidden || !preview.querySelector(".kb-related-preview-retry"), await targetPreview.elementHandle(), { timeout: 10000 });
       assert.equal(await page.locator("#kbResults .kb-result-card").count(), parentCount, "retry must not rerender away the parent card");
       assert.equal(await page.evaluate(() => document.activeElement?.closest(".kb-result-card")?.classList.contains("kb-result-card") || false), true, "retry should restore focus to the parent result card");
     } finally {
