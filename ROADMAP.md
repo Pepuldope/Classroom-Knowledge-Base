@@ -122,7 +122,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: add a scoped retry action when related-note previews fail, preserving the parent result card state. Shipped 2026-07-28: keyboard retry recovers the preview without opening the parent card.
 - [x] Continuity: verify reduced-motion related-preview errors remain readable in the Archive and Planner theme surfaces. Shipped 2026-07-29: shared error styling now uses theme foreground contrast and polite status semantics, with a 390px light/dark reduced-motion browser gate across both surfaces.
 - [x] Perf: expose a local related-preview cache hit/miss diagnostic in development-only timing output without logging note content (2026-07-28).
-- [ ] Continuity: add a mobile related-preview retry focus-ring smoke across Archive and Planner theme surfaces.
+- [x] Continuity: add a mobile related-preview retry focus-ring smoke across Archive and Planner theme surfaces. Shipped 2026-07-29: the reduced-motion 390px browser gate checks deliberate 2px focus rings, visibility, and overflow in both themes.
 - [ ] Continuity: add a browser smoke that verifies the local cache summary remains hidden outside the development harness and does not alter production KB layout.
 - [x] Perf: add a bounded local related-preview cache reset control to the development harness without exposing it in production. Shipped this run: the standalone harness can clear only the in-memory related-token cache and announces completion locally.
 - [x] Perf: add a bounded local related-preview cache hit/miss summary to the development harness without showing note content. Shipped 2026-07-29: the localhost-only harness now refreshes a content-free hit/miss label and keeps the production surface unchanged.

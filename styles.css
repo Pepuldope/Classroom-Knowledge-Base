@@ -1380,7 +1380,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   border: 1px solid currentColor; border-radius: 0.35rem; cursor: pointer;
 }
 .kb-related-preview-retry:hover,
-.kb-related-preview-retry:focus-visible { transform: translateY(-1px); outline: 2px solid var(--accent, #2563eb); outline-offset: 1px; }
+.kb-related-preview-retry:focus-visible { transform: translateY(-1px); outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
 @keyframes kb-related-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .kb-related-preview.is-loading::before {
