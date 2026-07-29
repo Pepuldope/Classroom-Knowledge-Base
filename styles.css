@@ -1365,7 +1365,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-radius: 50%; animation: kb-related-spin 0.8s linear infinite;
 }
 .kb-related-preview.is-error {
-  color: var(--muted); font-size: 0.72rem;
+  color: var(--fg); font-size: 0.72rem;
   display: inline-flex; align-items: center; gap: 0.35rem;
 }
 .kb-related-preview.is-error::before {

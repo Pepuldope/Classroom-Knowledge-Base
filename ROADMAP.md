@@ -120,13 +120,15 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: show a non-animated reduced-motion label/icon state in the related-preview error path, not only loading. Shipped 2026-07-28: failed related-note previews now retain a labeled, static `!` marker under reduced motion.
 - [x] Perf: add a warm local related-preview timing assertion so regressions are caught before hosted latency checks. Shipped 2026-07-28: cached per-note related-token sets and a 400-note/40-preview warm budget gate keep the local path under 100ms on the test fixture.
 - [x] KB: add a scoped retry action when related-note previews fail, preserving the parent result card state. Shipped 2026-07-28: keyboard retry recovers the preview without opening the parent card.
-- [ ] Continuity: verify reduced-motion related-preview errors remain readable in the Archive and Planner theme surfaces.
+- [x] Continuity: verify reduced-motion related-preview errors remain readable in the Archive and Planner theme surfaces. Shipped 2026-07-29: shared error styling now uses theme foreground contrast and polite status semantics, with a 390px light/dark reduced-motion browser gate across both surfaces.
 - [x] Perf: expose a local related-preview cache hit/miss diagnostic in development-only timing output without logging note content (2026-07-28).
 - [ ] Continuity: add a mobile related-preview retry focus-ring smoke across Archive and Planner theme surfaces.
 - [ ] Continuity: add a browser smoke that verifies the local cache summary remains hidden outside the development harness and does not alter production KB layout.
 - [x] Perf: add a bounded local related-preview cache reset control to the development harness without exposing it in production. Shipped this run: the standalone harness can clear only the in-memory related-token cache and announces completion locally.
 - [x] Perf: add a bounded local related-preview cache hit/miss summary to the development harness without showing note content. Shipped 2026-07-29: the localhost-only harness now refreshes a content-free hit/miss label and keeps the production surface unchanged.
 - [x] KB: add a keyboard-accessible “retry related notes” action with focus restoration after a preview error. Shipped 2026-07-28: retry restores focus to the parent result card after the async preview recovers.
+- [ ] Continuity: verify related-preview error announcements remain distinct after repeated retry failures in the KB, Archive, and Planner surfaces.
+- [ ] Accessibility: add a reduced-motion keyboard smoke for related-preview retry focus restoration on 390px screens.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).

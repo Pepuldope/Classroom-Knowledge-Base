@@ -1480,6 +1480,8 @@ function renderRelatedPreviewError(container, retry) {
   container.hidden = !state.visible;
   container.classList.remove("is-loading");
   container.classList.add("is-error");
+  container.setAttribute("role", "status");
+  container.setAttribute("aria-live", "polite");
   container.textContent = "Related notes unavailable";
   const button = document.createElement("button");
   button.type = "button";
