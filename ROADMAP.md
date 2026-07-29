@@ -131,6 +131,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Accessibility: add a reduced-motion keyboard smoke for related-preview retry focus restoration on 390px screens. Shipped 2026-07-29: the focused browser gate drives a real failed retry with reduced motion and requires parent-card focus restoration.
 - [ ] Continuity: add a live browser smoke for repeated related-preview retry announcements in Archive and Planner assignment cards.
 - [ ] Continuity: add a production-safe browser timing summary for the local related-preview path without exposing diagnostics to students.
+- [ ] Perf: reduce hosted related-preview warm latency below the 1s product budget while preserving the local IndexedDB fast path.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
