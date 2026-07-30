@@ -3,19 +3,22 @@
 // Usage: node scripts/kb_latency_test.mjs
 
 export function summarizeSamples(samples) {
-  if (!Array.isArray(samples) || samples.length < 2) {
-    throw new Error("latency probe needs at least two samples");
+  if (!Array.isArray(samples) || samples.length < 4) {
+    throw new Error("latency probe needs at least four samples");
   }
   const values = samples.map(Number);
   if (values.some((value) => !Number.isFinite(value) || value < 0)) {
     throw new Error("latency samples must be finite non-negative numbers");
   }
   const warmMs = values.slice(1);
+  const sortedWarm = [...warmMs].sort((a, b) => a - b);
+  const p95Index = Math.max(0, Math.ceil(sortedWarm.length * 0.95) - 1);
   return {
     coldMs: values[0],
     warmMs,
     warmMaxMs: Math.max(...warmMs),
     warmAverageMs: warmMs.reduce((sum, value) => sum + value, 0) / warmMs.length,
+    warmP95Ms: sortedWarm[p95Index],
   };
 }
 
@@ -59,7 +62,7 @@ async function main() {
   const budgetMs = Number(process.env.KB_LATENCY_BUDGET_MS || 1000);
   const samples = [];
   let details;
-  for (let i = 0; i < 3; i += 1) {
+  for (let i = 0; i < 4; i += 1) {
     details = await timedSearch(base, query);
     samples.push(Math.round(details.elapsedMs * 100) / 100);
   }
@@ -68,7 +71,7 @@ async function main() {
   if (localBase) {
     const localSamples = [];
     let localDetails;
-    for (let i = 0; i < 3; i += 1) {
+    for (let i = 0; i < 4; i += 1) {
       localDetails = await timedSearch(localBase, query);
       localSamples.push(Math.round(localDetails.elapsedMs * 100) / 100);
     }

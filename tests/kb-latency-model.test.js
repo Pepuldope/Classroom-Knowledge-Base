@@ -31,16 +31,27 @@ test("searchResponseCacheState rejects stale, mismatched, and empty cache entrie
 });
 
 test("summarizeSamples separates the cold request from warm repeats", () => {
-  assert.deepEqual(summarizeSamples([1200, 800, 900]), {
+  assert.deepEqual(summarizeSamples([1200, 800, 900, 1000]), {
     coldMs: 1200,
-    warmMs: [800, 900],
-    warmMaxMs: 900,
-    warmAverageMs: 850,
+    warmMs: [800, 900, 1000],
+    warmMaxMs: 1000,
+    warmAverageMs: 900,
+    warmP95Ms: 1000,
   });
 });
 
-test("summarizeSamples rejects an incomplete probe", () => {
-  assert.throws(() => summarizeSamples([800]), /at least two samples/);
+test("summarizeSamples reports p95 across three warm repeats", () => {
+  assert.deepEqual(summarizeSamples([1200, 800, 900, 1000]), {
+    coldMs: 1200,
+    warmMs: [800, 900, 1000],
+    warmMaxMs: 1000,
+    warmAverageMs: 900,
+    warmP95Ms: 1000,
+  });
+});
+
+test("summarizeSamples rejects a probe without three warm repeats", () => {
+  assert.throws(() => summarizeSamples([800, 700, 750]), /at least four samples/);
 });
 
 test("compareLatency reports bounded local and hosted warm metrics", () => {
