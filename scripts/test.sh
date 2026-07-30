@@ -20,6 +20,11 @@ node scripts/theme_test.mjs
 THEME_OK=$?
 if [ "$THEME_OK" -ne 0 ]; then echo "theme tests FAILED"; exit 1; fi
 
+echo "==> Private view auth model tests"
+node --test tests/auth-view.test.js
+AUTH_VIEW_OK=$?
+if [ "$AUTH_VIEW_OK" -ne 0 ]; then echo "private view auth tests FAILED"; exit 1; fi
+
 
 echo "==> Study streak model tests"
 node scripts/study_streak_test.mjs

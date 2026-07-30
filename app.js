@@ -15,6 +15,7 @@ import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 import { loadKbBundle, removeKbBundle } from "./kb-local.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
+import { privateViewDecision } from "./auth-view.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -467,10 +468,8 @@ function updateArchiveHeaderToggle() {
   const arc = getArchive();
   const toggle = $("viewToggle");
   if (!toggle) return;
-  // The Knowledge Base is a SHARED/public resource — its tab must always be
-  // reachable (anyone can search + ask the tutor, no login required). Only the
-  // personal Archive view is gated behind login/archive. So we always show the
-  // toggle; the Archive tab's own content enforces its login requirement.
+  // The navigation remains visible so signed-out students can see what is
+  // available, but the private KB route itself is gated in setView().
   toggle.hidden = false;
   if (!arc && !accessToken && currentView === "archive") setView("planner");
 }
@@ -514,6 +513,12 @@ async function handleArchiveFileChange(e) {
 }
 
 function setView(view) {
+  const access = privateViewDecision(view, accessToken);
+  if (!access.allowed) {
+    currentView = access.fallback;
+    setStatus(access.message, true);
+    view = access.fallback;
+  }
   currentView = view;
   const archiveView = $("archiveView");
   const plannerView = $("plannerView");
@@ -1320,6 +1325,7 @@ $("logoutBtn").addEventListener("click", () => {
   closeMenu();
   clearToken();
   revokeServerToken();
+  setView("planner");
   try { localStorage.removeItem(USER_HINT_KEY); } catch {}
   try { localStorage.removeItem(USER_PROFILE_KEY); } catch {}
   sessionEpoch++;
@@ -1418,6 +1424,7 @@ function handleWrongAccount() {
   $("userInfo").hidden = true;
   $("userInfo").textContent = "";
   $("userInfo").setAttribute("aria-hidden", "true");
+  setView("planner");
   $("welcome").hidden = false;
   setStatus("That Google account isn't a Classroom account. Sign in with your school Google account to continue.", true);
   updateArchiveHeaderToggle();

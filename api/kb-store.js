@@ -1,9 +1,9 @@
 // kb-store.js — legacy ingestion compatibility store; active bundles are private/local.
 //
-// The original Classroom-Web-Analyzer keeps each student's archive in their
-// own browser (IndexedDB). This project instead persists ONE shared classroom
-// knowledge base on the server, so every student can search it and the AI
-// tutor can reference it.
+// The active Classroom-derived Knowledge Base now stays in each student's own
+// browser (IndexedDB). This module remains only as a migration compatibility
+// path for existing deployments and must not be used as a public student-data
+// store.
 //
 // Storage backend: Upstash KV, accessed through Vercel's standard env vars
 // KV_REST_API_URL / KV_REST_API_TOKEN. The calls use only the Web-standard
@@ -23,7 +23,7 @@ import { deriveFamily } from "./kb-family.js";
 
 // Vercel's Upstash KV integration injects UPSTASH_REDIS_REST_URL / _TOKEN by
 // default, but some setups (or manual KV bindings) use KV_REST_API_URL / _TOKEN.
-// Support both so the shared DB persists regardless of how the store is bound.
+// Support both so the legacy migration store persists regardless of how it is bound.
 const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 const BUNDLE_KEY = "kb:bundle";

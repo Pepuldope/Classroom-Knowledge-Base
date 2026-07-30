@@ -17,7 +17,11 @@ try {
   const navViews = await page.locator(".view-toggle-btn").evaluateAll((buttons) => buttons.map((button) => button.dataset.view).sort());
   assert.deepEqual(navViews, ["archive", "kb", "planner"], "shared navigation should expose planner, archive, and KB");
 
-  for (const view of ["kb", "archive", "planner"]) {
+  await page.locator('.view-toggle-btn[data-view="kb"]').click();
+  assert.equal(await page.locator("#kbView").isHidden(), true, "signed-out users must not open the private KB");
+  assert.match(await page.locator("#status").textContent(), /Sign in with Google/);
+
+  for (const view of ["archive", "planner"]) {
     await page.locator(`.view-toggle-btn[data-view="${view}"]`).click();
     await page.waitForFunction((name) => {
       const el = document.getElementById(`${name}View`);
