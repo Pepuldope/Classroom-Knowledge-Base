@@ -58,7 +58,7 @@ try {
     // from the live DB's own facets/meta so we verify the SEARCH PIPELINE
     // works against whatever is currently deployed (the populated vault, a demo
     // note, etc.) instead of hardcoding brittle content.
-    const meta = await (await page.request.fetch(LIVE + "/api/kb-search?q=__ping__")).json().catch(() => null);
+    const meta = await (await page.request.fetch(LIVE + "/api/kb-search?q=the")).json().catch(() => null);
     const courses = meta?.meta?.courseList || meta?.filters?.courses || [];
     // courseList entries are objects {name,y,family,noteCount}; filters.courses
     // are plain strings. Normalize to a course-name string either way.
