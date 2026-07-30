@@ -134,6 +134,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Perf: reduce hosted related-preview warm latency below the 1s product budget while preserving the local IndexedDB fast path. Shipped 2026-07-30: warm legacy related lookups reuse a bounded 15s in-process bundle cache and invalidate after writes; post-deploy warm samples were 553–704ms.
 - [x] Perf: reduce hosted legacy search warm latency below the 1s product budget without logging note content. Shipped 2026-07-30: compatibility search now reuses a bounded response for the same bundle/query/filter key; ingestion replaces the bundle identity so stale responses cannot survive writes. Live probe remains populated (3,990 notes) and warm max was 983.54ms before deployment.
 - [x] Perf: add p95 hosted legacy search latency reporting across three warm probes without logging note content (2026-07-30).
+- [x] Privacy: build the Classroom-derived KB entirely in the browser and persist the curated bundle in the user's IndexedDB; tutor remains the only KB request sent to the server.
 - [ ] Continuity: verify cached legacy related responses remain fresh after a live incremental ingestion write.
 - [ ] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit.
 - [ ] Privacy: add a browser assertion that tutor requests never include unselected bundle bodies.

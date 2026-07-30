@@ -10,10 +10,9 @@
 //   - window.__cwaTokenClient — the google.accounts.oauth2 token client
 //   - getOauthConfig() / storeUserSub() — from app.js (auth state)
 //
-// Backend endpoints (see api/):
-//   POST /api/kb-scrape   { source:'classroom', authToken } | { source:'bundle', bundle }
-//   GET  /api/kb-search?q=  -> { meta, results:[{t,course,y,topic,p,_score,_snippet}] }
 //   POST /api/tutor        { messages:[...], notes:[...] } (streaming SSE)
+// Classroom ingestion and KB retrieval are browser-local; the tutor is the only
+// KB request that leaves the browser, and it receives only bounded retrieved notes.
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
@@ -21,6 +20,8 @@ import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
+import { buildArchiveFromClassroom } from "./archive-builder.js";
+import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 
 const $ = (id) => document.getElementById(id);
@@ -608,10 +609,8 @@ async function checkForClassroomChanges(bundle) {
   if (!banner || !token || kbChangeCheckInFlight) return;
   kbChangeCheckInFlight = true;
   try {
-    const response = await fetch("/api/kb-scrape", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "classroom", mode: "list", authToken: token }),
+    const response = await fetch("https://classroom.googleapis.com/v1/courses?courseStates=ACTIVE&courseStates=ARCHIVED&pageSize=100", {
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) return;
     const data = await response.json();
@@ -984,51 +983,29 @@ async function doScrape(token) {
   const logEl = $("kbBuildLog");
   const progress = $("kbBuildProgressBar");
   if (panel) panel.hidden = false;
-  if (statusEl) { statusEl.textContent = "Reading your courses…"; statusEl.classList.remove("error"); }
+  if (statusEl) { statusEl.textContent = "Reading your courses privately in this browser…"; statusEl.classList.remove("error"); }
   if (logEl) logEl.innerHTML = "";
   if (progress) progress.style.width = "5%";
   const log = (msg) => { if (logEl) { const li = document.createElement("div"); li.textContent = msg; logEl.appendChild(li); } };
-
-  const authHdr = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
-  try {
-    // Step 1: list courses (bounded, fast).
-    const listRes = await fetch("/api/kb-scrape", {
-      method: "POST",
-      headers: authHdr,
-      body: JSON.stringify({ source: "classroom", mode: "list", authToken: token }),
+  const gFetch = async (url, options = {}) => {
+    const response = await fetch(url, {
+      ...options,
+      headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` },
     });
-    if (!listRes.ok) { const e = await listRes.json().catch(() => ({})); setKbBuildError(e.error || listRes.status); return; }
-    const list = await listRes.json();
-    const courses = list.courses || [];
-    if (courses.length === 0) { if (statusEl) statusEl.textContent = "✅ No courses found to scrape."; return; }
-    if (statusEl) statusEl.textContent = `Building ${courses.length} course${courses.length === 1 ? "" : "s"} into your knowledge base…`;
-
-    // Step 2: per-course, incremental save so a single slow/failed course can't
-    // 504 the whole scrape and partial progress is preserved.
-    let done = 0, failed = 0;
-    for (const c of courses) {
-      try {
-        const r = await fetch("/api/kb-scrape", {
-          method: "POST",
-          headers: authHdr,
-          body: JSON.stringify({ source: "classroom", mode: "course", courseId: c.id, authToken: token }),
-        });
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        const d = await r.json();
-        done++;
-        log(`✓ ${c.name || c.id} — ${d.notes} notes`);
-      } catch (err) {
-        failed++;
-        log(`✗ ${c.name || c.id} — ${err.message}`);
-      }
-      if (progress) progress.style.width = `${Math.round(((done + failed) / courses.length) * 100)}%`;
-    }
-
-    if (statusEl) {
-      statusEl.textContent = failed === 0
-        ? `✅ Saved ${done} course${done === 1 ? "" : "s"} to the shared knowledge base.`
-        : `⚠️ Saved ${done} course${done === 1 ? "" : "s"}; ${failed} failed (see log). The rest is searchable now.`;
-    }
+    if (!response.ok) throw new Error(`Classroom API ${response.status}`);
+    return response.json();
+  };
+  try {
+    const archive = await buildArchiveFromClassroom(gFetch, {
+      onProgress: ({ message, done, total }) => {
+        if (message) { if (statusEl) statusEl.textContent = message; log(message); }
+        if (progress && total) progress.style.width = `${Math.round((done / total) * 90) + 5}%`;
+      },
+    });
+    const bundle = kbBundleFromClassroomArchive(archive);
+    localKbBundle = await saveKbBundle(bundle);
+    if (progress) progress.style.width = "100%";
+    if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
     setTimeout(() => refreshKb(), 600);
   } catch (e) {
     setKbBuildError(e.message);
@@ -1050,15 +1027,9 @@ async function handleKbFile(e) {
   try {
     const text = await file.text();
     let parsed; try { parsed = JSON.parse(text); } catch { setKbBuildError("That file isn't valid JSON."); return; }
-    const r = await fetch("/api/kb-scrape", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: "bundle", bundle: parsed }),
-    });
-    if (!r.ok) { const err = await r.json().catch(() => ({})); setKbBuildError(err.error || r.status); return; }
-    const data = await r.json();
-    try { localKbBundle = await saveKbBundle(parsed); } catch { /* cache is best-effort */ }
-    if (statusEl) statusEl.textContent = `✅ Saved ${data.meta?.noteCount?.toLocaleString()} notes to your knowledge base.`;
+    const bundle = kbBundleFromClassroomArchive(parsed);
+    localKbBundle = await saveKbBundle(bundle);
+    if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
     setTimeout(() => refreshKb(), 600);
   } catch (err) { setKbBuildError(err.message); }
   finally { e.target.value = ""; }

@@ -444,57 +444,24 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
       if (signal && signal.aborted) throw abortError();
       const course = courses[cursor++];
       const failCounter = { count: 0 };
-      const [topics, courseWork, courseWorkMaterials, announcements, submissions] = await Promise.all([
-        fetchFacetGraceful(
-          gFetch,
-          (pt) => `${CLASSROOM_BASE}/courses/${course.id}/topics?pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`,
-          "topic",
-          signal,
-          failCounter
-        ),
-        fetchFacetGraceful(
-          gFetch,
-          (pt) =>
-            `${CLASSROOM_BASE}/courses/${course.id}/courseWork?pageSize=${PAGE_SIZE}&courseWorkStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`,
-          "courseWork",
-          signal,
-          failCounter
-        ),
-        fetchFacetGraceful(
-          gFetch,
-          (pt) =>
-            `${CLASSROOM_BASE}/courses/${course.id}/courseWorkMaterials?pageSize=${PAGE_SIZE}&courseWorkMaterialStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`,
-          "courseWorkMaterial",
-          signal,
-          failCounter
-        ),
-        fetchFacetGraceful(
-          gFetch,
-          (pt) =>
-            `${CLASSROOM_BASE}/courses/${course.id}/announcements?pageSize=${PAGE_SIZE}&announcementStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`,
-          "announcements",
-          signal,
-          failCounter
-        ),
-        fetchFacetGraceful(
-          gFetch,
-          (pt) =>
-            `${CLASSROOM_BASE}/courses/${course.id}/courseWork/-/studentSubmissions?userId=me&pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`,
-          "studentSubmissions",
-          signal,
-          failCounter
-        ),
-      ]);
-      courseData[course.id] = { topics, courseWork, courseWorkMaterials, announcements, submissions };
-      failures += failCounter.count;
+      try {
+        const [topics, courseWork, courseWorkMaterials, announcements, submissions] = await Promise.all([
+          fetchFacetGraceful(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${course.id}/topics?pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`, "topic", signal, failCounter),
+          fetchFacetGraceful(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${course.id}/courseWork?pageSize=${PAGE_SIZE}&courseWorkStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "courseWork", signal, failCounter),
+          fetchFacetGraceful(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${course.id}/courseWorkMaterials?pageSize=${PAGE_SIZE}&courseWorkMaterialStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "courseWorkMaterial", signal, failCounter),
+          fetchFacetGraceful(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${course.id}/announcements?pageSize=${PAGE_SIZE}&announcementStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "announcements", signal, failCounter),
+          fetchFacetGraceful(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${course.id}/courseWork/-/studentSubmissions?userId=me&pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`, "studentSubmissions", signal, failCounter),
+        ]);
+        courseData[course.id] = { topics, courseWork, courseWorkMaterials, announcements, submissions };
+        failures += failCounter.count;
+        const noteCount = courseWork.length + courseWorkMaterials.length + (announcements.length > 0 ? 1 : 0);
+        onProgress({ phase: "course", message: `Fetching course ${completed + 1}/${courses.length}… ${course.name} (${noteCount} note${noteCount === 1 ? "" : "s"})`, done: completed + 1, total: courses.length });
+      } catch (e) {
+        if (e.name === "AbortError") throw e;
+        failures++;
+        onProgress({ phase: "course", message: `Skipping course ${course.name || course.id} after an API error.`, done: completed + 1, total: courses.length });
+      }
       completed++;
-      const noteCount = courseWork.length + courseWorkMaterials.length + (announcements.length > 0 ? 1 : 0);
-      onProgress({
-        phase: "course",
-        message: `Fetching course ${completed}/${courses.length}… ${course.name} (${noteCount} note${noteCount === 1 ? "" : "s"})`,
-        done: completed,
-        total: courses.length,
-      });
     }
   }
 

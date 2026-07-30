@@ -32,6 +32,8 @@ import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
+import { kbBundleFromClassroomArchive } from "../kb-client-build.js";
+import { buildArchiveFromClassroom } from "../archive-builder.js";
 import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } from "../api/tutor.js";
 
 // Minimal Edge-like Request for the route handler (node 22 has global Request).
@@ -1282,6 +1284,50 @@ test("classroom mode:'list' returns course ids, mode:'course' appends one course
 // renders BOTH the teacher's posted materials AND the student's submitted-file
 // link AND a deep link back to the assignment in Classroom.
 // ---------------------------------------------------------------------------
+test("client Classroom build continues after one course's API fails", async () => {
+  const progress = [];
+  const gFetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/courses?courseStates=ACTIVE&courseStates=ARCHIVED&pageSize=100")) {
+      return { courses: [
+        { id: "bad", name: "Unavailable", creationTime: "2025-09-01T00:00:00Z" },
+        { id: "good", name: "Math", creationTime: "2025-09-01T00:00:00Z" },
+      ] };
+    }
+    if (value.includes("/courses/bad/")) throw new Error("Classroom API 500");
+    return {};
+  };
+  const bundle = await buildArchiveFromClassroom(gFetch, { onProgress: (event) => progress.push(event) });
+  assert.equal(bundle.courses.length, 2);
+  assert.ok(progress.some((event) => /skipped/i.test(event.message || "")));
+  assert.equal(progress.at(-1).phase, "done");
+});
+
+
+test("client KB build preserves Classroom notes and adds searchable summaries locally", () => {
+  const archive = {
+    version: 1,
+    source: "classroom",
+    generatedAt: "2026-07-30T00:00:00.000Z",
+    years: ["2025-26"],
+    courses: [{ name: "Math", noteCount: 1 }],
+    notes: [{
+      p: "2025-26/vault/Algebra/Quadratics/Quadratic formula",
+      t: "Quadratic formula",
+      course: "Math",
+      y: "2025-26",
+      topic: "Quadratics",
+      kind: "note",
+      x: "The quadratic formula solves ax^2 + bx + c = 0.",
+    }],
+  };
+  const kb = kbBundleFromClassroomArchive(archive);
+  assert.equal(kb.source, "classroom");
+  assert.equal(kb.notes.length, 1);
+  assert.match(kb.notes[0].s, /quadratic formula/i);
+  assert.equal(kb.notes[0].family, "Science/Math");
+});
+
 test("bundleFromRaw includes teacher materials, student submission links, and assignment deep-link", async () => {
   const { bundleFromRaw } = await import("../archive-builder.js");
   const raw = {
