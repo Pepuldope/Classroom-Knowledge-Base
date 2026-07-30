@@ -208,11 +208,49 @@ let relatedTokenCache = new WeakMap();
 let relatedTokenCacheHits = 0;
 let relatedTokenCacheMisses = 0;
 
+let relatedPreviewTimings = [];
+
+/** Record bounded, content-free local related-preview timing diagnostics. */
+export function recordRelatedPreviewTiming(elapsedMs, { limit = 20 } = {}) {
+  const value = Number(elapsedMs);
+  if (!Number.isFinite(value) || value < 0) return;
+  const cap = Number.isInteger(limit) && limit > 0 ? limit : 20;
+  relatedPreviewTimings = [...relatedPreviewTimings, value].slice(-cap);
+}
+
+/** Summarize local related-preview timings without retaining note content. */
+export function relatedPreviewTimingModel(samples = [], { limit = 20 } = {}) {
+  const cap = Number.isInteger(limit) && limit > 0 ? limit : 20;
+  const values = (Array.isArray(samples) ? samples : [])
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .slice(-cap);
+  if (values.length === 0) return { samples: 0, lastMs: 0, averageMs: 0, maxMs: 0 };
+  const averageMs = Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100;
+  return {
+    samples: values.length,
+    lastMs: values[values.length - 1],
+    averageMs,
+    maxMs: Math.max(...values),
+  };
+}
+
+export function relatedPreviewTimingStats() {
+  return relatedPreviewTimingModel(relatedPreviewTimings);
+}
+
+export function formatRelatedPreviewTimingStats(stats = {}) {
+  const samples = Number.isInteger(stats.samples) && stats.samples >= 0 ? stats.samples : 0;
+  if (!samples) return "Related-preview timing: no samples";
+  return `Related-preview timing: last ${Number(stats.lastMs || 0).toFixed(2)}ms · avg ${Number(stats.averageMs || 0).toFixed(2)}ms · max ${Number(stats.maxMs || 0).toFixed(2)}ms · ${samples} samples`;
+}
+
 /** Clear local related-preview tokens and content-free diagnostics. */
 export function resetRelatedTokenCache() {
   relatedTokenCache = new WeakMap();
   relatedTokenCacheHits = 0;
   relatedTokenCacheMisses = 0;
+  relatedPreviewTimings = [];
 }
 
 /** Return/reset development diagnostics for the content-free related-token cache. */

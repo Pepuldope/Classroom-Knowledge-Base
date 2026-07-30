@@ -27,6 +27,7 @@
         <div class="kb-dev-tools" data-dev-only>
           <button id="kbRelatedCacheReset" class="ghost-btn" type="button">Reset related-preview cache</button>
           <span id="kbRelatedCacheStats" aria-live="polite">Related-preview cache: 0 hits · 0 misses</span>
+          <span id="kbRelatedTimingStats" aria-live="polite">Related-preview timing: no samples</span>
           <span id="kbRelatedCacheResetStatus" class="sr-only" role="status" aria-live="polite"></span>
         </div>
         <div id="kbStudyProgress" class="kb-study-progress" role="status" aria-live="polite"></div>
@@ -111,13 +112,15 @@
 
   <script type="module">
     import { showKbView } from "/kb.js";
-    import { resetRelatedTokenCache, relatedTokenCacheStats, formatRelatedTokenCacheStats } from "/kb-client-search.js";
+    import { resetRelatedTokenCache, relatedTokenCacheStats, formatRelatedTokenCacheStats, relatedPreviewTimingStats, formatRelatedPreviewTimingStats } from "/kb-client-search.js";
     const resetButton = document.getElementById("kbRelatedCacheReset");
     const statsLabel = document.getElementById("kbRelatedCacheStats");
+    const timingLabel = document.getElementById("kbRelatedTimingStats");
     const resetStatus = document.getElementById("kbRelatedCacheResetStatus");
     const localHarness = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     const updateStats = () => {
       if (statsLabel) statsLabel.textContent = formatRelatedTokenCacheStats(relatedTokenCacheStats());
+      if (timingLabel) timingLabel.textContent = formatRelatedPreviewTimingStats(relatedPreviewTimingStats());
     };
     if (!localHarness) {
       resetButton?.remove();

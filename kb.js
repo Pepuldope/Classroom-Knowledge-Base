@@ -18,7 +18,7 @@
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
-import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats } from "./kb-client-search.js";
+import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
 import { buildReviewDigest } from "./review-digest.js";
@@ -127,6 +127,7 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
   const related = relatedNotesPreview(notes, index, opts);
   if (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname)) {
     const elapsedMs = Math.round((performance.now() - started) * 100) / 100;
+    recordRelatedPreviewTiming(elapsedMs);
     console.debug("[KB perf] related-preview", { elapsedMs, cache: relatedTokenCacheStats() });
   }
   return related;
