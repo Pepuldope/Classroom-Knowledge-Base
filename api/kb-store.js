@@ -67,6 +67,27 @@ function planShards(notes) {
 
 // Process-memory fallback used only when KV is not configured.
 const mem = new Map();
+const BUNDLE_CACHE_TTL_MS = 15_000;
+let bundleCache = { bundle: null, cachedAt: 0 };
+
+/** Return a populated, non-expired bundle-cache entry or null. */
+export function bundleCacheState(entry, now = Date.now(), ttl = BUNDLE_CACHE_TTL_MS) {
+  const bundle = entry?.bundle;
+  const cachedAt = Number(entry?.cachedAt);
+  const age = Number(now) - cachedAt;
+  if (!bundle || !Array.isArray(bundle.notes) || bundle.notes.length === 0) return null;
+  if (!Number.isFinite(cachedAt) || !Number.isFinite(age) || age < 0 || age > ttl) return null;
+  return bundle;
+}
+
+function invalidateBundleCache() {
+  bundleCache = { bundle: null, cachedAt: 0 };
+}
+
+function cacheBundle(bundle) {
+  bundleCache = { bundle, cachedAt: Date.now() };
+  return bundle;
+}
 
 function kvAvailable() {
   return !!KV_URL && !!KV_TOKEN;
@@ -164,11 +185,13 @@ function bundleFromNotes(notes, extra = {}) {
 
 /** Load the shared knowledge-base bundle, or null if none has been built yet. */
 export async function getBundle() {
+  const cached = bundleCacheState(bundleCache);
+  if (cached) return cached;
   const notes = await readShardedNotes();
   const shardsPresent = kvAvailable() ? !!(await kvGetJSON(SHARDS_KEY)) : !!mem.get(SHARDS_KEY);
   if (notes.length === 0 && !shardsPresent) return null;
   const source = !kvAvailable() ? mem.get("kb:src") || "vault" : "vault";
-  return bundleFromNotes(notes, { source });
+  return cacheBundle(bundleFromNotes(notes, { source }));
 }
 
 /** Persist a legacy ingestion bundle during migration. */
@@ -186,6 +209,8 @@ export async function saveBundle(bundle) {
   await writeSharded(notes, bundle.source);
   if (kvAvailable()) await kvSetJSON(META_KEY, meta);
   else mem.set(META_KEY, meta);
+  invalidateBundleCache();
+  cacheBundle(bundleFromNotes(notes, { source: bundle.source }));
 }
 
 /** Read-only metadata about the legacy ingestion bundle (counts, dates). */

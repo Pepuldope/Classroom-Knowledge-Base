@@ -1,6 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { summarizeSamples, compareLatency } from "../scripts/kb_latency_test.mjs";
+import { bundleCacheState } from "../api/kb-store.js";
+
+test("bundleCacheState reuses a fresh populated bundle", () => {
+  const bundle = { version: 1, notes: [{ t: "Algebra" }] };
+  assert.equal(bundleCacheState({ bundle, cachedAt: 1000 }, 1500, 5000), bundle);
+});
+
+test("bundleCacheState rejects missing, empty, and expired cache entries", () => {
+  assert.equal(bundleCacheState(null, 1500, 5000), null);
+  assert.equal(bundleCacheState({ bundle: { notes: [] }, cachedAt: 1000 }, 1500, 5000), null);
+  assert.equal(bundleCacheState({ bundle: { notes: [{ t: "Algebra" }] }, cachedAt: 1000 }, 7000, 5000), null);
+});
 
 test("summarizeSamples separates the cold request from warm repeats", () => {
   assert.deepEqual(summarizeSamples([1200, 800, 900]), {
