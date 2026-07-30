@@ -45,14 +45,15 @@ try {
     assert.ok(res && res.ok(), `HTTP ${res && res.status()}`);
   });
 
-  await check("live: Knowledge Base tab present", async () => {
+  await check("live: Knowledge Base tab present and private", async () => {
     await page.waitForSelector('#viewToggle button[data-view="kb"]', { timeout: 10000 });
     await page.evaluate(() => { const t = document.getElementById("viewToggle"); if (t) t.hidden = false; });
     await page.click('#viewToggle button[data-view="kb"]');
-    await page.waitForSelector("#kbView:not([hidden]) #kbSearchInput", { timeout: 10000 });
+    await page.waitForFunction(() => document.getElementById("kbView")?.hidden === true, null, { timeout: 10000 });
+    assert.match(await page.locator("#status").textContent(), /Sign in with Google/);
   });
 
-  await check("live: search returns results", async () => {
+  await check("live: compatibility search API returns results", async () => {
     // Data-independent: don't assume a specific note exists. Pull a real term
     // from the live DB's own facets/meta so we verify the SEARCH PIPELINE
     // works against whatever is currently deployed (the populated vault, a demo
@@ -65,22 +66,10 @@ try {
     const firstName = typeof first === "string" ? first : (first && first.name) || "";
     // Prefer a course name token; else fall back to a generic probe.
     const term = firstName ? firstName.split(/\s+/)[0] : "the";
-    await page.fill("#kbSearchInput", term);
-    await page.keyboard.press("Enter");
-    // Either we get result cards, or (if the term matches nothing) the empty
-    // state renders — both prove the search UI + API are wired. We assert the
-    // API actually returned hits for the chosen term; if the DB is empty we
-    // relax to "the empty state rendered without error".
     const api = await (await page.request.fetch(`${LIVE}/api/kb-search?q=${encodeURIComponent(term)}&limit=8`)).json().catch(() => null);
     const hasHits = Array.isArray(api?.results) && api.results.length > 0;
-    if (hasHits) {
-      await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
-      const n = await page.locator("#kbResults .kb-result-card").count();
-      assert.ok(n > 0, "expected result cards for a real DB term");
-    } else {
-      // No hits (e.g. a near-empty demo DB): the empty state must render.
-      await page.waitForSelector("#kbResults .empty", { timeout: 10000 });
-    }
+    assert.ok(hasHits, `expected populated compatibility search for ${term}`);
+    assert.ok(Number(api?.meta?.noteCount) > 100, "expected a realistic populated note count");
   });
 
   await check("live: no uncaught page errors", async () => {
