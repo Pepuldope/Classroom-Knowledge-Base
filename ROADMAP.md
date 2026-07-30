@@ -131,10 +131,10 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Accessibility: add a reduced-motion keyboard smoke for related-preview retry focus restoration on 390px screens. Shipped 2026-07-29: the focused browser gate drives a real failed retry with reduced motion and requires parent-card focus restoration.
 - [x] Continuity: add a live browser smoke for repeated related-preview retry announcements in Archive and Planner assignment cards. Shipped 2026-07-30: `scripts/live_cross_view_related_retry_test.mjs` runs against the deployed shell and is wired into `scripts/test.sh`.
 - [x] Continuity: add a production-safe browser timing summary for the local related-preview path without exposing diagnostics to students. Shipped 2026-07-30: bounded last/average/max timing is visible only in the localhost KB harness and never in the integrated student surface.
-- [ ] Perf: reduce hosted related-preview warm latency below the 1s product budget while preserving the local IndexedDB fast path.
-- [ ] Continuity: add a local-browser assertion that related-preview timing stays hidden from the integrated student shell after repeated searches.
-- [ ] Accessibility: announce local related-preview timing only in development tooling without adding student-facing live-region noise.
-- [x] Perf: add a deterministic warm-sample percentile summary to the local related-preview harness without retaining note content. Shipped 2026-07-30: the development harness now reports bounded p50/p95 timing summaries from numeric samples only.
+- [x] Perf: reduce hosted related-preview warm latency below the 1s product budget while preserving the local IndexedDB fast path. Shipped 2026-07-30: warm legacy related lookups reuse a bounded 15s in-process bundle cache and invalidate after writes; post-deploy warm samples were 553–704ms.
+- [ ] Perf: reduce hosted legacy search warm latency below the 1s product budget without logging note content.
+- [ ] Continuity: verify cached legacy related responses remain fresh after a live incremental ingestion write.
+- [ ] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
