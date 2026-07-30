@@ -134,7 +134,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Perf: reduce hosted related-preview warm latency below the 1s product budget while preserving the local IndexedDB fast path.
 - [ ] Continuity: add a local-browser assertion that related-preview timing stays hidden from the integrated student shell after repeated searches.
 - [ ] Accessibility: announce local related-preview timing only in development tooling without adding student-facing live-region noise.
-- [ ] Perf: add a deterministic warm-sample percentile summary to the local related-preview harness without retaining note content.
+- [x] Perf: add a deterministic warm-sample percentile summary to the local related-preview harness without retaining note content. Shipped 2026-07-30: the development harness now reports bounded p50/p95 timing summaries from numeric samples only.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).

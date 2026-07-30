@@ -235,8 +235,28 @@ export function relatedPreviewTimingModel(samples = [], { limit = 20 } = {}) {
   };
 }
 
+export function relatedPreviewTimingPercentiles(samples = [], { limit = 20 } = {}) {
+  const cap = Number.isInteger(limit) && limit > 0 ? limit : 20;
+  const values = (Array.isArray(samples) ? samples : [])
+    .map(Number)
+    .filter((value) => Number.isFinite(value) && value >= 0)
+    .slice(-cap)
+    .sort((a, b) => a - b);
+  if (values.length === 0) return { samples: 0, p50Ms: 0, p95Ms: 0 };
+  const nearestRank = (percentile) => values[Math.max(0, Math.ceil(percentile * values.length) - 1)];
+  return {
+    samples: values.length,
+    p50Ms: nearestRank(0.5),
+    p95Ms: nearestRank(0.95),
+  };
+}
+
 export function relatedPreviewTimingStats() {
   return relatedPreviewTimingModel(relatedPreviewTimings);
+}
+
+export function relatedPreviewTimingSamples() {
+  return [...relatedPreviewTimings];
 }
 
 export function formatRelatedPreviewTimingStats(stats = {}) {

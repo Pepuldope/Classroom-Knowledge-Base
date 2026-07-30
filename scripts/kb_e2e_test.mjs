@@ -29,7 +29,7 @@ import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
-import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats } from "../kb-client-search.js";
+import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 import { validateKbBundle } from "../kb-local.js";
 import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } from "../api/tutor.js";
@@ -1009,6 +1009,14 @@ test("related cache summary formats bounded content-free diagnostics", async () 
   assert.doesNotMatch(formatRelatedTokenCacheStats({ hits: 7, misses: 3 }), /Quadratic|notes|body/i);
 });
 
+test("related preview timing percentiles summarize bounded warm samples", () => {
+  assert.deepEqual(
+    relatedPreviewTimingPercentiles([12.5, 4, "bad", -1, 8, 20], { limit: 4 }),
+    { samples: 4, p50Ms: 8, p95Ms: 20 },
+  );
+  assert.deepEqual(relatedPreviewTimingPercentiles([], { limit: 4 }), { samples: 0, p50Ms: 0, p95Ms: 0 });
+});
+
 test("related preview timing summary reports bounded content-free samples", () => {
   const model = relatedPreviewTimingModel([12.5, 4, "bad", -1, 8], { limit: 3 });
   assert.deepEqual(model, { samples: 3, lastMs: 8, averageMs: 8.17, maxMs: 12.5 });
@@ -1020,6 +1028,7 @@ test("development harness exposes a bounded related-cache reset control", async 
   assert.match(source, /id="kbRelatedCacheReset"/);
   assert.match(source, /id="kbRelatedCacheStats"/);
   assert.match(source, /id="kbRelatedTimingStats"/);
+  assert.match(source, /id="kbRelatedTimingPercentiles"/);
   assert.match(source, /formatRelatedTokenCacheStats/);
   assert.match(source, /formatRelatedPreviewTimingStats/);
   assert.match(source, /Reset related-preview cache/);

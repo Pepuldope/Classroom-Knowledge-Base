@@ -28,6 +28,7 @@
           <button id="kbRelatedCacheReset" class="ghost-btn" type="button">Reset related-preview cache</button>
           <span id="kbRelatedCacheStats" aria-live="polite">Related-preview cache: 0 hits · 0 misses</span>
           <span id="kbRelatedTimingStats" aria-live="polite">Related-preview timing: no samples</span>
+          <span id="kbRelatedTimingPercentiles" aria-live="polite">Warm percentiles: no samples</span>
           <span id="kbRelatedCacheResetStatus" class="sr-only" role="status" aria-live="polite"></span>
         </div>
         <div id="kbStudyProgress" class="kb-study-progress" role="status" aria-live="polite"></div>
@@ -112,15 +113,20 @@
 
   <script type="module">
     import { showKbView } from "/kb.js";
-    import { resetRelatedTokenCache, relatedTokenCacheStats, formatRelatedTokenCacheStats, relatedPreviewTimingStats, formatRelatedPreviewTimingStats } from "/kb-client-search.js";
+    import { resetRelatedTokenCache, relatedTokenCacheStats, formatRelatedTokenCacheStats, relatedPreviewTimingStats, relatedPreviewTimingSamples, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "/kb-client-search.js";
     const resetButton = document.getElementById("kbRelatedCacheReset");
     const statsLabel = document.getElementById("kbRelatedCacheStats");
     const timingLabel = document.getElementById("kbRelatedTimingStats");
+    const percentileLabel = document.getElementById("kbRelatedTimingPercentiles");
     const resetStatus = document.getElementById("kbRelatedCacheResetStatus");
     const localHarness = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
     const updateStats = () => {
       if (statsLabel) statsLabel.textContent = formatRelatedTokenCacheStats(relatedTokenCacheStats());
       if (timingLabel) timingLabel.textContent = formatRelatedPreviewTimingStats(relatedPreviewTimingStats());
+      if (percentileLabel) {
+        const stats = relatedPreviewTimingPercentiles(relatedPreviewTimingSamples());
+        percentileLabel.textContent = stats.samples ? `Warm percentiles: p50 ${stats.p50Ms.toFixed(2)}ms · p95 ${stats.p95Ms.toFixed(2)}ms · ${stats.samples} sample` : "Warm percentiles: no samples";
+      }
     };
     if (!localHarness) {
       resetButton?.remove();
