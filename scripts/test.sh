@@ -165,9 +165,16 @@ else
   echo "[live] KB_LIVE_URL=$KB_LIVE_URL"
   node scripts/kb_live_test.mjs
   LIVE_OK=$?
+  if [ "$LIVE_OK" -eq 0 ]; then
+    echo "==> Live cross-view related-retry smoke"
+    node scripts/live_cross_view_related_retry_test.mjs
+    LIVE_CROSS_VIEW_OK=$?
+  else
+    LIVE_CROSS_VIEW_OK=1
+  fi
 fi
 
-if [ "$LIVE_OK" -ne 0 ]; then
+if [ "$LIVE_OK" -ne 0 ] || [ "${LIVE_CROSS_VIEW_OK:-0}" -ne 0 ]; then
   echo "LIVE E2E FAILED (production regression detected)"
   exit 1
 fi
