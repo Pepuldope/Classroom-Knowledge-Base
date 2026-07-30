@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { summarizeSamples, compareLatency } from "../scripts/kb_latency_test.mjs";
 import { bundleCacheState } from "../api/kb-store.js";
+import { searchResponseCacheState } from "../api/kb-response-cache.js";
 
 test("bundleCacheState reuses a fresh populated bundle", () => {
   const bundle = { version: 1, notes: [{ t: "Algebra" }] };
@@ -12,6 +13,21 @@ test("bundleCacheState rejects missing, empty, and expired cache entries", () =>
   assert.equal(bundleCacheState(null, 1500, 5000), null);
   assert.equal(bundleCacheState({ bundle: { notes: [] }, cachedAt: 1000 }, 1500, 5000), null);
   assert.equal(bundleCacheState({ bundle: { notes: [{ t: "Algebra" }] }, cachedAt: 1000 }, 7000, 5000), null);
+});
+
+test("searchResponseCacheState reuses a fresh response for the same bundle and key", () => {
+  const bundle = { version: 1, notes: [{ t: "Algebra" }] };
+  const response = { results: [{ t: "Algebra" }] };
+  assert.equal(searchResponseCacheState({ key: "algebra", bundle, response, cachedAt: 1000 }, "algebra", bundle, 1500, 5000), response);
+});
+
+test("searchResponseCacheState rejects stale, mismatched, and empty cache entries", () => {
+  const bundle = { version: 1, notes: [{ t: "Algebra" }] };
+  const otherBundle = { version: 1, notes: [{ t: "Biology" }] };
+  assert.equal(searchResponseCacheState(null, "algebra", bundle, 1500, 5000), null);
+  assert.equal(searchResponseCacheState({ key: "algebra", bundle, response: {}, cachedAt: 1000 }, "biology", bundle, 1500, 5000), null);
+  assert.equal(searchResponseCacheState({ key: "algebra", bundle, response: {}, cachedAt: 1000 }, "algebra", otherBundle, 1500, 5000), null);
+  assert.equal(searchResponseCacheState({ key: "algebra", bundle, response: {}, cachedAt: 1000 }, "algebra", bundle, 7000, 5000), null);
 });
 
 test("summarizeSamples separates the cold request from warm repeats", () => {

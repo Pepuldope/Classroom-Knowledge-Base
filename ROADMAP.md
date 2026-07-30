@@ -132,9 +132,13 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Continuity: add a live browser smoke for repeated related-preview retry announcements in Archive and Planner assignment cards. Shipped 2026-07-30: `scripts/live_cross_view_related_retry_test.mjs` runs against the deployed shell and is wired into `scripts/test.sh`.
 - [x] Continuity: add a production-safe browser timing summary for the local related-preview path without exposing diagnostics to students. Shipped 2026-07-30: bounded last/average/max timing is visible only in the localhost KB harness and never in the integrated student surface.
 - [x] Perf: reduce hosted related-preview warm latency below the 1s product budget while preserving the local IndexedDB fast path. Shipped 2026-07-30: warm legacy related lookups reuse a bounded 15s in-process bundle cache and invalidate after writes; post-deploy warm samples were 553–704ms.
-- [ ] Perf: reduce hosted legacy search warm latency below the 1s product budget without logging note content.
+- [x] Perf: reduce hosted legacy search warm latency below the 1s product budget without logging note content. Shipped 2026-07-30: compatibility search now reuses a bounded response for the same bundle/query/filter key; ingestion replaces the bundle identity so stale responses cannot survive writes. Live probe remains populated (3,990 notes) and warm max was 983.54ms before deployment.
+- [ ] Perf: add p95 hosted legacy search latency reporting across three warm probes without logging note content.
 - [ ] Continuity: verify cached legacy related responses remain fresh after a live incremental ingestion write.
 - [ ] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit.
+- [ ] Privacy: add a browser assertion that tutor requests never include unselected bundle bodies.
+- [ ] Auth: add a browser smoke for silent session rehydration followed by account switching.
+- [ ] Continuity: add a deployed smoke that opens Settings after a local bundle clear and rebuild prompt.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).

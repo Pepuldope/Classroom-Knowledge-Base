@@ -2,6 +2,7 @@ import { jsonResponse } from "./_helpers.js";
 import { getBundle, getMeta } from "./kb-store.js";
 import { searchNotes, suggestCorrection, makeSortFn } from "./kb-retrieval.js";
 import { deriveFamily } from "./kb-family.js";
+import { searchResponseCacheState, SEARCH_RESPONSE_CACHE_TTL_MS } from "./kb-response-cache.js";
 
 export const config = { runtime: "edge" };
 
@@ -24,6 +25,8 @@ function timedJsonResponse(start, body, status = 200, metric = "kb-search") {
   return jsonResponse(body, status, { "Server-Timing": timing, "X-Server-Timing": timing });
 }
 
+let searchResponseCache = null;
+
 export default async function handler(req) {
   const start = Date.now();
   if (req.method !== "GET") return timedJsonResponse(start, { error: "Method not allowed" }, 405);
@@ -44,6 +47,16 @@ export default async function handler(req) {
       { meta: await getMeta(), results: [], filters: { courses: [], years: [], kinds: [], families: [] }, empty: true }
     );
   }
+
+  const cacheKey = JSON.stringify({ q, limit, courseFilter, yearFilter, kindFilter, familyFilter, sort });
+  const cachedResponse = searchResponseCacheState(
+    searchResponseCache,
+    cacheKey,
+    bundle,
+    Date.now(),
+    SEARCH_RESPONSE_CACHE_TTL_MS,
+  );
+  if (cachedResponse) return timedJsonResponse(start, cachedResponse, 200, "kb-search;desc=cache");
 
   // Derive the distinct course/year/kind/family facets so the UI can render
   // filter chips (focus area 7: type + class-type facets join course + year).
@@ -93,5 +106,6 @@ export default async function handler(req) {
     const suggestion = suggestCorrection(notes, q);
     if (suggestion) response.didYouMean = suggestion;
   }
+  searchResponseCache = { key: cacheKey, bundle, response, cachedAt: Date.now() };
   return timedJsonResponse(start, response, 200);
 }
