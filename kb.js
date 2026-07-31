@@ -27,7 +27,6 @@ import { buildTutorRetrievedNotes } from "./kb-tutor-context.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
-const KB_TOKEN_KEY = "cwa_kb_token";
 export { highlightSnippet, bundleToMarkdown, bundleToCsv };
 
 /** Return the next result-card index for keyboard navigation, or null when unused. */
@@ -941,9 +940,9 @@ function showKbLoading() {
 }
 
 // accessToken lives in app.js's module scope; read it via the window mirror it
-// exposes (window.__cwaAccessToken). Fall back to our own cached token.
+// exposes (window.__cwaAccessToken).
 function currentAccessToken() {
-  return (typeof window !== "undefined" && window.__cwaAccessToken) || loadKbToken() || null;
+  return (typeof window !== "undefined" && window.__cwaAccessToken) || null;
 }
 
 export async function startScrape() {
@@ -964,8 +963,6 @@ export async function startScrape() {
     }
     window.__cwaTokenClient.callback = (resp) => {
       if (resp.error) { showStatus("Google sign-in failed: " + resp.error, true); return; }
-      accessToken = resp.access_token;
-      storeKbToken(resp.access_token, Number(resp.expires_in) || 3600);
       doScrape(resp.access_token);
     };
     try {
@@ -975,7 +972,7 @@ export async function startScrape() {
     } catch (e) { showStatus("Could not start Google sign-in: " + e.message, true); }
     return;
   }
-  doScrape(accessToken || loadKbToken());
+  doScrape(accessToken);
 }
 
 async function doScrape(token) {
@@ -2344,17 +2341,6 @@ if (typeof document !== "undefined") {
       e.target.hidden = true;
     }
   });
-}
-
-// ---------------------------------------------------------------------------
-// token helpers (fallback; app.js owns the canonical token but we cache for scrape)
-// ---------------------------------------------------------------------------
-function loadKbToken() {
-  try { const raw = localStorage.getItem(KB_TOKEN_KEY); if (!raw) return null; const p = JSON.parse(raw); if (Date.now() < p.expiresAt) return p.token; } catch {}
-  return null;
-}
-function storeKbToken(token, expiresInSec) {
-  try { localStorage.setItem(KB_TOKEN_KEY, JSON.stringify({ token, expiresAt: Date.now() + (expiresInSec - 30) * 1000 })); } catch {}
 }
 
 // Auto-wire once the DOM is ready, independent of Google Identity Services.

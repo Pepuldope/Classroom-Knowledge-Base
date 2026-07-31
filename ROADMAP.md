@@ -142,7 +142,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Continuity: add a deployed smoke that opens Settings after a local bundle clear and rebuild prompt. Shipped this run: `settings_clear_rebuild_test.mjs` now seeds a local bundle, clears it through the real Settings control, and verifies the rebuild card returns locally and on the deployed shell.
 - [x] Accessibility: announce the KB empty/rebuild transition after a Settings clear with a dedicated polite status (2026-07-31).
 - [x] Accessibility: restore focus to the KB build button after the empty/rebuild transition so keyboard users can continue without hunting.
-- [ ] Privacy: add a local-storage audit that confirms sign-out removes cached Classroom credentials but preserves no token values in page storage.
+- [x] Privacy: add a local-storage audit that confirms sign-out removes cached Classroom credentials but preserves no token values in page storage. Shipped 2026-07-31: access tokens now live in the shared IndexedDB store; legacy `cwa_token_v9` / `cwa_kb_token` values are migrated once and removed.
 - [ ] Continuity: verify the KB rebuild card remains hidden during a resumed incremental Classroom build and returns only after a true empty state.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
@@ -160,6 +160,9 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: let students dismiss a stale copy-history entry locally without touching their bundle (2026-07-26).
 - [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
 - [x] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies (2026-07-25).
+- [ ] Auth: add a browser smoke proving a refreshed IndexedDB session survives a full page reload without exposing token values in localStorage.
+- [ ] Privacy: clear the IndexedDB auth record when Classroom returns 400/403 and require the account chooser on the next interactive sign-in.
+- [ ] Continuity: verify Archive, Planner, and Knowledge Base all converge on the same local auth-session record after sign-in and sign-out.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item

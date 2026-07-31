@@ -17,6 +17,7 @@ import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision } from "./auth-view.js";
 import { kbLocalStatusModel } from "./kb-local-status.js";
+import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -104,7 +105,6 @@ function pushPrefsToServer() {
 
 const SORT_KEY = "cwa_sort";
 let currentSort = sessionStorage.getItem(SORT_KEY) || "default";
-const TOKEN_KEY = "cwa_token_v9";
 const USER_SUB_KEY = "cwa_user_sub";
 
 function loadUserSub() {
@@ -212,15 +212,8 @@ function setStatus(msg, isError = false) {
   statusEl.classList.toggle("error", !!isError);
 }
 
-function loadStoredToken() {
-  try {
-    const raw = localStorage.getItem(TOKEN_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && Date.now() < parsed.expiresAt) return parsed;
-    localStorage.removeItem(TOKEN_KEY);
-  } catch {}
-  return null;
+async function loadStoredToken() {
+  return loadStoredAuthSession();
 }
 
 let refreshTimer = null;
@@ -235,15 +228,12 @@ function scheduleSilentRefresh(expiresInSec) {
 }
 
 function storeToken(token, expiresInSec) {
-  localStorage.setItem(TOKEN_KEY, JSON.stringify({
-    token,
-    expiresAt: Date.now() + (expiresInSec - 30) * 1000,
-  }));
+  storeAuthSession(token, expiresInSec).catch(() => {});
   scheduleSilentRefresh(expiresInSec);
 }
 
 function clearToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  clearAuthSession().catch(() => {});
   accessToken = null;
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
 }
@@ -420,7 +410,7 @@ async function initGis() {
     });
   }
 
-  const stored = loadStoredToken();
+  const stored = await loadStoredToken();
   if (stored && stored.token) {
     accessToken = stored.token;
     const remaining = Math.max(60, Math.round((stored.expiresAt - Date.now()) / 1000));
