@@ -146,6 +146,11 @@ BASE_URL="http://localhost:$PORT" node scripts/settings_ui_test.mjs
 SETTINGS_OK=$?
 if [ "$SETTINGS_OK" -ne 0 ]; then echo "settings styling e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Settings clear/rebuild e2e (local)"
+BASE_URL="http://localhost:$PORT" node scripts/settings_clear_rebuild_test.mjs
+SETTINGS_CLEAR_OK=$?
+if [ "$SETTINGS_CLEAR_OK" -ne 0 ]; then echo "settings clear/rebuild e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Cross-view continuity smoke (local)"
 BASE_URL="http://localhost:$PORT" node scripts/continuity_smoke_test.mjs
 CONTINUITY_OK=$?
@@ -176,15 +181,19 @@ else
   node scripts/kb_live_test.mjs
   LIVE_OK=$?
   if [ "$LIVE_OK" -eq 0 ]; then
+    echo "==> Live Settings clear/rebuild smoke"
+    BASE_URL="$KB_LIVE_URL" node scripts/settings_clear_rebuild_test.mjs
+    LIVE_SETTINGS_CLEAR_OK=$?
     echo "==> Live cross-view related-retry smoke"
     node scripts/live_cross_view_related_retry_test.mjs
     LIVE_CROSS_VIEW_OK=$?
   else
+    LIVE_SETTINGS_CLEAR_OK=1
     LIVE_CROSS_VIEW_OK=1
   fi
 fi
 
-if [ "$LIVE_OK" -ne 0 ] || [ "${LIVE_CROSS_VIEW_OK:-0}" -ne 0 ]; then
+if [ "$LIVE_OK" -ne 0 ] || [ "${LIVE_SETTINGS_CLEAR_OK:-0}" -ne 0 ] || [ "${LIVE_CROSS_VIEW_OK:-0}" -ne 0 ]; then
   echo "LIVE E2E FAILED (production regression detected)"
   exit 1
 fi

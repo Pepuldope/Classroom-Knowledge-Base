@@ -1163,6 +1163,7 @@ async function configureKbSettingsUi() {
   const clearButton = $("kbPrefClear");
   if (clearButton) clearButton.onclick = async () => {
     await removeKbBundle();
+    await import("./kb.js").then(({ refreshKb }) => refreshKb());
     const status = $("kbPrefStatus");
     if (status) status.textContent = "Local knowledge base cleared.";
   };

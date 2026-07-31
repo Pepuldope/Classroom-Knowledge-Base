@@ -533,7 +533,7 @@ export function kbSearchTopic(topic) {
 
 let localKbBundle = null;
 
-async function refreshKb() {
+export async function refreshKb() {
   const onboarding = $("kbOnboarding");
   const main = $("kbMain");
   const buildPanel = $("kbBuildPanel");
