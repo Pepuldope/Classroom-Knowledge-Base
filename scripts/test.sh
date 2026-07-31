@@ -71,6 +71,11 @@ node --test tests/kb-local-status.test.js
 KB_LOCAL_STATUS_OK=$?
 if [ "$KB_LOCAL_STATUS_OK" -ne 0 ]; then echo "KB local status tests FAILED"; exit 1; fi
 
+echo "==> Related preview accessibility model tests"
+node --test tests/kb-related-status.test.js
+KB_RELATED_STATUS_OK=$?
+if [ "$KB_RELATED_STATUS_OK" -ne 0 ]; then echo "related preview accessibility tests FAILED"; exit 1; fi
+
 echo "==> Starting dev server on :$PORT"
 node scripts/dev-server.mjs "$PORT" > /tmp/kb_dev.log 2>&1 &
 SRV=$!

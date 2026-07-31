@@ -24,6 +24,7 @@ import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 import { buildTutorRetrievedNotes } from "./kb-tutor-context.js";
+import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -1270,7 +1271,13 @@ async function runKbSearch(query) {
       const preview = document.createElement("div");
       preview.className = "kb-related-preview";
       preview.classList.add("is-loading");
-      preview.textContent = "Loading related notes…";
+      const initialAnnouncement = relatedPreviewAnnouncement("loading", {
+        cached: !!localKbBundle?.notes?.length,
+      });
+      preview.setAttribute("role", initialAnnouncement.role);
+      preview.setAttribute("aria-live", initialAnnouncement.live);
+      preview.setAttribute("aria-label", initialAnnouncement.text);
+      preview.textContent = initialAnnouncement.text;
       body.appendChild(preview);
       row.appendChild(body);
       const open = () => {
@@ -1461,6 +1468,7 @@ function renderRelatedPreviewError(container, retry) {
   container.classList.add("is-error");
   container.setAttribute("role", "status");
   container.setAttribute("aria-live", "polite");
+  container.setAttribute("aria-label", relatedPreviewAnnouncement("error", { count: attempt }).text);
   container.textContent = error.announcement;
   const button = document.createElement("button");
   button.type = "button";
@@ -1508,6 +1516,12 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
     container.hidden = !state.visible;
     container.classList.remove("is-error");
     container.classList.toggle("is-loading", state.loading);
+    container.setAttribute("role", "status");
+    container.setAttribute("aria-live", "polite");
+    container.setAttribute("aria-label", relatedPreviewAnnouncement("ready", {
+      cached: !!localKbBundle?.notes?.length,
+      count: related.length,
+    }).text);
     delete container.dataset.relatedRetryAttempts;
     container.textContent = "";
     const tag = document.createElement("span");

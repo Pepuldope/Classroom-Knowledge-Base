@@ -136,7 +136,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Perf: add p95 hosted legacy search latency reporting across three warm probes without logging note content (2026-07-30).
 - [x] Privacy: build the Classroom-derived KB entirely in the browser and persist the curated bundle in the user's IndexedDB; tutor remains the only KB request sent to the server.
 - [ ] Continuity: verify cached legacy related responses remain fresh after a live incremental ingestion write.
-- [ ] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit.
+- [x] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit. Shipped 2026-07-31: related previews now expose explicit polite status announcements for local-cache loading, ready counts, and retryable errors; covered by `tests/kb-related-status.test.js`.
 - [x] Privacy: add a browser assertion that tutor requests never include unselected bundle bodies. Shipped this run: local grounding selection is isolated in `kb-tutor-context.js` with a regression test and the canonical gate.
 - [x] Auth: add a browser smoke for silent session rehydration followed by account switching. Shipped 2026-07-30: private KB routing now rejects signed-out access, preserves the account chooser/revoke escape hatches, and returns to Planner after sign-out or wrong-account recovery.
 - [x] Continuity: add a deployed smoke that opens Settings after a local bundle clear and rebuild prompt. Shipped this run: `settings_clear_rebuild_test.mjs` now seeds a local bundle, clears it through the real Settings control, and verifies the rebuild card returns locally and on the deployed shell.
@@ -163,6 +163,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Auth: add a browser smoke proving a refreshed IndexedDB session survives a full page reload without exposing token values in localStorage.
 - [ ] Privacy: clear the IndexedDB auth record when Classroom returns 400/403 and require the account chooser on the next interactive sign-in.
 - [ ] Continuity: verify Archive, Planner, and Knowledge Base all converge on the same local auth-session record after sign-in and sign-out.
+- [ ] Accessibility: add a narrow-screen browser smoke for related-preview status announcements and retry focus restoration.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item
