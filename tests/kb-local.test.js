@@ -1,0 +1,38 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { browseKbBundle } from "../kb-local.js";
+
+const bundle = {
+  version: 1,
+  generatedAt: "2026-07-31T10:00:00.000Z",
+  years: ["2025"],
+  notes: [
+    { t: "Algebra", course: "Math", y: "2025", s: "Quadratic equations" },
+    { t: "Biology", course: "Science", y: "2024", x: "Cells and tissues" },
+    { t: "Geometry", course: "Math", y: "2024", x: "Triangles" },
+  ],
+};
+
+test("browseKbBundle returns local course facets without a network response", () => {
+  const result = browseKbBundle(bundle);
+
+  assert.deepEqual(result.courses, [
+    { course: "Math", count: 2, years: ["2024", "2025"] },
+    { course: "Science", count: 1, years: ["2024"] },
+  ]);
+  assert.equal(result.meta.noteCount, 3);
+  assert.equal(result.notes, undefined);
+});
+
+test("browseKbBundle returns recency-sorted course notes with snippets", () => {
+  const result = browseKbBundle(bundle, "Math");
+
+  assert.deepEqual(result.notes.map((note) => ({
+    t: note.t,
+    noteIndex: note.noteIndex,
+    _snippet: note._snippet,
+  })), [
+    { t: "Algebra", noteIndex: 0, _snippet: "Quadratic equations" },
+    { t: "Geometry", noteIndex: 2, _snippet: "Triangles" },
+  ]);
+});

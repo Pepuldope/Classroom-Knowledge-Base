@@ -16,7 +16,7 @@
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
-import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
+import { loadKbBundle, saveKbBundle, removeKbBundle, browseKbBundle } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
@@ -1345,9 +1345,7 @@ async function loadBrowseCourses() {
   list.hidden = false;
   list.innerHTML = `<div class="empty">Loading courses…</div>`;
   try {
-    const r = await fetch("/api/kb-browse");
-    if (!r.ok) { list.innerHTML = `<div class="empty">Couldn't load courses.</div>`; return; }
-    const d = await r.json();
+    const d = browseKbBundle(localKbBundle);
     const courses = Array.isArray(d.courses) ? d.courses : [];
     if (!courses.length) { list.innerHTML = `<div class="empty">No courses yet — the knowledge base is empty.</div>`; return; }
     list.innerHTML = "";
@@ -1382,9 +1380,7 @@ async function openCourse(course) {
   if (notesEl) { notesEl.hidden = false; notesEl.innerHTML = `<div class="empty">Loading ${course}…</div>`; }
   if (back) back.hidden = false;
   try {
-    const r = await fetch("/api/kb-browse?course=" + encodeURIComponent(course));
-    if (!r.ok) { if (notesEl) notesEl.innerHTML = `<div class="empty">Couldn't load this course.</div>`; return; }
-    const d = await r.json();
+    const d = browseKbBundle(localKbBundle, course);
     const notes = Array.isArray(d.notes) ? d.notes : [];
     if (!notes.length) { if (notesEl) notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`; return; }
     if (notesEl) {

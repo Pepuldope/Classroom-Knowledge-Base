@@ -62,7 +62,12 @@ try {
       req.onerror = () => reject(req.error);
       req.onsuccess = () => {
         const tx = req.result.transaction("archive", "readwrite");
-        tx.objectStore("archive").put({ id: "kb-bundle", data: { version: 1, notes: [{ t: "Local review note", course: "Math", y: "2025-26", topic: "Algebra", s: "Review", x: "Review" }], years: ["2025-26"], courses: ["Math"] } });
+        const notes = [
+          { t: "Local review note", course: "Math", y: "2025-26", topic: "Algebra", s: "Review", x: "Review" },
+          { t: "STAR method", course: "Careers", y: "2025-26", topic: "Interview", s: "Situation task action result", x: "Use the STAR method in an interview." },
+          { t: "Cover letter", course: "Careers", y: "2024-25", topic: "Applications", s: "Cover letter structure", x: "Write a clear cover letter." },
+        ];
+        tx.objectStore("archive").put({ id: "kb-bundle", data: { version: 1, notes, years: ["2024-25", "2025-26"], courses: ["Careers", "Math"] } });
         tx.oncomplete = () => { req.result.close(); resolve(); };
         tx.onerror = () => reject(tx.error);
       };
@@ -97,11 +102,7 @@ try {
     await page.waitForSelector("#kbReviewDigest .kb-review-item", { timeout: 10000 });
     assert.match(await page.locator("#kbReviewDigest").textContent(), /Your weekly review/);
     assert.ok(await page.locator("#kbReviewDigest .kb-review-item").count() > 0, "digest should recommend at least one note");
-    await page.evaluate(() => new Promise((resolve, reject) => {
-      const req = indexedDB.open("cwa-archive", 1);
-      req.onsuccess = () => { const tx = req.result.transaction("archive", "readwrite"); tx.objectStore("archive").delete("kb-bundle"); tx.oncomplete = () => { req.result.close(); resolve(); }; tx.onerror = () => reject(tx.error); };
-      req.onerror = () => reject(req.error);
-    }));
+    // Keep the local fixture available for the remaining client-side browse/search checks.
     await page.reload({ waitUntil: "networkidle" });
   });
 
@@ -790,10 +791,25 @@ try {
   // properties via computed styles + layout geometry — no screenshot analysis
   // required — so the "aesthetic" gate keeps firing even without vision.
   await check("course accordion renders styled (border-radius + pointer cursor)", async () => {
-    // Explicitly reset to the browse-by-course surface (mirrors the empty-query
-    // path) so this check is deterministic and not dependent on prior steps'
-    // search state. Reveal the browse panel + notes list and clear the search
-    // input so the production path renders the course grid.
+    await page.evaluate(() => new Promise((resolve, reject) => {
+      const req = indexedDB.open("cwa-archive", 1);
+      req.onsuccess = () => {
+        const tx = req.result.transaction("archive", "readwrite");
+        tx.objectStore("archive").put({ id: "kb-bundle", data: {
+          version: 1,
+          notes: [
+            { t: "Local review note", course: "Math", y: "2025-26", topic: "Algebra", s: "Review", x: "Review" },
+            { t: "Cover letter", course: "Careers", y: "2024-25", topic: "Applications", s: "Cover letter structure", x: "Write a clear cover letter." },
+          ],
+          years: ["2024-25", "2025-26"],
+          courses: ["Careers", "Math"],
+        } });
+        tx.oncomplete = () => { req.result.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+      req.onerror = () => reject(req.error);
+    }));
+    await page.reload({ waitUntil: "networkidle" });
     await page.evaluate(() => {
       const input = document.getElementById("kbSearchInput");
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
