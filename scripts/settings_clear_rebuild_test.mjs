@@ -48,6 +48,7 @@ try {
   assert.equal(await page.locator("#kbOnboarding").isHidden(), false, "clearing the local KB should reveal the rebuild card");
   assert.equal(await page.locator("#kbBuildPanel").isHidden(), true, "clearing should not leave the build progress panel open");
   assert.match(await page.locator("#kbBuildHint").textContent(), /Sign in to build|build/i);
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "kbBuildBtn", "clearing should restore focus to the rebuild button");
   assert.deepEqual(errors, [], `page errors: ${errors.join(" | ")}`);
   console.log(`✓ Settings clear returns the KB to its rebuild state (${BASE})`);
 } finally {

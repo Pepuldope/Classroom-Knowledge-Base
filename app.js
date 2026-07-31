@@ -1165,8 +1165,10 @@ async function configureKbSettingsUi() {
   if (clearButton) clearButton.onclick = async () => {
     await removeKbBundle();
     await import("./kb.js").then(({ refreshKb }) => refreshKb());
+    const statusModel = kbLocalStatusModel("cleared");
     const status = $("kbPrefStatus");
-    if (status) status.textContent = kbLocalStatusModel("cleared").message;
+    if (status) status.textContent = statusModel.message;
+    document.getElementById(statusModel.focusTarget)?.focus();
   };
 }
 
