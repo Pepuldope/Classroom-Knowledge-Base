@@ -23,6 +23,7 @@ import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./stu
 import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
+import { buildTutorRetrievedNotes } from "./kb-tutor-context.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -2087,12 +2088,7 @@ async function sendTutor(text, { retry = false } = {}) {
   const assistantEl = addTutorMessage("assistant", "…", true);
   let acc = "";
   try {
-    const retrieved = localKbBundle?.notes?.length && text
-      ? searchNotes(localKbBundle.notes, text, { limit: 6 }).map((result) => ({
-        ...localKbBundle.notes[result.noteIndex],
-        noteIndex: result.noteIndex,
-      }))
-      : [];
+    const retrieved = buildTutorRetrievedNotes(localKbBundle, text);
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },

@@ -61,6 +61,11 @@ node --test tests/kb-latency-model.test.js
 LATENCY_MODEL_OK=$?
 if [ "$LATENCY_MODEL_OK" -ne 0 ]; then echo "latency model tests FAILED"; exit 1; fi
 
+echo "==> Tutor grounding privacy model tests"
+node --test tests/kb-tutor-context.test.js
+TUTOR_CONTEXT_OK=$?
+if [ "$TUTOR_CONTEXT_OK" -ne 0 ]; then echo "tutor grounding privacy tests FAILED"; exit 1; fi
+
 echo "==> Starting dev server on :$PORT"
 node scripts/dev-server.mjs "$PORT" > /tmp/kb_dev.log 2>&1 &
 SRV=$!

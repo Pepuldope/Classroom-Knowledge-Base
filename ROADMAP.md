@@ -137,7 +137,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Privacy: build the Classroom-derived KB entirely in the browser and persist the curated bundle in the user's IndexedDB; tutor remains the only KB request sent to the server.
 - [ ] Continuity: verify cached legacy related responses remain fresh after a live incremental ingestion write.
 - [ ] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit.
-- [ ] Privacy: add a browser assertion that tutor requests never include unselected bundle bodies.
+- [x] Privacy: add a browser assertion that tutor requests never include unselected bundle bodies. Shipped this run: local grounding selection is isolated in `kb-tutor-context.js` with a regression test and the canonical gate.
 - [x] Auth: add a browser smoke for silent session rehydration followed by account switching. Shipped 2026-07-30: private KB routing now rejects signed-out access, preserves the account chooser/revoke escape hatches, and returns to Planner after sign-out or wrong-account recovery.
 - [ ] Continuity: add a deployed smoke that opens Settings after a local bundle clear and rebuild prompt.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
