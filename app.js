@@ -15,7 +15,7 @@ import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 import { loadKbBundle, removeKbBundle } from "./kb-local.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
-import { privateViewDecision } from "./auth-view.js";
+import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
 import { kbLocalStatusModel } from "./kb-local-status.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
 
@@ -1425,6 +1425,10 @@ function handleWrongAccount() {
   updateArchiveSettingsUi();
 }
 
+window.addEventListener("cwa-classroom-auth-error", (event) => {
+  if (classroomAuthRecoveryModel(event?.detail?.status).resetSession) handleWrongAccount();
+});
+
 function switchAccount() {
   const mw = $("menuWrap"); if (mw) mw.hidden = true;
   // Force the account chooser so the user can pick their school account.
@@ -1519,7 +1523,7 @@ async function loadReport(epoch) {
     // is NOT a school/Classroom account (e.g. a cached personal account).
     // Don't stay stuck on the wrong account — clear it, bounce to the welcome
     // screen, and let the user pick their school account from the chooser.
-    if (e && (e.status === 400 || e.status === 403)) {
+    if (classroomAuthRecoveryModel(e?.status).resetSession) {
       handleWrongAccount();
       return;
     }

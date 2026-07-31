@@ -1,5 +1,13 @@
 const PRIVATE_VIEWS = new Set(["kb"]);
 
+/** Decide whether a Classroom response means the cached account is unusable. */
+export function classroomAuthRecoveryModel(status) {
+  const code = Number(status);
+  return code === 400 || code === 403
+    ? { resetSession: true, prompt: "select_account" }
+    : { resetSession: false, prompt: null };
+}
+
 /** Decide whether a routed view may expose user-owned Classroom data. */
 export function privateViewDecision(view, accessToken) {
   if (!PRIVATE_VIEWS.has(view) || String(accessToken || "").trim()) {

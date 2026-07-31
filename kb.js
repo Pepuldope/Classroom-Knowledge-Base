@@ -25,6 +25,7 @@ import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 import { buildTutorRetrievedNotes } from "./kb-tutor-context.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
+import { classroomAuthRecoveryModel } from "./auth-view.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -991,7 +992,11 @@ async function doScrape(token) {
       ...options,
       headers: { ...(options.headers || {}), Authorization: `Bearer ${token}` },
     });
-    if (!response.ok) throw new Error(`Classroom API ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(`Classroom API ${response.status}`);
+      error.status = response.status;
+      throw error;
+    }
     return response.json();
   };
   try {
@@ -1007,6 +1012,12 @@ async function doScrape(token) {
     if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
     setTimeout(() => refreshKb(), 600);
   } catch (e) {
+    if (classroomAuthRecoveryModel(e?.status).resetSession) {
+      window.dispatchEvent(new CustomEvent("cwa-classroom-auth-error", {
+        detail: { status: e.status },
+      }));
+      return;
+    }
     setKbBuildError(e.message);
   }
 }

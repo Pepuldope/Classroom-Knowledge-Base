@@ -161,7 +161,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
 - [x] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies (2026-07-25).
 - [ ] Auth: add a browser smoke proving a refreshed IndexedDB session survives a full page reload without exposing token values in localStorage.
-- [ ] Privacy: clear the IndexedDB auth record when Classroom returns 400/403 and require the account chooser on the next interactive sign-in.
+- [x] Privacy: clear the IndexedDB auth record when Classroom returns 400/403 and require the account chooser on the next interactive sign-in. Shipped 2026-07-31: both the report loader and browser-local KB builder now preserve the status and converge on the existing wrong-account reset/revoke flow.
 - [ ] Continuity: verify Archive, Planner, and Knowledge Base all converge on the same local auth-session record after sign-in and sign-out.
 - [ ] Accessibility: add a narrow-screen browser smoke for related-preview status announcements and retry focus restoration.
 ## 🚧 Blocked (pinged — needs Pepuldo)
