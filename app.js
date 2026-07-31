@@ -16,6 +16,7 @@ import { loadKbBundle, removeKbBundle } from "./kb-local.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision } from "./auth-view.js";
+import { kbLocalStatusModel } from "./kb-local-status.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -1165,7 +1166,7 @@ async function configureKbSettingsUi() {
     await removeKbBundle();
     await import("./kb.js").then(({ refreshKb }) => refreshKb());
     const status = $("kbPrefStatus");
-    if (status) status.textContent = "Local knowledge base cleared.";
+    if (status) status.textContent = kbLocalStatusModel("cleared").message;
   };
 }
 

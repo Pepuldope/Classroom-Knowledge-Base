@@ -66,6 +66,11 @@ node --test tests/kb-tutor-context.test.js
 TUTOR_CONTEXT_OK=$?
 if [ "$TUTOR_CONTEXT_OK" -ne 0 ]; then echo "tutor grounding privacy tests FAILED"; exit 1; fi
 
+echo "==> KB local status accessibility model tests"
+node --test tests/kb-local-status.test.js
+KB_LOCAL_STATUS_OK=$?
+if [ "$KB_LOCAL_STATUS_OK" -ne 0 ]; then echo "KB local status tests FAILED"; exit 1; fi
+
 echo "==> Starting dev server on :$PORT"
 node scripts/dev-server.mjs "$PORT" > /tmp/kb_dev.log 2>&1 &
 SRV=$!

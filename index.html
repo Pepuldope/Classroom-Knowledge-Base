@@ -389,7 +389,7 @@
         <label class="settings-row"><span>Read-aloud speed <output id="kbPrefSpeechRateValue">1×</output></span><input id="kbPrefSpeechRate" type="range" min="0.5" max="2" step="0.25" value="1" /></label>
         <label class="settings-row settings-row-toggle"><span>Build automatically after Classroom sign-in</span><input type="checkbox" id="kbPrefAutoBuild" /></label>
         <div class="settings-row"><button id="kbPrefExport" type="button">Download my KB</button><button id="kbPrefExportBook" type="button">Download study book</button><button id="kbPrefClear" type="button">Clear local KB</button></div>
-        <p class="settings-hint" id="kbPrefStatus" role="status"></p>
+        <p class="settings-hint" id="kbPrefStatus" role="status" aria-live="polite" aria-atomic="true"></p>
       </section>
       <section id="settingsPane-about" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-about" data-pane="about" hidden>
         <p class="modal-sub">Classroom Analyzer · personal study dashboard with AI tutor.</p>
