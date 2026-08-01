@@ -21,14 +21,18 @@ try {
   assert.equal(await page.locator("#kbView").isHidden(), true, "signed-out users must not open the private KB");
   assert.match(await page.locator("#status").textContent(), /Sign in with Google/);
 
-  for (const view of ["archive", "planner"]) {
-    await page.locator(`.view-toggle-btn[data-view="${view}"]`).click();
-    await page.waitForFunction((name) => {
-      const el = document.getElementById(`${name}View`);
-      return el && !el.hidden;
-    }, view, { timeout: 10000 });
-    assert.equal(await page.locator(`#${view}View`).isVisible(), true, `${view} view should be visible`);
-  }
+  // Archive is private too: clicking it while signed out must keep the
+  // previous public surface visible rather than exposing Classroom data.
+  await page.locator('.view-toggle-btn[data-view="archive"]').click();
+  assert.equal(await page.locator("#archiveView").isHidden(), true, "signed-out users must not open the private Archive");
+  assert.match(await page.locator("#status").textContent(), /Sign in with Google/);
+
+  await page.locator('.view-toggle-btn[data-view="planner"]').click();
+  await page.waitForFunction(() => {
+    const el = document.getElementById("plannerView");
+    return el && !el.hidden;
+  }, { timeout: 10000 });
+  assert.equal(await page.locator("#plannerView").isVisible(), true, "planner view should be visible");
 
   // Settings is account-gated in the real shell. Open its existing modal in a
   // DOM-backed way so this smoke remains deterministic without OAuth secrets.

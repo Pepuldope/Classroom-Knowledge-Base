@@ -1,4 +1,4 @@
-const PRIVATE_VIEWS = new Set(["kb"]);
+const PRIVATE_VIEWS = new Set(["kb", "archive"]);
 
 /** Decide whether a Classroom response means the cached account is unusable. */
 export function classroomAuthRecoveryModel(status) {

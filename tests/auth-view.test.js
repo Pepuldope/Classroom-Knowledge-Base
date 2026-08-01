@@ -8,10 +8,20 @@ test("private views require an authenticated session", () => {
     fallback: "planner",
     message: "Sign in with Google to open your private Knowledge Base.",
   });
+  assert.deepEqual(privateViewDecision("archive", null), {
+    allowed: false,
+    fallback: "planner",
+    message: "Sign in with Google to open your private Knowledge Base.",
+  });
 });
 
 test("authenticated users may open the private Knowledge Base", () => {
   assert.deepEqual(privateViewDecision("kb", "token"), {
+    allowed: true,
+    fallback: null,
+    message: "",
+  });
+  assert.deepEqual(privateViewDecision("archive", "token"), {
     allowed: true,
     fallback: null,
     message: "",
