@@ -25,6 +25,11 @@ node --test tests/auth-view.test.js
 AUTH_VIEW_OK=$?
 if [ "$AUTH_VIEW_OK" -ne 0 ]; then echo "private view auth tests FAILED"; exit 1; fi
 
+echo "==> Redirect sign-in model tests"
+node --test tests/auth-redirect.test.js
+AUTH_REDIRECT_OK=$?
+if [ "$AUTH_REDIRECT_OK" -ne 0 ]; then echo "redirect sign-in tests FAILED"; exit 1; fi
+
 echo "==> Study streak model tests"
 node scripts/study_streak_test.mjs
 STREAK_OK=$?

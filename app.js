@@ -18,6 +18,7 @@ import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStat
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
 import { kbLocalStatusModel } from "./kb-local-status.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
+import { buildAuthRedirectUrl, parseAuthRedirectHash, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -328,6 +329,7 @@ const SILENT_REFRESH_TIMEOUT_MS = 10_000;
 // specific error before this generic fallback fires.
 const SIGNIN_WATCHDOG_MS = 25_000;
 let silentTokenClient = null;
+let kbTokenClient = null;
 let silentRefreshInFlight = null;
 let silentRefreshResolve = null;
 let silentRefreshTimer = null;
@@ -351,24 +353,8 @@ function onSilentTokenResponse(resp) {
   }
 }
 
-// Set while an interactive popup (sign in / switch account) is open. GIS does
-// not cope with two concurrent flows on the same client_id: the boot-time
-// silent refresh and the popup end up fighting over the same popup channel,
-// and under COOP the opener can't observe the popup to sort it out. That race
-// is timing-dependent, which is why it disappears with DevTools open.
-let interactiveAuthInFlight = false;
-
-export function beginInteractiveAuth() {
-  interactiveAuthInFlight = true;
-  settleSilentRefresh(false);
-}
-
-export function endInteractiveAuth() {
-  interactiveAuthInFlight = false;
-}
-
 function silentRefresh() {
-  if (!silentTokenClient || interactiveAuthInFlight) return Promise.resolve(false);
+  if (!silentTokenClient) return Promise.resolve(false);
   if (silentRefreshInFlight) return silentRefreshInFlight;
   silentRefreshInFlight = new Promise((resolve) => {
     silentRefreshResolve = resolve;
@@ -426,7 +412,6 @@ async function initGis() {
     client_id: CLIENT_ID,
     scope: SCOPES,
     callback: (resp) => {
-      endInteractiveAuth();
       if (resp.error) {
         setStatus(`Auth failed: ${resp.error}`, true);
         return;
@@ -438,7 +423,6 @@ async function initGis() {
     // Non-OAuth failures (popup blocked, popup closed, unknown) arrive here and
     // never through `callback`. Without this the UI gave no feedback at all.
     error_callback: (err) => {
-      endInteractiveAuth();
       const type = err?.type || "unknown";
       if (type === "popup_closed") { setStatus(""); return; }
       setStatus(`Auth failed: ${type}`, true);
@@ -453,6 +437,15 @@ async function initGis() {
     error_callback: () => settleSilentRefresh(false),
   });
 
+  // Third client, handed to kb.js. That module assigns its own .callback
+  // before each request, so it must never be given a client anyone else
+  // depends on — clobbering a shared callback is the bug fixed in d4bacd5.
+  kbTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: () => {},
+  });
+
   const cfg = await getOauthConfig();
   if (cfg.hasRefreshTokens) {
     codeClient = google.accounts.oauth2.initCodeClient({
@@ -465,14 +458,12 @@ async function initGis() {
       // that account isn't in a Classroom domain (see handleClassroomAuthError).
       prompt: "select_account",
       error_callback: (err) => {
-        endInteractiveAuth();
-        const type = err?.type || "unknown";
+          const type = err?.type || "unknown";
         if (type === "popup_closed") { setStatus(""); return; }
         setStatus(`Sign-in failed: ${type}`, true);
       },
       callback: async (resp) => {
-        endInteractiveAuth();
-        if (!resp || !resp.code) {
+          if (!resp || !resp.code) {
           setStatus(`Auth failed: ${resp?.error || "no code"}`, true);
           return;
         }
@@ -501,6 +492,11 @@ async function initGis() {
     });
   }
 
+  // consumeAuthRedirect() already signed in on this load and storeToken()
+  // already armed the refresh timer. A second onSignedIn() here would bump
+  // sessionEpoch and strand the first one's render.
+  if (accessToken) return;
+
   const stored = await loadStoredToken();
   if (stored && stored.token) {
     accessToken = stored.token;
@@ -512,21 +508,77 @@ async function initGis() {
   // Try server-side refresh first (works after browser restart), fall back to legacy silent refresh
   if (cfg.hasRefreshTokens && loadUserSub()) {
     serverRefreshAccessToken().then((token) => {
-      if (interactiveAuthInFlight) return;
       if (token) onSignedIn();
-      else if (loadUserHint()) silentRefresh().then((ok) => { if (ok && !interactiveAuthInFlight) onSignedIn(); });
+      else if (loadUserHint()) silentRefresh().then((ok) => { if (ok) onSignedIn(); });
     });
   } else if (loadUserHint()) {
-    silentRefresh().then((ok) => { if (ok && !interactiveAuthInFlight) onSignedIn(); });
+    silentRefresh().then((ok) => { if (ok) onSignedIn(); });
   }
 }
+
+// --- Redirect sign-in (no popup) -------------------------------------------
+
+function authRedirectUri() {
+  // Must match an Authorized redirect URI on the OAuth client exactly.
+  return `${location.origin}/`;
+}
+
+function startRedirectSignIn(prompt = "select_account") {
+  let state = "";
+  try {
+    state = randomState();
+    sessionStorage.setItem(AUTH_STATE_KEY, state);
+  } catch {
+    setStatus("Sign-in needs site storage enabled for this site.", true);
+    return;
+  }
+  setStatus("Redirecting to Google…");
+  location.assign(buildAuthRedirectUrl({
+    clientId: CLIENT_ID,
+    scope: SCOPES,
+    redirectUri: authRedirectUri(),
+    state,
+    prompt,
+    // Only hint on a plain re-auth; never when the user asked to switch.
+    loginHint: prompt === "select_account" ? "" : loadUserHint(),
+  }));
+}
+
+/**
+ * Handle a return from Google. Runs before initGis so the token is in place
+ * by the time the stored-session logic there looks for one.
+ */
+function consumeAuthRedirect() {
+  let expected = null;
+  try { expected = sessionStorage.getItem(AUTH_STATE_KEY); } catch {}
+  const result = parseAuthRedirectHash(location.hash, expected);
+  if (!result) return;
+  try { sessionStorage.removeItem(AUTH_STATE_KEY); } catch {}
+  // Drop the token from the address bar before anything else can read it.
+  try { history.replaceState(null, "", location.pathname + location.search); } catch {}
+
+  if (result.error) {
+    const msg = result.error === "access_denied"
+      ? "Sign-in was cancelled."
+      : result.error === "state_mismatch"
+        ? "Sign-in couldn't be verified. Please try again."
+        : `Sign-in failed: ${result.error}`;
+    setStatus(msg, true);
+    return;
+  }
+  accessToken = result.token;
+  storeToken(accessToken, result.expiresIn);
+  onSignedIn();
+}
+
+consumeAuthRedirect();
 
 function waitForGis() {
   if (window.google?.accounts?.oauth2) {
     initGis();
     // Expose the token client so the Knowledge-Base module can request a
     // Classroom-scoped token for building the user's local knowledge base.
-    window.__cwaTokenClient = tokenClient;
+    window.__cwaTokenClient = kbTokenClient;
     // Wire KB events once the DOM is parsed (safe even before first KB view).
     import("./kb.js").then((m) => m.wireKbEvents()).catch(() => {});
   } else {
@@ -1392,20 +1444,10 @@ function applySort(items) {
   return copy;
 }
 
-$("loginBtn").addEventListener("click", () => {
-  beginInteractiveAuth();
-  if (codeClient) {
-    // Always show the account chooser so the user picks their SCHOOL account
-    // (never silently reuse a cached personal account that 400s on Classroom).
-    codeClient.requestCode({ prompt: "select_account" });
-    return;
-  }
-  if (!tokenClient) {
-    setStatus("Google client not loaded yet, try again.", true);
-    return;
-  }
-  tokenClient.requestAccessToken({ prompt: "select_account" });
-});
+// Sign-in is a full-page redirect, never a popup — see auth-redirect.js.
+// It also needs no Google script to have loaded yet, so it can't fail with
+// "Google client not loaded yet".
+$("loginBtn").addEventListener("click", () => startRedirectSignIn("select_account"));
 
 $("switchBtn").addEventListener("click", () => { closeMenu(); revokeServerToken().then(switchAccount); });
 $("logoutBtn").addEventListener("click", () => {
@@ -1541,12 +1583,9 @@ window.addEventListener("cwa-classroom-auth-error", (event) => {
 });
 
 function switchAccount() {
-  beginInteractiveAuth();
   const mw = $("menuWrap"); if (mw) mw.hidden = true;
   // Force the account chooser so the user can pick their school account.
-  if (codeClient) { codeClient.requestCode({ prompt: "select_account" }); return; }
-  if (!tokenClient) { setStatus("Google client not loaded yet, try again.", true); return; }
-  tokenClient.requestAccessToken({ prompt: "select_account" });
+  startRedirectSignIn("select_account");
 }
 
 async function onSignedIn() {
