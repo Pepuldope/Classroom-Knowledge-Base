@@ -479,6 +479,11 @@ export function kbBuildSurfaceModel({ state = "loading" } = {}) {
   return { showBuildCard, showMain: !showBuildCard };
 }
 
+/** Describe the visible surface while an incremental Classroom build is running. */
+export function kbBuildStartModel() {
+  return { onboardingHidden: true, mainVisible: true, panelVisible: true };
+}
+
 /** Keep async related-note previews from collapsing while local notes resolve. */
 export function relatedPreviewSurfaceModel({ state = "loading" } = {}) {
   if (state === "empty") return { visible: false, loading: false, error: false };
@@ -982,7 +987,12 @@ async function doScrape(token) {
   const statusEl = $("kbBuildStatus");
   const logEl = $("kbBuildLog");
   const progress = $("kbBuildProgressBar");
-  if (panel) panel.hidden = false;
+  const buildSurface = kbBuildStartModel();
+  const onboarding = $("kbOnboarding");
+  const main = $("kbMain");
+  if (onboarding) onboarding.hidden = buildSurface.onboardingHidden;
+  if (main) main.hidden = !buildSurface.mainVisible;
+  if (panel) panel.hidden = !buildSurface.panelVisible;
   if (statusEl) { statusEl.textContent = "Reading your courses privately in this browser…"; statusEl.classList.remove("error"); }
   if (logEl) logEl.innerHTML = "";
   if (progress) progress.style.width = "5%";
