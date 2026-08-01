@@ -25,7 +25,6 @@ node --test tests/auth-view.test.js
 AUTH_VIEW_OK=$?
 if [ "$AUTH_VIEW_OK" -ne 0 ]; then echo "private view auth tests FAILED"; exit 1; fi
 
-
 echo "==> Study streak model tests"
 node scripts/study_streak_test.mjs
 STREAK_OK=$?
@@ -84,6 +83,11 @@ for i in $(seq 1 30); do
   curl -s --max-time 2 "http://localhost:$PORT/api/oauth-config" >/dev/null && break
   sleep 0.5
 done
+
+echo "==> IndexedDB auth-session reload e2e"
+BASE_URL="http://localhost:$PORT" node scripts/auth_session_reload_test.mjs
+AUTH_RELOAD_OK=$?
+if [ "$AUTH_RELOAD_OK" -ne 0 ]; then echo "auth-session reload e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
 echo "==> Seeding dev data"
 node scripts/seed-dev.mjs "$PORT" 400 >/dev/null 2>&1
