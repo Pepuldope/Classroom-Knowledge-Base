@@ -13,8 +13,13 @@
 // repeatedly show HTTP 403 with `x-vercel-mitigated: challenge` against this
 // project's production alias. It is Vercel's managed bot protection reacting to
 // the runner's datacenter IP in headless Chromium, which cannot solve a
-// challenge. A Vercel Firewall bypass rule for the runner IP (added 2026-08-01)
-// should make it rare, but rules can lapse — e.g. if the runner's IP changes.
+// challenge. There is no way to switch this off from the Vercel side: a
+// Firewall bypass rule keyed on the runner's IP was tried on 2026-08-01 and
+// does NOT work. Vercel's IP matcher never matches this runner's address —
+// proven with a Deny probe on a scratch path: a path-only rule fired (403),
+// the same rule with an IP condition did not (404), in both plain and CIDR
+// form. Path matching works, IP matching does not. Do not re-attempt the
+// IP-bypass approach; this classifier is the permanent mitigation.
 //
 // It is INTERMITTENT and NOT caused by deploying. In the 2026-08-01 incident no
 // `vercel deploy` ran between the passing pre-deploy check and the failing

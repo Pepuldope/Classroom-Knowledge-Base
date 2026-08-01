@@ -109,9 +109,12 @@ These layers together answer **“is the feature working?”** — not just “d
   `x-vercel-mitigated: challenge` against the production alias — Vercel's managed bot
   protection reacting to the runner's datacenter IP. In the 2026-08-01 incident **no
   `vercel deploy` ran between the passing pre-deploy check and the failing post-deploy
-  one**, so "passed before deploy, 403 after" is coincidence, not causation. A Vercel
-  Firewall bypass rule for the runner IP (added 2026-08-01) should make it rare; if the
-  runner's IP ever changes, the rule stops matching and the 403s return.
+  one**, so "passed before deploy, 403 after" is coincidence, not causation. It cannot
+  be turned off from the Vercel side: an IP-keyed Firewall bypass rule was tried on
+  2026-08-01 and does not work — Vercel's IP matcher never matches this runner. Proven
+  with a Deny probe: a path-only rule fired (403), the same rule plus an IP condition
+  did not (404), in plain and CIDR form. **Do not re-attempt the IP-bypass approach.**
+  Classifying the challenge as inconclusive is the permanent mitigation, not a stopgap.
 - **Mechanism:** `scripts/live-http.mjs` classifies responses. `scripts/kb_live_test.mjs`
   warms the edge, retries with backoff (5s/20s/60s), and exits **75** (`EX_TEMPFAIL`)
   for "inconclusive" instead of 1. `scripts/test.sh` maps 75 to a warning and exits 0.
