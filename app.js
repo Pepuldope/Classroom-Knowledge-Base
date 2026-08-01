@@ -532,6 +532,12 @@ function startRedirectSignIn(prompt = "select_account") {
     setStatus("Sign-in needs site storage enabled for this site.", true);
     return;
   }
+  // Google rejects the request with redirect_uri_mismatch unless this exact
+  // string — trailing slash included — is listed under Authorized redirect
+  // URIs (NOT Authorized JavaScript origins) on the OAuth client. Every
+  // origin the app is served from needs its own entry, preview deploys
+  // included, so log it rather than making someone guess.
+  console.info("[auth] redirect_uri =", authRedirectUri());
   setStatus("Redirecting to Google…");
   location.assign(buildAuthRedirectUrl({
     clientId: CLIENT_ID,
