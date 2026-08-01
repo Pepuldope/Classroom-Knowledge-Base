@@ -99,3 +99,34 @@ These layers together answer **“is the feature working?”** — not just “d
   every available provider (OpenRouter, local FreeLLMAPI proxy, Groq, Cerebras,
   Mistral, NVIDIA, GitHub Models, Qwen, Google Gemini) and fails over on
   429/5xx/auth errors. Use as many as are configured — don't pin to one.
+
+## 7. Live checks: infrastructure failures are not blockers
+- **A failing live check does not by itself mean production is broken.** Two very
+  different things produce the same red result: (a) the app regressed, (b) Vercel's
+  edge mitigation challenged *the test runner* and we never observed the app at all.
+- **Case (b) is documented, recurring, and NOT caused by deploying.** Run logs from
+  2026-07-26 through 2026-08-01 repeatedly show HTTP 403 with
+  `x-vercel-mitigated: challenge` against the production alias — Vercel's managed bot
+  protection reacting to the runner's datacenter IP. In the 2026-08-01 incident **no
+  `vercel deploy` ran between the passing pre-deploy check and the failing post-deploy
+  one**, so "passed before deploy, 403 after" is coincidence, not causation. A Vercel
+  Firewall bypass rule for the runner IP (added 2026-08-01) should make it rare; if the
+  runner's IP ever changes, the rule stops matching and the 403s return.
+- **Mechanism:** `scripts/live-http.mjs` classifies responses. `scripts/kb_live_test.mjs`
+  warms the edge, retries with backoff (5s/20s/60s), and exits **75** (`EX_TEMPFAIL`)
+  for "inconclusive" instead of 1. `scripts/test.sh` maps 75 to a warning and exits 0.
+- **Hard invariant — the loop must NOT:**
+  1. Open a blocker, or park backlog items, on an inconclusive (exit 75) live result.
+  2. Redeploy, roll back, or "fix" application code in response to one. Nothing is known
+     to be wrong. Changing code here means changing a working site based on no evidence.
+  3. Widen `isEdgeMitigation()` to swallow plain 403s with no mitigation evidence — the
+     app's own JSON 403s must keep failing loudly. `tests/live-http.test.js` guards this.
+- **Before escalating a live failure, confirm it independently** from outside the runner:
+  `curl -sI https://classroom-knowledge-google.vercel.app/ | head -1`. If that is 200,
+  the site is up and there is no blocker — say so plainly and continue with the backlog.
+- **Why this is here:** on 2026-08-01 a cron run reported a hard blocker — "Vercel edge
+  HTTP 403 on /index.html and /api/kb-search, 1/4 live checks passing" — and stopped
+  autonomous work. Production was serving 200 the whole time, and the deployed build
+  hashed identical to HEAD. The "1/4" was the tell: check 1 (site loads) 403'd, checks
+  2–3 cascaded, and check 4 ("no uncaught page errors") passed *vacuously* because no
+  page had loaded. That vacuous pass is now asserted against.
