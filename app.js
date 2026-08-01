@@ -351,8 +351,24 @@ function onSilentTokenResponse(resp) {
   }
 }
 
+// Set while an interactive popup (sign in / switch account) is open. GIS does
+// not cope with two concurrent flows on the same client_id: the boot-time
+// silent refresh and the popup end up fighting over the same popup channel,
+// and under COOP the opener can't observe the popup to sort it out. That race
+// is timing-dependent, which is why it disappears with DevTools open.
+let interactiveAuthInFlight = false;
+
+export function beginInteractiveAuth() {
+  interactiveAuthInFlight = true;
+  settleSilentRefresh(false);
+}
+
+export function endInteractiveAuth() {
+  interactiveAuthInFlight = false;
+}
+
 function silentRefresh() {
-  if (!silentTokenClient) return Promise.resolve(false);
+  if (!silentTokenClient || interactiveAuthInFlight) return Promise.resolve(false);
   if (silentRefreshInFlight) return silentRefreshInFlight;
   silentRefreshInFlight = new Promise((resolve) => {
     silentRefreshResolve = resolve;
@@ -410,6 +426,7 @@ async function initGis() {
     client_id: CLIENT_ID,
     scope: SCOPES,
     callback: (resp) => {
+      endInteractiveAuth();
       if (resp.error) {
         setStatus(`Auth failed: ${resp.error}`, true);
         return;
@@ -421,6 +438,7 @@ async function initGis() {
     // Non-OAuth failures (popup blocked, popup closed, unknown) arrive here and
     // never through `callback`. Without this the UI gave no feedback at all.
     error_callback: (err) => {
+      endInteractiveAuth();
       const type = err?.type || "unknown";
       if (type === "popup_closed") { setStatus(""); return; }
       setStatus(`Auth failed: ${type}`, true);
@@ -447,11 +465,13 @@ async function initGis() {
       // that account isn't in a Classroom domain (see handleClassroomAuthError).
       prompt: "select_account",
       error_callback: (err) => {
+        endInteractiveAuth();
         const type = err?.type || "unknown";
         if (type === "popup_closed") { setStatus(""); return; }
         setStatus(`Sign-in failed: ${type}`, true);
       },
       callback: async (resp) => {
+        endInteractiveAuth();
         if (!resp || !resp.code) {
           setStatus(`Auth failed: ${resp?.error || "no code"}`, true);
           return;
@@ -492,11 +512,12 @@ async function initGis() {
   // Try server-side refresh first (works after browser restart), fall back to legacy silent refresh
   if (cfg.hasRefreshTokens && loadUserSub()) {
     serverRefreshAccessToken().then((token) => {
+      if (interactiveAuthInFlight) return;
       if (token) onSignedIn();
-      else if (loadUserHint()) silentRefresh().then((ok) => { if (ok) onSignedIn(); });
+      else if (loadUserHint()) silentRefresh().then((ok) => { if (ok && !interactiveAuthInFlight) onSignedIn(); });
     });
   } else if (loadUserHint()) {
-    silentRefresh().then((ok) => { if (ok) onSignedIn(); });
+    silentRefresh().then((ok) => { if (ok && !interactiveAuthInFlight) onSignedIn(); });
   }
 }
 
@@ -1372,6 +1393,7 @@ function applySort(items) {
 }
 
 $("loginBtn").addEventListener("click", () => {
+  beginInteractiveAuth();
   if (codeClient) {
     // Always show the account chooser so the user picks their SCHOOL account
     // (never silently reuse a cached personal account that 400s on Classroom).
@@ -1519,6 +1541,7 @@ window.addEventListener("cwa-classroom-auth-error", (event) => {
 });
 
 function switchAccount() {
+  beginInteractiveAuth();
   const mw = $("menuWrap"); if (mw) mw.hidden = true;
   // Force the account chooser so the user can pick their school account.
   if (codeClient) { codeClient.requestCode({ prompt: "select_account" }); return; }
