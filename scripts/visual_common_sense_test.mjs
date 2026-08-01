@@ -187,6 +187,31 @@ async function checkCopyStatusLayout(theme) {
 }
 
 try {
+  // Keep this gate hermetic. checkControlStates() genuinely clicks the primary
+  // button to sample its :active style, and on this page that button is "Sign in
+  // with Google" — so the click fires startRedirectSignIn() and navigates the
+  // page to accounts.google.com. Google then rejects it with
+  // redirect_uri_mismatch, because http://localhost:<port>/ is not an
+  // authorized redirect URI on the OAuth client, and every later style
+  // assertion times out against Google's error page.
+  //
+  // Neutralise the navigation itself rather than aborting it in flight: an
+  // aborted main-frame navigation leaves the document pending, which hangs the
+  // next locator.evaluate(). Stubbing location.assign/replace means no
+  // navigation is ever started, the click still applies :active, and the gate
+  // stops depending on Google config or on which port the harness uses.
+  // Test-only; production auth is untouched.
+  await page.addInitScript(() => {
+    for (const method of ["assign", "replace"]) {
+      try {
+        Object.defineProperty(window.location, method, {
+          configurable: true,
+          value: (url) => { window.__cwaBlockedNav = String(url); },
+        });
+      } catch { /* older engines: fall back to the route guard below */ }
+    }
+  });
+  await page.route(/accounts\.google\.com/, (route) => route.abort());
   await page.goto(`${BASE}/index.html`, { waitUntil: "networkidle", timeout: 30000 });
   await page.waitForSelector("#viewToggle", { timeout: 10000 });
   await forceHarnessStates();
