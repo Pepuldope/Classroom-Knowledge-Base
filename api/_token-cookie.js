@@ -39,6 +39,7 @@ function base64UrlDecode(value) {
   const binary = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4));
   const out = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) out[i] = binary.charCodeAt(i);
+  if (base64UrlEncode(out) !== value) throw new Error("non-canonical base64url");
   return out;
 }
 
