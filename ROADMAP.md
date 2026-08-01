@@ -164,7 +164,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Privacy: make the Settings account-storage explanation match persistent IndexedDB auth (short-lived token, cleared on sign-out; 2026-08-01).
 - [ ] Auth: add a browser smoke proving a refreshed IndexedDB session survives a full page reload without exposing token values in localStorage.
 - [ ] Continuity: verify Archive, Planner, and Knowledge Base all converge on the same local auth-session record after sign-in and sign-out.
-- [ ] Privacy: add a browser assertion that the tutor request payload stays bounded when a search returns many matching notes.
+- [x] Privacy: add a browser assertion that the tutor request payload stays bounded when a search returns many matching notes. Shipped this run: client-side grounding now strips source paths and caps each selected note before `/api/tutor` serialization; the many-match regression stays under 24,000 characters.
 - [ ] Continuity: verify the KB rebuild card remains hidden during a resumed incremental Classroom build and returns only after a true empty state.
 - [ ] Accessibility: add a narrow-screen browser smoke for related-preview status announcements and retry focus restoration.
 ## 🚧 Blocked (pinged — needs Pepuldo)

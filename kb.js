@@ -23,7 +23,7 @@ import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./stu
 import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
-import { buildTutorRetrievedNotes } from "./kb-tutor-context.js";
+import { buildTutorRetrievedNotes, tutorRequestNotesModel } from "./kb-tutor-context.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 
@@ -2106,7 +2106,7 @@ async function sendTutor(text, { retry = false } = {}) {
   const assistantEl = addTutorMessage("assistant", "…", true);
   let acc = "";
   try {
-    const retrieved = buildTutorRetrievedNotes(localKbBundle, text);
+    const retrieved = tutorRequestNotesModel(buildTutorRetrievedNotes(localKbBundle, text));
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
