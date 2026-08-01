@@ -76,7 +76,7 @@ function findMatchPos(text, qTokens) {
 }
 const SNIPPET_LEN = 200;
 function buildSnippet(note, qTokens) {
-  const source = note.x || note.s || "";
+  const source = note.x || note.s || [note.t, note.topic].filter(Boolean).join(" — ");
   if (!source) return "";
   const pos = findMatchPos(source, qTokens);
   if (pos === -1) return source.length > SNIPPET_LEN ? source.slice(0, SNIPPET_LEN).trim() + "…" : source.trim();

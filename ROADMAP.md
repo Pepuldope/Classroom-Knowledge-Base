@@ -135,6 +135,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Perf: reduce hosted legacy search warm latency below the 1s product budget without logging note content. Shipped 2026-07-30: compatibility search now reuses a bounded response for the same bundle/query/filter key; ingestion replaces the bundle identity so stale responses cannot survive writes. Live probe remains populated (3,990 notes) and warm max was 983.54ms before deployment.
 - [x] Perf: add p95 hosted legacy search latency reporting across three warm probes without logging note content (2026-07-30).
 - [x] Privacy: build the Classroom-derived KB entirely in the browser and persist the curated bundle in the user's IndexedDB; tutor remains the only KB request sent to the server.
+- [x] Search: guarantee every local result has a usable snippet, falling back to title/topic when source text is empty (2026-08-01).
 - [ ] Continuity: verify cached legacy related responses remain fresh after a live incremental ingestion write.
 - [x] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit. Shipped 2026-07-31: related previews now expose explicit polite status announcements for local-cache loading, ready counts, and retryable errors; covered by `tests/kb-related-status.test.js`.
 - [x] Privacy: add a browser assertion that tutor requests never include unselected bundle bodies. Shipped this run: local grounding selection is isolated in `kb-tutor-context.js` with a regression test and the canonical gate.
