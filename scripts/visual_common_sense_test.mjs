@@ -211,7 +211,15 @@ try {
       } catch { /* older engines: fall back to the route guard below */ }
     }
   });
-  await page.route(/accounts\.google\.com/, (route) => route.abort());
+  // Network-layer backstop, and the part that must not be removed: answer any
+  // auth navigation with 204 No Content. A top-level navigation that receives
+  // 204 is abandoned by the browser — the page stays exactly where it is, with
+  // no pending document (which is what route.abort() leaves behind, hanging the
+  // next locator.evaluate()). This works no matter what initiates the
+  // navigation — location.assign, a form submit, or a GIS client — so it does
+  // not depend on the JS stub above taking effect in a given environment.
+  await page.route(/accounts\.google\.com/, (route) =>
+    route.fulfill({ status: 204, body: "" }));
   await page.goto(`${BASE}/index.html`, { waitUntil: "networkidle", timeout: 30000 });
   await page.waitForSelector("#viewToggle", { timeout: 10000 });
   await forceHarnessStates();
