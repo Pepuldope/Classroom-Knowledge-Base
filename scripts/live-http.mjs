@@ -94,10 +94,11 @@ async function probe(url) {
 /**
  * Poll the live origin until it serves a non-mitigated response.
  *
- * Call this ONCE before the real assertions. After a deploy the edge cache is
- * cold, so this doubles as a warm-up: the first request repopulates the cache
- * and subsequent checks are served as HITs, which are far less likely to be
- * challenged.
+ * Call this ONCE before the real assertions, so a challenge is detected before
+ * any assertion runs rather than surfacing as a confusing mid-test failure.
+ * (An earlier version of this comment claimed the warm-up makes later checks
+ * less likely to be challenged, via cache HITs. That was never measured and
+ * the deploy-correlation it rested on was disproved — see the header.)
  *
  * Throws EdgeMitigationError if every attempt is challenged.
  */
