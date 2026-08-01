@@ -255,8 +255,22 @@ if [ "$LIVE_OK" -eq "$INCONCLUSIVE" ]; then
   exit 0
 fi
 
-if [ "$LIVE_OK" -ne 0 ] || [ "${LIVE_SETTINGS_CLEAR_OK:-0}" -ne 0 ] || [ "${LIVE_CROSS_VIEW_OK:-0}" -ne 0 ]; then
-  echo "LIVE E2E FAILED (production regression detected)"
+# Name what actually failed. "LIVE E2E FAILED (production regression detected)"
+# used to be printed for ALL three, including the two follow-on smokes — which
+# sent someone hunting a production fault when the site was healthy and a smoke
+# had simply gone stale against a deliberate app change.
+if [ "$LIVE_OK" -ne 0 ]; then
+  echo "LIVE E2E FAILED: scripts/kb_live_test.mjs (exit $LIVE_OK) — production regression"
+  exit 1
+fi
+if [ "${LIVE_SETTINGS_CLEAR_OK:-0}" -ne 0 ]; then
+  echo "LIVE SMOKE FAILED: scripts/settings_clear_rebuild_test.mjs (exit $LIVE_SETTINGS_CLEAR_OK)"
+  echo "  kb_live_test.mjs passed, so production is serving. Check the smoke before the app."
+  exit 1
+fi
+if [ "${LIVE_CROSS_VIEW_OK:-0}" -ne 0 ]; then
+  echo "LIVE SMOKE FAILED: scripts/live_cross_view_related_retry_test.mjs (exit $LIVE_CROSS_VIEW_OK)"
+  echo "  kb_live_test.mjs passed, so production is serving. Check the smoke before the app."
   exit 1
 fi
 

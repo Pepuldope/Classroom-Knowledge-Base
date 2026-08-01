@@ -1,5 +1,18 @@
 // live_cross_view_related_retry_test.mjs — live-shell smoke for repeated related-note
 // retry announcements in assignment-shaped cards on Archive and Planner.
+//
+// NOTE ON HOW THE SURFACE IS REVEALED (do not "fix" this back to clicking the
+// view toggle): Archive is a PRIVATE view. auth-view.js declares
+// PRIVATE_VIEWS = {"kb","archive"} and app.js setView() routes any private view
+// to a "planner" fallback when there is no access token. The live site is always
+// signed out here, so clicking .view-toggle-btn[data-view="archive"] can never
+// reveal #archiveView — it silently lands on Planner instead. That auth gating
+// is correct and must stay (see LOOP-GUARDRAILS.md).
+//
+// This smoke is about the related-preview retry UI *inside* a surface, not about
+// routing, and it injects its own fixture card anyway. So it reveals the target
+// surface directly rather than navigating to it, which keeps Archive coverage
+// without requiring a signed-in session.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
@@ -62,7 +75,14 @@ try {
   assert.ok(response?.ok(), `live site should load (HTTP ${response?.status()})`);
   await page.waitForSelector("#viewToggle:not([hidden])", { timeout: 15000 });
   for (const [view, surface] of [["archive", "archiveView"], ["planner", "plannerView"]]) {
-    await page.locator(`.view-toggle-btn[data-view="${view}"]`).click();
+    await page.evaluate((name) => {
+      const surfaces = ["kbView", "archiveView", "plannerView"];
+      if (!document.getElementById(name)) throw new Error("missing surface " + name);
+      for (const id of surfaces) {
+        const node = document.getElementById(id);
+        if (node) node.hidden = id !== name;
+      }
+    }, surface);
     await page.waitForFunction((name) => {
       const node = document.getElementById(name);
       return node && !node.hidden;
