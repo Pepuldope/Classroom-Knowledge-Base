@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildAuthRedirectUrl, parseAuthRedirectHash, randomState } from "../auth-redirect.js";
+import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState } from "../auth-redirect.js";
 
 const BASE = {
   clientId: "client-123.apps.googleusercontent.com",
@@ -26,44 +26,44 @@ test("buildAuthRedirectUrl omits login_hint unless one is supplied", () => {
   assert.equal(hinted.searchParams.get("login_hint"), "s@school.sk");
 });
 
-test("parseAuthRedirectHash returns null for an ordinary page load", () => {
-  assert.equal(parseAuthRedirectHash("", "abc123"), null);
-  assert.equal(parseAuthRedirectHash("#", "abc123"), null);
-  assert.equal(parseAuthRedirectHash("#section-2", "abc123"), null);
+test("parseAuthRedirectResponse returns null for an ordinary page load", () => {
+  assert.equal(parseAuthRedirectResponse("", "", "abc123"), null);
+  assert.equal(parseAuthRedirectResponse("", "#", "abc123"), null);
+  assert.equal(parseAuthRedirectResponse("", "#section-2", "abc123"), null);
 });
 
-test("parseAuthRedirectHash extracts the token on success", () => {
+test("parseAuthRedirectResponse extracts the token on success", () => {
   const hash = "#access_token=ya29.tok&token_type=Bearer&expires_in=3599&state=abc123";
-  assert.deepEqual(parseAuthRedirectHash(hash, "abc123"), { token: "ya29.tok", expiresIn: 3599 });
+  assert.deepEqual(parseAuthRedirectResponse("", hash, "abc123"), { token: "ya29.tok", expiresIn: 3599 });
 });
 
-test("parseAuthRedirectHash defaults a missing or bogus expires_in", () => {
+test("parseAuthRedirectResponse defaults a missing or bogus expires_in", () => {
   for (const tail of ["", "&expires_in=0", "&expires_in=nonsense"]) {
-    const got = parseAuthRedirectHash(`#access_token=t&state=abc123${tail}`, "abc123");
+    const got = parseAuthRedirectResponse("", `#access_token=t&state=abc123${tail}`, "abc123");
     assert.equal(got.expiresIn, 3600);
   }
 });
 
-test("parseAuthRedirectHash rejects a state that does not match", () => {
+test("parseAuthRedirectResponse rejects a state that does not match", () => {
   const hash = "#access_token=ya29.tok&state=attacker";
-  assert.deepEqual(parseAuthRedirectHash(hash, "abc123"), { error: "state_mismatch" });
+  assert.deepEqual(parseAuthRedirectResponse("", hash, "abc123"), { error: "state_mismatch" });
 });
 
-test("parseAuthRedirectHash rejects a token when no state was stored", () => {
+test("parseAuthRedirectResponse rejects a token when no state was stored", () => {
   const hash = "#access_token=ya29.tok&state=abc123";
   for (const expected of [null, "", undefined]) {
-    assert.deepEqual(parseAuthRedirectHash(hash, expected), { error: "state_mismatch" });
+    assert.deepEqual(parseAuthRedirectResponse("", hash, expected), { error: "state_mismatch" });
   }
 });
 
-test("parseAuthRedirectHash surfaces Google's error, state permitting", () => {
-  assert.deepEqual(parseAuthRedirectHash("#error=access_denied&state=abc123", "abc123"), { error: "access_denied" });
+test("parseAuthRedirectResponse surfaces Google's error, state permitting", () => {
+  assert.deepEqual(parseAuthRedirectResponse("", "#error=access_denied&state=abc123", "abc123"), { error: "access_denied" });
   // A mismatched state outranks the reported error — we cannot trust either.
-  assert.deepEqual(parseAuthRedirectHash("#error=access_denied&state=x", "abc123"), { error: "state_mismatch" });
+  assert.deepEqual(parseAuthRedirectResponse("", "#error=access_denied&state=x", "abc123"), { error: "state_mismatch" });
 });
 
-test("parseAuthRedirectHash reports a state-valid response carrying no token", () => {
-  assert.deepEqual(parseAuthRedirectHash("#state=abc123&token_type=Bearer", "abc123"), { error: "no_token" });
+test("parseAuthRedirectResponse reports a state-valid response carrying no token", () => {
+  assert.deepEqual(parseAuthRedirectResponse("", "#state=abc123&token_type=Bearer", "abc123"), { error: "no_token" });
 });
 
 test("randomState produces distinct 32-char hex values", () => {
@@ -71,4 +71,44 @@ test("randomState produces distinct 32-char hex values", () => {
   const b = randomState();
   assert.match(a, /^[0-9a-f]{32}$/);
   assert.notEqual(a, b);
+});
+
+// --- authorization code flow ------------------------------------------------
+
+test("buildAuthRedirectUrl asks for offline consent in code mode", () => {
+  const url = new URL(buildAuthRedirectUrl({ ...BASE, responseType: "code" }));
+  assert.equal(url.searchParams.get("response_type"), "code");
+  assert.equal(url.searchParams.get("access_type"), "offline");
+  // Without consent in the prompt Google withholds the refresh token on every
+  // authorization after the first.
+  assert.match(url.searchParams.get("prompt"), /consent/);
+  assert.match(url.searchParams.get("prompt"), /select_account/);
+});
+
+test("buildAuthRedirectUrl does not duplicate an explicit consent prompt", () => {
+  const url = new URL(buildAuthRedirectUrl({ ...BASE, responseType: "code", prompt: "consent" }));
+  assert.equal(url.searchParams.get("prompt"), "consent");
+});
+
+test("buildAuthRedirectUrl leaves token mode free of offline params", () => {
+  const url = new URL(buildAuthRedirectUrl(BASE));
+  assert.equal(url.searchParams.get("response_type"), "token");
+  assert.equal(url.searchParams.has("access_type"), false);
+  assert.equal(url.searchParams.get("prompt"), "select_account");
+});
+
+test("parseAuthRedirectResponse reads a code from the query string", () => {
+  assert.deepEqual(parseAuthRedirectResponse("?code=4/abc&state=abc123", "", "abc123"), { code: "4/abc" });
+});
+
+test("parseAuthRedirectResponse rejects a code whose state does not match", () => {
+  assert.deepEqual(parseAuthRedirectResponse("?code=4/abc&state=evil", "", "abc123"), { error: "state_mismatch" });
+});
+
+test("parseAuthRedirectResponse surfaces a denied consent from the query string", () => {
+  assert.deepEqual(parseAuthRedirectResponse("?error=access_denied&state=abc123", "", "abc123"), { error: "access_denied" });
+});
+
+test("parseAuthRedirectResponse ignores a URL carrying neither response", () => {
+  assert.equal(parseAuthRedirectResponse("?utm_source=x", "#top", "abc123"), null);
 });

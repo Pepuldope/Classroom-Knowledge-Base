@@ -18,7 +18,7 @@ import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStat
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
 import { kbLocalStatusModel } from "./kb-local-status.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
-import { buildAuthRedirectUrl, parseAuthRedirectHash, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
+import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -131,29 +131,29 @@ function pushPrefsToServer() {
 
 const SORT_KEY = "cwa_sort";
 let currentSort = sessionStorage.getItem(SORT_KEY) || "default";
-const USER_SUB_KEY = "cwa_user_sub";
+// The refresh token lives in an httpOnly cookie the page cannot read, so this
+// flag is only a hint about whether it is worth asking the server for a
+// refresh. It is not a credential and carries no identity — the cookie alone
+// decides whose token gets minted.
+const HAS_SERVER_SESSION_KEY = "cwa_has_server_session";
 
-function loadUserSub() {
-  try { return localStorage.getItem(USER_SUB_KEY) || ""; } catch { return ""; }
+function hasServerSession() {
+  try { return localStorage.getItem(HAS_SERVER_SESSION_KEY) === "1"; } catch { return false; }
 }
-function storeUserSub(sub) {
-  if (!sub) return;
-  try { localStorage.setItem(USER_SUB_KEY, sub); } catch {}
+function setServerSessionFlag(on) {
+  try {
+    if (on) localStorage.setItem(HAS_SERVER_SESSION_KEY, "1");
+    else localStorage.removeItem(HAS_SERVER_SESSION_KEY);
+  } catch {}
 }
 
 // Tell the server to forget this account's stored refresh token. Without this,
 // oauth-refresh.js silently re-grants a token for the old account on every page
 // load, so the user stays locked into the wrong (e.g. non-Classroom) account.
 async function revokeServerToken() {
-  const sub = loadUserSub();
-  if (!sub) return;
-  try { localStorage.removeItem(USER_SUB_KEY); } catch {}
+  setServerSessionFlag(false);
   try {
-    fetch("/api/oauth-revoke", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sub }),
-    }).catch(() => {});
+    await fetchWithTimeout("/api/oauth-revoke", { method: "POST" });
   } catch {}
 }
 const ENRICH_KEY = "cwa_enrich_v12";
@@ -248,7 +248,7 @@ function scheduleSilentRefresh(expiresInSec) {
   const ms = Math.max(15_000, (expiresInSec - 90) * 1000);
   refreshTimer = setTimeout(async () => {
     const cfg = await getOauthConfig();
-    const refreshed = (cfg.hasRefreshTokens && loadUserSub()) ? await serverRefreshAccessToken() : null;
+    const refreshed = (cfg.hasRefreshTokens && hasServerSession()) ? await serverRefreshAccessToken() : null;
     if (!refreshed) silentRefresh();
   }, ms);
 }
@@ -290,17 +290,15 @@ let serverRefreshAvailable = true;
 
 async function serverRefreshAccessToken() {
   if (!serverRefreshAvailable) return null;
-  const sub = loadUserSub();
-  if (!sub) return null;
+  if (!hasServerSession()) return null;
   try {
-    const r = await fetchWithTimeout("/api/oauth-refresh", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ sub }),
-    });
+    // No body: the endpoint reads the httpOnly refresh cookie this request
+    // carries. Nothing here names an account.
+    const r = await fetchWithTimeout("/api/oauth-refresh", { method: "POST" });
     if (r.status === 500 || r.status === 503) { serverRefreshAvailable = false; return null; }
-    if (r.status === 401) {
-      try { localStorage.removeItem(USER_SUB_KEY); } catch {}
+    if (r.status === 401 || r.status === 404) {
+      // Cookie missing, expired or revoked — stop asking.
+      setServerSessionFlag(false);
       return null;
     }
     if (!r.ok) return null;
@@ -482,7 +480,7 @@ async function initGis() {
           const data = await r.json();
           accessToken = data.access_token;
           storeToken(accessToken, Number(data.expires_in) || 3600);
-          if (data.sub) storeUserSub(data.sub);
+          setServerSessionFlag(!!data.has_refresh);
           if (data.email) storeUserHint(data.email);
           onSignedIn();
         } catch (e) {
@@ -492,9 +490,11 @@ async function initGis() {
     });
   }
 
-  // consumeAuthRedirect() already signed in on this load and storeToken()
-  // already armed the refresh timer. A second onSignedIn() here would bump
-  // sessionEpoch and strand the first one's render.
+  // consumeAuthRedirect() may still be redeeming a code. Wait for it, then
+  // bail if it signed us in: storeToken() already armed the refresh timer, and
+  // a second onSignedIn() here would bump sessionEpoch and strand the first
+  // one's render.
+  await authRedirectSettled.catch(() => false);
   if (accessToken) return;
 
   const stored = await loadStoredToken();
@@ -506,7 +506,7 @@ async function initGis() {
     return;
   }
   // Try server-side refresh first (works after browser restart), fall back to legacy silent refresh
-  if (cfg.hasRefreshTokens && loadUserSub()) {
+  if (cfg.hasRefreshTokens && hasServerSession()) {
     serverRefreshAccessToken().then((token) => {
       if (token) onSignedIn();
       else if (loadUserHint()) silentRefresh().then((ok) => { if (ok) onSignedIn(); });
@@ -523,7 +523,7 @@ function authRedirectUri() {
   return `${location.origin}/`;
 }
 
-function startRedirectSignIn(prompt = "select_account") {
+async function startRedirectSignIn(prompt = "select_account") {
   let state = "";
   try {
     state = randomState();
@@ -532,6 +532,11 @@ function startRedirectSignIn(prompt = "select_account") {
     setStatus("Sign-in needs site storage enabled for this site.", true);
     return;
   }
+  // Prefer the code flow when the server can redeem it — that is the only way
+  // to get a refresh token, and so the only way a session outlives the access
+  // token. Falls back to implicit when unconfigured, so sign-in still works.
+  const cfg = await getOauthConfig().catch(() => ({ hasRefreshTokens: false }));
+  const responseType = cfg.hasRefreshTokens ? "code" : "token";
   // Google rejects the request with redirect_uri_mismatch unless this exact
   // string — trailing slash included — is listed under Authorized redirect
   // URIs (NOT Authorized JavaScript origins) on the OAuth client. Every
@@ -544,6 +549,7 @@ function startRedirectSignIn(prompt = "select_account") {
     scope: SCOPES,
     redirectUri: authRedirectUri(),
     state,
+    responseType,
     prompt,
     // Only hint on a plain re-auth; never when the user asked to switch.
     loginHint: prompt === "select_account" ? "" : loadUserHint(),
@@ -554,14 +560,15 @@ function startRedirectSignIn(prompt = "select_account") {
  * Handle a return from Google. Runs before initGis so the token is in place
  * by the time the stored-session logic there looks for one.
  */
-function consumeAuthRedirect() {
+async function consumeAuthRedirect() {
   let expected = null;
   try { expected = sessionStorage.getItem(AUTH_STATE_KEY); } catch {}
-  const result = parseAuthRedirectHash(location.hash, expected);
-  if (!result) return;
+  const result = parseAuthRedirectResponse(location.search, location.hash, expected);
+  if (!result) return false;
   try { sessionStorage.removeItem(AUTH_STATE_KEY); } catch {}
-  // Drop the token from the address bar before anything else can read it.
-  try { history.replaceState(null, "", location.pathname + location.search); } catch {}
+  // Strip the code/token from the address bar before anything else reads it,
+  // and before it can end up in history or a shared URL.
+  try { history.replaceState(null, "", location.pathname); } catch {}
 
   if (result.error) {
     const msg = result.error === "access_denied"
@@ -570,14 +577,46 @@ function consumeAuthRedirect() {
         ? "Sign-in couldn't be verified. Please try again."
         : `Sign-in failed: ${result.error}`;
     setStatus(msg, true);
-    return;
+    return false;
   }
-  accessToken = result.token;
-  storeToken(accessToken, result.expiresIn);
-  onSignedIn();
+
+  // Implicit flow: the token is already here.
+  if (result.token) {
+    accessToken = result.token;
+    storeToken(accessToken, result.expiresIn);
+    setServerSessionFlag(false);
+    onSignedIn();
+    return true;
+  }
+
+  // Code flow: the server redeems the code and sets the refresh cookie.
+  setStatus("Signing in…");
+  try {
+    const r = await fetchWithTimeout("/api/oauth-exchange", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ code: result.code, redirectUri: authRedirectUri() }),
+    });
+    if (!r.ok) {
+      const data = await r.json().catch(() => ({}));
+      setStatus(`Sign-in failed: ${data.error || r.status}`, true);
+      return false;
+    }
+    const data = await r.json();
+    accessToken = data.access_token;
+    storeToken(accessToken, Number(data.expires_in) || 3600);
+    if (data.email) storeUserHint(data.email);
+    setServerSessionFlag(!!data.has_refresh);
+    onSignedIn();
+    return true;
+  } catch (e) {
+    setStatus(isTimeoutError(e) ? "Sign-in timed out. Please try again." : `Sign-in failed: ${e.message}`, true);
+    return false;
+  }
 }
 
-consumeAuthRedirect();
+// Kick off before initGis so a token is in place by the time it looks.
+const authRedirectSettled = consumeAuthRedirect();
 
 function waitForGis() {
   if (window.google?.accounts?.oauth2) {
@@ -1453,7 +1492,7 @@ function applySort(items) {
 // Sign-in is a full-page redirect, never a popup — see auth-redirect.js.
 // It also needs no Google script to have loaded yet, so it can't fail with
 // "Google client not loaded yet".
-$("loginBtn").addEventListener("click", () => startRedirectSignIn("select_account"));
+$("loginBtn").addEventListener("click", () => { startRedirectSignIn("select_account"); });
 
 $("switchBtn").addEventListener("click", () => { closeMenu(); revokeServerToken().then(switchAccount); });
 $("logoutBtn").addEventListener("click", () => {
@@ -1513,7 +1552,6 @@ async function fetchUserName(useCache = true) {
     if (!r.ok) return null;
     const data = await r.json();
     if (data.email) storeUserHint(data.email);
-    if (data.sub) storeUserSub(data.sub);
     const info = { name: data.given_name || data.name || data.email || null, email: data.email || null };
     if (info.name) saveCachedProfile(info);
     return info;

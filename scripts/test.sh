@@ -25,6 +25,11 @@ node --test tests/auth-view.test.js
 AUTH_VIEW_OK=$?
 if [ "$AUTH_VIEW_OK" -ne 0 ]; then echo "private view auth tests FAILED"; exit 1; fi
 
+echo "==> Refresh-token cookie tests"
+node --test tests/token-cookie.test.js
+TOKEN_COOKIE_OK=$?
+if [ "$TOKEN_COOKIE_OK" -ne 0 ]; then echo "token cookie tests FAILED"; exit 1; fi
+
 echo "==> Redirect sign-in model tests"
 node --test tests/auth-redirect.test.js
 AUTH_REDIRECT_OK=$?
