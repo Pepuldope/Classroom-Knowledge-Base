@@ -226,6 +226,44 @@ nontrivial architecture decisions. Then: check → plan → implement → test.
 - `relatedNotes` must stay <1s on a few-hundred-note corpus.
 - Report a concise status to the `#kb-site-status` Discord channel.
 
+## STATUS REPORTING & BLOCKER DISCIPLINE (hard rules — owner 2026-08-01)
+Each tick is a FRESH agent with no memory of previous runs. You will reconstruct
+context by reading prior run logs. Those logs are **a record of what a past run
+believed**, not a description of the system right now. Treat them accordingly.
+
+- **Never restate a blocker you did not personally re-observe this run.** If a
+  prior log reports a blocker, RE-RUN ITS CHECK. If it passes, state plainly that
+  it is cleared and close it. Copying a prior run's blocker text forward is
+  forbidden — on 2026-08-01 a run reported "Vercel edge 403, 1/4 live checks
+  passing" while its OWN log contained `[KB live e2e] 4/4 passed`, production
+  served 200 throughout, and the deployed build hashed identical to HEAD. That
+  cost the owner a day of investigation into a healthy site.
+- **Every blocker claim carries raw evidence**: the status line, the response
+  headers, and the first ~500 bytes of body, plus an independent
+  `curl -sS -D -` re-probe. A blocker supported only by prose — yours or a past
+  run's — is not a blocker. Do not open one.
+- **Distinguish infrastructure from regression.** A 403 carrying
+  `x-vercel-mitigated`, a challenge token/nonce, or a Vercel Security Checkpoint
+  body is the edge refusing THIS RUNNER. The site is fine for users. Report it as
+  `live verification inconclusive — edge challenge`, do NOT halt autonomous work,
+  do NOT redeploy, do NOT roll back, and do NOT treat it as a code defect.
+  `scripts/live-http.mjs` classifies this; `scripts/test.sh` exits 0 with
+  `ALL TESTS PASSED (live verification inconclusive)`. **That string does not mean
+  production was verified** — it means the site was never observed. Report a
+  deploy under it as "deployed, live verification inconclusive", never as
+  live-verified. See LOOP-GUARDRAILS.md §7.
+- **Label inferences as inferences.** If you did not read a fact from a file,
+  command output, or config, say "inferred" and say from what. Never present a
+  guess inline with verified output — when asked which commands run pre- vs
+  post-deploy, a run answered "based on context: ..." rather than reading the
+  cron definition, and the guess was indistinguishable from the measurements
+  around it.
+- **Answer the question that was asked.** If asked for a raw log, paste the raw
+  log — not `grep` hits on your own summaries of it. If you cannot produce the
+  artifact, say so explicitly rather than substituting something adjacent.
+- **Report scope honestly.** State what you verified, what you could not verify,
+  and what you skipped. "Works on live" requires a live e2e that actually ran.
+
 ## ACCEPTANCE GATE (the run is only "done" when ALL hold)
 - `/api/kb-search?q=<real term>` returns relevant, ranked, snippet-bearing
   results over a corpus of hundreds of real notes (NOT the empty set).
