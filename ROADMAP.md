@@ -160,9 +160,12 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: let students dismiss a stale copy-history entry locally without touching their bundle (2026-07-26).
 - [x] Perf: add a bounded server timing header to legacy KB search/related responses for cold-latency diagnosis without logging note content (2026-07-25; exposed as `Server-Timing` plus Vercel-survivable `X-Server-Timing`).
 - [x] KB: add a compact “copy again” action for the latest local search-context event without persisting note bodies (2026-07-25).
-- [ ] Auth: add a browser smoke proving a refreshed IndexedDB session survives a full page reload without exposing token values in localStorage.
 - [x] Privacy: clear the IndexedDB auth record when Classroom returns 400/403 and require the account chooser on the next interactive sign-in. Shipped 2026-07-31: both the report loader and browser-local KB builder now preserve the status and converge on the existing wrong-account reset/revoke flow.
+- [x] Privacy: make the Settings account-storage explanation match persistent IndexedDB auth (short-lived token, cleared on sign-out; 2026-08-01).
+- [ ] Auth: add a browser smoke proving a refreshed IndexedDB session survives a full page reload without exposing token values in localStorage.
 - [ ] Continuity: verify Archive, Planner, and Knowledge Base all converge on the same local auth-session record after sign-in and sign-out.
+- [ ] Privacy: add a browser assertion that the tutor request payload stays bounded when a search returns many matching notes.
+- [ ] Continuity: verify the KB rebuild card remains hidden during a resumed incremental Classroom build and returns only after a true empty state.
 - [ ] Accessibility: add a narrow-screen browser smoke for related-preview status announcements and retry focus restoration.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

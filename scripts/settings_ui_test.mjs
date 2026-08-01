@@ -80,6 +80,7 @@ try {
   assert.match(await privacy.textContent(), /stay in this browser/i);
   assert.match(await privacy.textContent(), /only the notes needed/i);
   assert.match(await privacy.textContent(), /read-only Google Classroom/i);
+  assert.match(await privacy.textContent(), /short-lived.*IndexedDB/i, "Settings must explain where the persistent sign-in token is stored");
 
   assert.match(result.className, /settings-select/);
   assert.equal(result.borderRadius, "6px");
