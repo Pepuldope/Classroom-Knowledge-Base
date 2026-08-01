@@ -288,30 +288,53 @@ async function serverRefreshAccessToken() {
   } catch { return null; }
 }
 
+// Background token refresh. This MUST run on its own token client
+// (silentTokenClient, built in initGis) and never by swapping the interactive
+// tokenClient's callback in place. The silent flow (prompt: "") depends on the
+// accounts.google.com session in a third-party context, so browsers that block
+// third-party cookies by default — Arc, notably — fail it, and GIS reports that
+// class of failure through error_callback only. With a swapped callback and no
+// error_callback that meant the interactive callback stayed hijacked for the
+// life of the page: a subsequent sign-in stored its token but never called
+// onSignedIn(), so the app sat blank until a manual reload restored it from
+// IndexedDB.
+const SILENT_REFRESH_TIMEOUT_MS = 10_000;
+let silentTokenClient = null;
 let silentRefreshInFlight = null;
+let silentRefreshResolve = null;
+let silentRefreshTimer = null;
+
+function settleSilentRefresh(ok) {
+  if (!silentRefreshResolve) return;
+  const resolve = silentRefreshResolve;
+  silentRefreshResolve = null;
+  silentRefreshInFlight = null;
+  if (silentRefreshTimer) { clearTimeout(silentRefreshTimer); silentRefreshTimer = null; }
+  resolve(ok);
+}
+
+function onSilentTokenResponse(resp) {
+  if (resp && resp.access_token) {
+    accessToken = resp.access_token;
+    storeToken(accessToken, Number(resp.expires_in) || 3600);
+    settleSilentRefresh(true);
+  } else {
+    settleSilentRefresh(false);
+  }
+}
+
 function silentRefresh() {
-  if (!tokenClient) return Promise.resolve(false);
+  if (!silentTokenClient) return Promise.resolve(false);
   if (silentRefreshInFlight) return silentRefreshInFlight;
   silentRefreshInFlight = new Promise((resolve) => {
-    const hint = loadUserHint();
-    const original = tokenClient.callback;
-    const done = (ok) => {
-      tokenClient.callback = original;
-      silentRefreshInFlight = null;
-      resolve(ok);
-    };
-    tokenClient.callback = (resp) => {
-      if (resp && resp.access_token) {
-        accessToken = resp.access_token;
-        storeToken(accessToken, Number(resp.expires_in) || 3600);
-        done(true);
-      } else {
-        done(false);
-      }
-    };
+    silentRefreshResolve = resolve;
+    // Always settle. A silent request that never calls back at all would
+    // otherwise leave every `await silentRefresh()` — including gFetch's 401
+    // retry, which loadReport sits behind — pending forever.
+    silentRefreshTimer = setTimeout(() => settleSilentRefresh(false), SILENT_REFRESH_TIMEOUT_MS);
     try {
-      tokenClient.requestAccessToken({ prompt: "", hint: hint || undefined });
-    } catch { done(false); }
+      silentTokenClient.requestAccessToken({ prompt: "", hint: loadUserHint() || undefined });
+    } catch { settleSilentRefresh(false); }
   });
   return silentRefreshInFlight;
 }
@@ -367,6 +390,21 @@ async function initGis() {
       storeToken(accessToken, Number(resp.expires_in) || 3600);
       onSignedIn();
     },
+    // Non-OAuth failures (popup blocked, popup closed, unknown) arrive here and
+    // never through `callback`. Without this the UI gave no feedback at all.
+    error_callback: (err) => {
+      const type = err?.type || "unknown";
+      if (type === "popup_closed") { setStatus(""); return; }
+      setStatus(`Auth failed: ${type}`, true);
+    },
+  });
+
+  // Separate client for background refresh — see silentRefresh() above.
+  silentTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: onSilentTokenResponse,
+    error_callback: () => settleSilentRefresh(false),
   });
 
   const cfg = await getOauthConfig();
@@ -380,6 +418,11 @@ async function initGis() {
       // silently reuses the last-approved account and the user gets a 400 when
       // that account isn't in a Classroom domain (see handleClassroomAuthError).
       prompt: "select_account",
+      error_callback: (err) => {
+        const type = err?.type || "unknown";
+        if (type === "popup_closed") { setStatus(""); return; }
+        setStatus(`Sign-in failed: ${type}`, true);
+      },
       callback: async (resp) => {
         if (!resp || !resp.code) {
           setStatus(`Auth failed: ${resp?.error || "no code"}`, true);
@@ -1444,7 +1487,28 @@ async function onSignedIn() {
   const sb = $("sidebar"); if (sb) sb.hidden = false;
   updateArchiveHeaderToggle();
   updateArchiveSettingsUi();
-  setStatus("Loading your courses…");
+  const LOADING = "Loading your courses…";
+  setStatus(LOADING);
+  try {
+    await hydrateSignedInView(epoch);
+  } catch (e) {
+    if (epoch === sessionEpoch) setStatus(e?.message || "Sign-in failed.", true);
+  } finally {
+    // #welcome is hidden above but #report is only unhidden at the very end of
+    // loadReport. Anything that throws or bails out in between used to leave
+    // both hidden — a blank page with no way forward but a manual reload.
+    // Never exit this function in that state.
+    if (epoch === sessionEpoch && currentView === "planner"
+        && $("report").hidden && $("welcome").hidden) {
+      $("welcome").hidden = false;
+      if (!statusEl.textContent || statusEl.textContent === LOADING) {
+        setStatus("Couldn't load your Classroom data — try refreshing.", true);
+      }
+    }
+  }
+}
+
+async function hydrateSignedInView(epoch) {
   fetchUserName().then((info) => {
     if (epoch !== sessionEpoch) return;
     if (info && info.name) {
