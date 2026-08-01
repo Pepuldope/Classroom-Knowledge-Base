@@ -59,10 +59,35 @@ let displayPrefs = loadDisplayPrefs();
 let prefsStorageAvailable = true;
 let prefsLoadedFromServer = false;
 
+// Every request on the sign-in path must go through this. A bare fetch() has
+// no timeout: if a request stalls rather than fails — which browsers with
+// aggressive tracker/cookie blocking can do to Google endpoints — the whole
+// awaited chain in onSignedIn hangs, #report is never unhidden, and even the
+// try/finally guard there never runs, leaving a permanently blank page that
+// only a reload clears.
+const NET_TIMEOUT_MS = 20_000;
+
+export function isTimeoutError(err) {
+  return err?.name === "TimeoutError" || err?.name === "AbortError";
+}
+
+async function fetchWithTimeout(url, init = {}, ms = NET_TIMEOUT_MS) {
+  if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+    return fetch(url, { ...init, signal: AbortSignal.timeout(ms) });
+  }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function loadServerPrefs() {
   if (!prefsStorageAvailable || !accessToken) return null;
   try {
-    const r = await fetch("/api/prefs", {
+    const r = await fetchWithTimeout("/api/prefs", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (r.status === 503) { prefsStorageAvailable = false; return null; }
@@ -75,7 +100,7 @@ async function loadServerPrefs() {
 async function saveServerPrefs(prefs) {
   if (!prefsStorageAvailable || !accessToken) return;
   try {
-    const r = await fetch("/api/prefs", {
+    const r = await fetchWithTimeout("/api/prefs", {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ prefs }),
@@ -267,7 +292,7 @@ async function serverRefreshAccessToken() {
   const sub = loadUserSub();
   if (!sub) return null;
   try {
-    const r = await fetch("/api/oauth-refresh", {
+    const r = await fetchWithTimeout("/api/oauth-refresh", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sub }),
@@ -299,6 +324,9 @@ async function serverRefreshAccessToken() {
 // onSignedIn(), so the app sat blank until a manual reload restored it from
 // IndexedDB.
 const SILENT_REFRESH_TIMEOUT_MS = 10_000;
+// Longer than NET_TIMEOUT_MS so a stalled request reports its own, more
+// specific error before this generic fallback fires.
+const SIGNIN_WATCHDOG_MS = 25_000;
 let silentTokenClient = null;
 let silentRefreshInFlight = null;
 let silentRefreshResolve = null;
@@ -367,7 +395,7 @@ function getOauthConfig() {
       return oauthConfigPromise;
     }
   } catch {}
-  oauthConfigPromise = fetch("/api/oauth-config")
+  oauthConfigPromise = fetchWithTimeout("/api/oauth-config")
     .then((r) => r.ok ? r.json() : { hasRefreshTokens: false })
     .catch(() => ({ hasRefreshTokens: false }))
     .then((cfg) => {
@@ -430,7 +458,7 @@ async function initGis() {
         }
         setStatus("Signing in…");
         try {
-          const r = await fetch("/api/oauth-exchange", {
+          const r = await fetchWithTimeout("/api/oauth-exchange", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ code: resp.code, redirectUri: "postmessage" }),
@@ -1409,7 +1437,7 @@ async function fetchUserName(useCache = true) {
     }
   }
   try {
-    const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    const r = await fetchWithTimeout("https://www.googleapis.com/oauth2/v3/userinfo", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!r.ok) return null;
@@ -1424,12 +1452,30 @@ async function fetchUserName(useCache = true) {
   }
 }
 
+function networkError(cause) {
+  const err = new Error(isTimeoutError(cause)
+    ? "Google didn't respond in time. If your browser blocks third-party cookies or trackers for this site, allow them and try again."
+    : `Couldn't reach Google: ${cause?.message || "network error"}`);
+  err.status = 0;
+  return err;
+}
+
 async function gFetch(url) {
-  let r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  const call = () => fetchWithTimeout(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  let r;
+  try {
+    r = await call();
+  } catch (e) {
+    throw networkError(e);
+  }
   if (r.status === 401) {
     const ok = await silentRefresh();
     if (ok && accessToken) {
-      r = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+      try {
+        r = await call();
+      } catch (e) {
+        throw networkError(e);
+      }
     }
     if (r.status === 401) {
       clearToken();
@@ -1489,11 +1535,21 @@ async function onSignedIn() {
   updateArchiveSettingsUi();
   const LOADING = "Loading your courses…";
   setStatus(LOADING);
+  // Belt and braces for the try/finally below: that only runs once the awaited
+  // chain settles, so a request that hangs forever would still strand the user
+  // on an empty page. This fires regardless.
+  const watchdog = setTimeout(() => {
+    if (epoch !== sessionEpoch || currentView !== "planner") return;
+    if (!$("report").hidden || !$("welcome").hidden) return;
+    $("welcome").hidden = false;
+    setStatus("Still waiting on Google — the request looks blocked. Try refreshing, or allow third-party cookies for this site.", true);
+  }, SIGNIN_WATCHDOG_MS);
   try {
     await hydrateSignedInView(epoch);
   } catch (e) {
     if (epoch === sessionEpoch) setStatus(e?.message || "Sign-in failed.", true);
   } finally {
+    clearTimeout(watchdog);
     // #welcome is hidden above but #report is only unhidden at the very end of
     // loadReport. Anything that throws or bails out in between used to leave
     // both hidden — a blank page with no way forward but a manual reload.
