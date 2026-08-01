@@ -166,6 +166,11 @@ BASE_URL="http://localhost:$PORT" node scripts/kb_related_retry_reduced_motion_t
 KB_RETRY_REDUCED_MOTION_OK=$?
 if [ "$KB_RETRY_REDUCED_MOTION_OK" -ne 0 ]; then echo "KB reduced-motion keyboard retry-focus e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> KB narrow related-preview status e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_related_mobile_status_test.mjs
+KB_RELATED_MOBILE_STATUS_OK=$?
+if [ "$KB_RELATED_MOBILE_STATUS_OK" -ne 0 ]; then echo "KB narrow related-preview status e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> KB result-card focus-ring e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_result_card_focus_test.mjs
 RESULT_CARD_FOCUS_OK=$?

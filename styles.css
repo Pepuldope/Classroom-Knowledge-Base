@@ -1364,13 +1364,15 @@ summary::-webkit-details-marker { color: var(--muted); }
 /* Related-notes preview chips under each search-result card. */
 .kb-related-preview {
   display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center;
+  max-width: 100%; min-width: 0; box-sizing: border-box;
+  overflow-wrap: anywhere;
   margin-top: 0.5rem; padding-top: 0.45rem;
   border-top: 1px dashed var(--border, #eee);
   min-height: 1.35rem;
 }
 .kb-related-preview.is-loading {
   color: var(--muted); font-size: 0.72rem;
-  display: inline-flex; align-items: center; gap: 0.35rem;
+  display: flex; align-items: center; gap: 0.35rem;
 }
 .kb-related-preview.is-loading::before {
   content: ""; width: 0.65rem; height: 0.65rem; flex: 0 0 auto;
@@ -1379,7 +1381,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .kb-related-preview.is-error {
   color: var(--fg); font-size: 0.72rem;
-  display: inline-flex; align-items: center; gap: 0.35rem;
+  display: flex; align-items: center; gap: 0.35rem;
 }
 .kb-related-preview.is-error::before {
   content: "!"; width: 0.75rem; height: 0.75rem; flex: 0 0 auto;
@@ -1388,6 +1390,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   font-size: 0.6rem; font-weight: 700; line-height: 1;
 }
 .kb-related-preview-retry {
+  flex: 0 0 auto; white-space: normal;
   font-size: 0.72rem; padding: 0.15rem 0.45rem;
   color: var(--accent, #2563eb); background: transparent;
   border: 1px solid currentColor; border-radius: 0.35rem; cursor: pointer;
