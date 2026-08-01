@@ -89,6 +89,11 @@ BASE_URL="http://localhost:$PORT" node scripts/auth_session_reload_test.mjs
 AUTH_RELOAD_OK=$?
 if [ "$AUTH_RELOAD_OK" -ne 0 ]; then echo "auth-session reload e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> IndexedDB auth-session continuity e2e"
+BASE_URL="http://localhost:$PORT" node scripts/auth_session_continuity_test.mjs
+AUTH_CONTINUITY_OK=$?
+if [ "$AUTH_CONTINUITY_OK" -ne 0 ]; then echo "auth-session continuity e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Seeding dev data"
 node scripts/seed-dev.mjs "$PORT" 400 >/dev/null 2>&1
 echo "==> Theme contrast browser tests"
