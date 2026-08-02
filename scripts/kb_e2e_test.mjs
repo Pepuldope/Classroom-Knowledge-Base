@@ -28,7 +28,7 @@ import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { relatedResponseCacheState, RELATED_RESPONSE_CACHE_TTL_MS } from "../api/kb-related-cache.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
@@ -204,11 +204,6 @@ test("related notes use the configured local limit and clamp invalid values", ()
   assert.equal(relatedNotesLimit(), 3);
 });
 
-test("local KB bundles skip the legacy server probe while empty state keeps the fallback", () => {
-  assert.equal(shouldProbeLegacyKb({ version: 1, notes: [{ t: "one" }] }), false);
-  assert.equal(shouldProbeLegacyKb({ version: 1, notes: [] }), true);
-  assert.equal(shouldProbeLegacyKb(null), true);
-});
 
 test("build surface stays hidden while bundle state is unknown or loading, and only reveals for a known empty state", () => {
   assert.deepEqual(kbBuildSurfaceModel({ state: "loading" }), { showBuildCard: false, showMain: true });

@@ -120,6 +120,7 @@
     const percentileLabel = document.getElementById("kbRelatedTimingPercentiles");
     const resetStatus = document.getElementById("kbRelatedCacheResetStatus");
     const localHarness = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    window.__cwaLegacyCompatibility = localHarness && !new URLSearchParams(location.search).has("noLegacy");
     const updateStats = () => {
       if (statsLabel) statsLabel.textContent = formatRelatedTokenCacheStats(relatedTokenCacheStats());
       if (timingLabel) timingLabel.textContent = formatRelatedPreviewTimingStats(relatedPreviewTimingStats());

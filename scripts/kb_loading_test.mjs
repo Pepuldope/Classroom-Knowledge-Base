@@ -68,6 +68,26 @@ try {
     const n = await page.locator("#kbResults .kb-result-card").count();
     assert.ok(n > 0, "results should render after the delayed search");
   });
+
+  await page.evaluate(async () => {
+    const { removeKbBundle } = await import("/kb-local.js");
+    await removeKbBundle();
+  });
+  await page.goto(`${BASE}${PATH}?noLegacy=1`, { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
+  await page.waitForSelector("#kbSearchInput", { timeout: 10000 });
+  const legacyRequests = [];
+  const onRequest = (request) => {
+    if (/\/api\/kb-(search|browse|related|note|store)/.test(request.url())) legacyRequests.push(request.url());
+  };
+  page.on("request", onRequest);
+  await check("empty private KB search stays local and does not query legacy routes", async () => {
+    await page.fill("#kbSearchInput", "private-empty-probe");
+    await page.waitForTimeout(500);
+    assert.equal(legacyRequests.length, 0, `legacy KB requests: ${legacyRequests.join(", ")}`);
+    assert.match(await page.locator("#kbResults").textContent(), /knowledge base is empty/i);
+  });
+  page.off("request", onRequest);
 } finally {
   await browser.close();
 }

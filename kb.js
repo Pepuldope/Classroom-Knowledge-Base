@@ -45,7 +45,7 @@ export function kbResultNavigationIndex(current, key, count) {
 }
 
 // ---------------------------------------------------------------------------
-// Pure filter model (no DOM): turn the raw facet lists from /api/kb-search
+// Pure filter model (no DOM): turn the raw facet lists from local retrieval
 // into a complete, untruncated list of courses + years with the active
 // selection passed through. The UI renders from this so EVERY course is
 // reachable as a filter (owner request #2) — no silent top-N truncation.
@@ -466,9 +466,6 @@ export function groupCourseNotesBySprint(notes) {
 // ---------------------------------------------------------------------------
 // View switching
 // ---------------------------------------------------------------------------
-export function shouldProbeLegacyKb(bundle) {
-  return !Array.isArray(bundle?.notes) || bundle.notes.length === 0;
-}
 
 export function shouldAutoBuildKb(settings = {}, bundle = null) {
   return settings?.autoBuild === true && (!Array.isArray(bundle?.notes) || bundle.notes.length === 0);
@@ -576,9 +573,9 @@ export async function refreshKb() {
       if (onboarding) onboarding.hidden = true;
     }
   } catch {}
-  if (shouldProbeLegacyKb(localKbBundle)) {
+  if (!localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
     try {
-      const r = await fetch("/api/kb-search?q=" + encodeURIComponent("__ping__"));
+      const r = await fetch("/api/kb-search?q=__ping__");
       if (r.ok) {
         const d = await r.json();
         if (d.meta?.noteCount > 0 || !meta) meta = d.meta;
@@ -1105,24 +1102,22 @@ async function runKbSearch(query) {
   // (the KB reassembles 13 KV shards) never looks like a frozen/blank panel.
   showKbLoading();
   try {
-    const params = new URLSearchParams({ q: query, limit: "8" });
-    if (kbActiveCourse) params.set("course", kbActiveCourse);
-    if (kbActiveYear) params.set("year", kbActiveYear);
-    if (kbActiveKind) params.set("kind", kbActiveKind);
-    if (kbActiveFamily) params.set("family", kbActiveFamily);
-    if (effectiveSort && effectiveSort !== "relevance") params.set("sort", effectiveSort);
-    let d;
-    if (localKbBundle?.notes?.length) {
-      d = buildLocalSearchResponse(localKbBundle, query, {
-        course: kbActiveCourse,
-        courses: kbActiveCourse ? [] : scope.courses,
-        year: kbActiveYear,
-        kind: kbActiveKind,
-        family: kbActiveFamily,
-        sort: effectiveSort,
-        limit: 8,
-      });
-    } else {
+    let d = buildLocalSearchResponse(localKbBundle, query, {
+      course: kbActiveCourse,
+      courses: kbActiveCourse ? [] : scope.courses,
+      year: kbActiveYear,
+      kind: kbActiveKind,
+      family: kbActiveFamily,
+      sort: effectiveSort,
+      limit: 8,
+    });
+    if (!localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
+      const params = new URLSearchParams({ q: query, limit: "8" });
+      if (kbActiveCourse) params.set("course", kbActiveCourse);
+      if (kbActiveYear) params.set("year", kbActiveYear);
+      if (kbActiveKind) params.set("kind", kbActiveKind);
+      if (kbActiveFamily) params.set("family", kbActiveFamily);
+      if (effectiveSort && effectiveSort !== "relevance") params.set("sort", effectiveSort);
       const r = await fetch("/api/kb-search?" + params.toString());
       d = await r.json();
     }
@@ -1333,7 +1328,7 @@ async function runKbSearch(query) {
 // "Browse by course" — a no-query discovery entry point (ROADMAP: richer
 // empty state with a "browse by course" entry point). When the search box is
 // empty we show (a) a row of example searches and (b) a course grid; clicking
-// a course fetches /api/kb-browse?course=<name> and lists that course's notes
+// a course lists its notes from the cached private bundle
 // in the same card shape the search results use.
 // ---------------------------------------------------------------------------
 function exampleSearches() {
@@ -1488,7 +1483,7 @@ async function openCourse(course) {
 }
 
 // Render a compact related-notes preview inside a search-result card.
-// Reuses /api/kb-related so the cross-links match the detail-modal panel.
+// Reuses the same local related-note model as the detail-modal panel.
 function renderRelatedPreviewError(container, retry) {
   const state = relatedPreviewSurfaceModel({ state: "error" });
   const action = relatedPreviewRetryModel();
@@ -1524,15 +1519,10 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
   try {
     let related;
     const limit = relatedNotesLimit(loadKbSettings());
-    if (localKbBundle?.notes?.length) {
-      related = localRelatedFromBundle(localKbBundle, noteIndex, { limit });
-    } else {
+    related = localRelatedFromBundle(localKbBundle, noteIndex, { limit });
+    if (!related.length && !localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
       const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=${limit}`);
-      if (!r.ok) {
-        renderRelatedPreviewError(container, noteIndex);
-        restoreParentFocus();
-        return;
-      }
+      if (!r.ok) { renderRelatedPreviewError(container, noteIndex); restoreParentFocus(); return; }
       related = (await r.json()).related || [];
     }
     if (!related.length) {
@@ -2218,7 +2208,7 @@ function renderTutorSources(container, notes) {
 }
 
 // ---------------------------------------------------------------------------
-// Note-detail modal — open a full note by its bundle index (see /api/kb-note)
+// Note-detail modal — open a full note by its index in the private bundle.
 // ---------------------------------------------------------------------------
 async function openKbNote(index) {
   const modal = $("kbNoteModal");
@@ -2236,19 +2226,12 @@ async function openKbNote(index) {
   modal.hidden = false;
   try {
     let note;
-    if (localKbBundle?.notes?.length) {
-      note = localNoteFromBundle(localKbBundle, index);
-      if (!note) throw new Error("note not found in local knowledge base");
-    } else {
+    note = localNoteFromBundle(localKbBundle, index);
+    if (!note && window.__cwaLegacyCompatibility === true) {
       const r = await fetch("/api/kb-note?id=" + encodeURIComponent(index));
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        bodyEl.innerHTML = `<div class="empty">Couldn't load this note (${err.error || r.status}).</div>`;
-        if (titleEl) titleEl.textContent = "Note";
-        return;
-      }
-      note = await r.json();
+      if (r.ok) note = await r.json();
     }
+    if (!note) throw new Error("note not found in local knowledge base");
     if (titleEl) titleEl.textContent = note.t || "(untitled)";
     if (metaEl) metaEl.textContent = [note.course, note.y, note.topic].filter(Boolean).join("  ·  ");
     markNoteProgress(index);
@@ -2308,9 +2291,8 @@ async function renderRelatedNotes(index) {
   try {
     let related;
     const limit = relatedNotesLimit(loadKbSettings());
-    if (localKbBundle?.notes?.length) {
-      related = localRelatedFromBundle(localKbBundle, index, { limit });
-    } else {
+    related = localRelatedFromBundle(localKbBundle, index, { limit });
+    if (!related.length && !localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
       const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=" + limit);
       if (!r.ok) return;
       related = (await r.json()).related || [];
