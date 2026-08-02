@@ -91,8 +91,12 @@ export function browseKbBundle(bundle, course = "", { kind = "", family = "", so
   };
 }
 
-/** Load the user's cached KB, if one exists. */
 export async function loadKbBundle() {
+  const localHarness = typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+  const testDelay = localHarness ? Number(window.__cwaTestLoadDelayMs) : 0;
+  if (Number.isFinite(testDelay) && testDelay > 0) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(testDelay, 5000)));
+  }
   const record = await idbGet(BUNDLE_ID);
   return record?.data ? validateKbBundle(record.data) : null;
 }

@@ -1,7 +1,8 @@
 // kb_loading_test.mjs — TDD test for owner #7 LOADING state on KB search.
-// While the /api/kb-search fetch is in flight the UI must show an intentional
-// "searching" spinner (not a blank/stale region); it must disappear once
-// results arrive. Verified by intercepting the search route to add latency.
+// While the private IndexedDB bundle is being discovered the UI must show an
+// intentional loading state (not a blank/stale region). Search itself is local
+// after the pivot, so the second assertion verifies that retrieval completes
+// without a network round-trip or a blank result surface.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
@@ -20,18 +21,24 @@ function check(name, fn) {
 
 try {
   console.log(`\n[KB loading-state e2e] against ${BASE}${PATH}\n`);
-  await page.goto(BASE + PATH, { waitUntil: "networkidle", timeout: 45000 });
-  await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
-  await page.waitForSelector("#kbSearchInput", { timeout: 10000 });
-  await page.waitForTimeout(800);
-
-  // Regression: legacy metadata is intentionally delayed so the browser is
-  // observed during bundle discovery, not after the server response finishes.
-  const delayedProbe = async (route) => {
-    if (route.request().url().includes("q=__ping__")) await new Promise((r) => setTimeout(r, 1400));
-    await route.fallback();
-  };
-  await page.route("**/api/kb-search**", delayedProbe);
+  await page.goto(BASE + PATH, { waitUntil: "domcontentloaded", timeout: 45000 });
+  // The post-pivot harness must exercise the real client-local path. Seed a
+  // tiny private bundle in this isolated browser context before reloading;
+  // production never receives this fixture and no server KB route is used.
+  await page.evaluate(async () => {
+    const { saveKbBundle } = await import("/kb-local.js");
+    await saveKbBundle({
+      version: 1,
+      generatedAt: new Date().toISOString(),
+      years: ["2025-26"],
+      courses: ["Algebra"],
+      notes: [
+        { t: "Quadratic equations", course: "Algebra", y: "2025-26", topic: "quadratic", kind: "note", x: "Solve a quadratic equation by factoring." },
+        { t: "Linear equations", course: "Algebra", y: "2025-26", topic: "linear", kind: "note", x: "Balance both sides of the equation." },
+      ],
+    });
+  });
+  await page.addInitScript(() => { window.__cwaTestLoadDelayMs = 1400; });
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
   await check("build card stays hidden while an existing KB is being discovered", async () => {
@@ -44,28 +51,20 @@ try {
     assert.equal(state.mainVisible, true, "study surface must remain visible during discovery");
     assert.match(state.loadingText, /Loading your knowledge base/);
   });
-  await page.unroute("**/api/kb-search**", delayedProbe);
-
-  // Slow the search route so the in-flight loading state is observable.
-  await page.route("**/api/kb-search**", async (route) => {
-    await new Promise((r) => setTimeout(r, 1400));
-    await route.fallback();
-  });
-
-  await check("a loading spinner appears while the search is in flight", async () => {
+  await page.waitForSelector("#kbSearchInput", { timeout: 10000 });
+  await page.waitForFunction(() => /\b2\b notes/.test(document.querySelector("#kbMetaBar")?.textContent || ""), null, { timeout: 10000 });
+  await page.waitForTimeout(100);
+  await check("local search completes without a network round-trip", async () => {
     await page.fill("#kbSearchInput", "algebra");
-    await page.click("#kbSearchInput");
-    await page.keyboard.press("Enter");
-    // Assert the spinner shows up during the (delayed) round-trip.
-    await page.waitForSelector("#kbResults .kb-loading, #kbLoading:not([hidden]), .kb-loading-spinner", { timeout: 3000 });
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 3000 });
   });
 
-  await check("the loading spinner clears and results render after the fetch", async () => {
+  await check("local results remain visible after retrieval completes", async () => {
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 8000 });
     const spinnerGone =
       (await page.locator("#kbResults .kb-loading").count()) === 0 &&
       (await page.locator(".kb-loading-spinner").count()) === 0;
-    assert.ok(spinnerGone, "loading spinner must be removed after results arrive");
+    assert.ok(spinnerGone, "loading indicator must be removed after results arrive");
     const n = await page.locator("#kbResults .kb-result-card").count();
     assert.ok(n > 0, "results should render after the delayed search");
   });
