@@ -1074,11 +1074,29 @@ test("/api/kb-browse?course=<name> returns that course's notes sorted by recency
   // BEng Y1 has two notes (Random Biology Note, STAR Method).
   assert.ok(Array.isArray(d.notes) && d.notes.length === 2, "both BEng Y1 notes returned");
   assert.ok(d.notes.every((n) => n.course === "BEng Y1"), "every note is the requested course");
-  // Result shape must match searchNotes so the UI reuses rendering.
+  // Result shape must match searchNotes so the UI reuses card rendering.
   assert.ok("noteIndex" in d.notes[0] && "t" in d.notes[0], "result shape matches search");
   // Recency: 2023-24 note should rank above the 2022-23 note.
   const order = d.notes.map((n) => n.y);
   assert.ok(order.indexOf("2023-24") < order.indexOf("2022-23"), "newer notes first");
+});
+
+test("/api/kb-browse applies kind, family, and explicit sort filters", async () => {
+  await seed({
+    ...sampleBundle(),
+    notes: [
+      { ...sampleBundle().notes[0], kind: "assignment", family: "language" },
+      { ...sampleBundle().notes[1], kind: "note", family: "engineering" },
+      { ...sampleBundle().notes[2], kind: "assignment", family: "engineering" },
+    ],
+  });
+  const params = new URLSearchParams({ course: "BEng Y1", kind: "assignment", family: "engineering", sort: "title" });
+  const r = await kbBrowse(makeReq("/api/kb-browse?" + params));
+  assert.equal(r.status, 200);
+  const d = await r.json();
+  assert.deepEqual(d.notes.map((note) => ({ t: note.t, kind: note.kind, family: note.family })), [
+    { t: "STAR Method", kind: "assignment", family: "engineering" },
+  ]);
 });
 
 test("/api/kb-browse?course=<unknown> returns an empty notes list", async () => {

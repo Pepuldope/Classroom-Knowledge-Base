@@ -5,6 +5,7 @@
 // IDs, so it cannot overwrite the raw Classroom archive.
 
 import { idbGet, idbPut, idbDelete } from "./archive.js";
+import { makeSortFn } from "./kb-client-search.js";
 
 const BUNDLE_ID = "kb-bundle";
 const META_ID = "kb-meta";
@@ -34,9 +35,12 @@ export async function saveKbBundle(bundle) {
 }
 
 /** Build the no-network browse response for the user's local bundle. */
-export function browseKbBundle(bundle, course = "") {
+export function browseKbBundle(bundle, course = "", { kind = "", family = "", sort = "recency" } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const cleanCourse = String(course || "").trim();
+  const cleanKind = String(kind || "").trim();
+  const cleanFamily = String(family || "").trim();
+  const sortKey = new Set(["relevance", "recency", "course", "title"]).has(sort) ? sort : "recency";
   const browseSnippet = (note) => {
     const source = String(note?.s || note?.x || "").trim();
     return source.length > 200 ? `${source.slice(0, 200)}…` : source;
@@ -47,27 +51,32 @@ export function browseKbBundle(bundle, course = "") {
     generatedAt: bundle?.generatedAt || null,
     updatedAt: bundle?.generatedAt || null,
   };
+  const scopedNotes = notes.filter((note) =>
+    (!cleanCourse || (note?.course || "Uncategorised") === cleanCourse) &&
+    (!cleanKind || (note?.kind || "") === cleanKind) &&
+    (!cleanFamily || (note?.family || "") === cleanFamily)
+  );
   if (cleanCourse) {
     return {
       meta,
-      notes: notes
-        .map((note, noteIndex) => ({ note, noteIndex }))
-        .filter(({ note }) => (note?.course || "Uncategorised") === cleanCourse)
-        .sort((a, b) => String(b.note?.y || "").localeCompare(String(a.note?.y || "")))
-        .map(({ note, noteIndex }) => ({
+      notes: scopedNotes
+        .map((note) => ({
           t: note?.t || "",
           course: note?.course || "",
           y: note?.y || "",
           topic: note?.topic || null,
+          kind: note?.kind || "",
+          family: note?.family || "",
           p: note?.p || "",
-          noteIndex,
+          noteIndex: notes.indexOf(note),
           _score: 0,
           _snippet: browseSnippet(note),
-        })),
+        }))
+        .sort(makeSortFn(sortKey)),
     };
   }
   const map = new Map();
-  notes.forEach((note) => {
+  scopedNotes.forEach((note) => {
     const name = note?.course || "Uncategorised";
     const entry = map.get(name) || { course: name, count: 0, years: new Set() };
     entry.count += 1;

@@ -36,3 +36,17 @@ test("browseKbBundle returns recency-sorted course notes with snippets", () => {
     { t: "Geometry", noteIndex: 2, _snippet: "Triangles" },
   ]);
 });
+
+test("browseKbBundle applies kind, family, and explicit sort filters locally", () => {
+  const result = browseKbBundle({
+    ...bundle,
+    notes: [
+      { ...bundle.notes[0], kind: "assignment", family: "language" },
+      { ...bundle.notes[1], kind: "note", family: "science" },
+      { ...bundle.notes[2], kind: "assignment", family: "math" },
+    ],
+  }, "Math", { kind: "assignment", family: "math", sort: "title" });
+  assert.deepEqual(result.notes.map((note) => ({ t: note.t, kind: note.kind, family: note.family })), [
+    { t: "Geometry", kind: "assignment", family: "math" },
+  ]);
+});

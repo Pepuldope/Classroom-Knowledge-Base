@@ -1,5 +1,6 @@
 import { jsonResponse } from "./_helpers.js";
 import { getBundle, getMeta } from "./kb-store.js";
+import { makeSortFn } from "./kb-retrieval.js";
 
 export const config = { runtime: "edge" };
 
@@ -20,6 +21,8 @@ function toResult(note, index) {
     course: note.course || "",
     y: note.y || "",
     topic: note.topic || null,
+    kind: note.kind || "",
+    family: note.family || "",
     p: note.p || "",
     noteIndex: index,
     _score: 0,
@@ -29,7 +32,8 @@ function toResult(note, index) {
 
 /**
  * GET /api/kb-browse                  -> { meta, courses:[{course,count,years}] }
- * GET /api/kb-browse?course=<name>    -> { meta, notes:[...] } (recency-sorted)
+ * GET /api/kb-browse?course=<name>&kind=<kind>&family=<family>&sort=<sort>
+ *                                      -> { meta, notes:[...] }
  *
  * Legacy compatibility route; active browse runs over the user's local bundle.
  * This is the no-query "discover by course" entry point the KB was missing — a student
@@ -39,16 +43,28 @@ export default async function handler(req) {
   if (req.method !== "GET") return jsonResponse({ error: "Method not allowed" }, 405);
   const url = new URL(req.url);
   const course = (url.searchParams.get("course") || "").trim();
+  const kind = (url.searchParams.get("kind") || "").trim();
+  const family = (url.searchParams.get("family") || "").trim();
+  const requestedSort = (url.searchParams.get("sort") || "recency").trim();
+  const sort = new Set(["relevance", "recency", "course", "title"]).has(requestedSort)
+    ? requestedSort
+    : "recency";
 
   const bundle = await getBundle();
   if (!bundle || !Array.isArray(bundle.notes)) {
     return jsonResponse({ meta: await getMeta(), courses: [], notes: [] }, 200);
   }
 
+  const scopedNotes = bundle.notes.filter((n) =>
+    (!course || (n.course || "Uncategorised") === course) &&
+    (!kind || (n.kind || "") === kind) &&
+    (!family || (n.family || "") === family)
+  );
+
   if (!course) {
     // Aggregate distinct courses with note counts + the years they span.
     const map = new Map();
-    for (const n of bundle.notes) {
+    for (const n of scopedNotes) {
       const c = n.course || "Uncategorised";
       let entry = map.get(c);
       if (!entry) { entry = { course: c, count: 0, years: new Set() }; map.set(c, entry); }
@@ -62,10 +78,9 @@ export default async function handler(req) {
   }
 
   // Notes for the selected course, newest year first.
-  const notes = bundle.notes
-    .map((n, i) => ({ n, i }))
-    .filter(({ n }) => (n.course || "Uncategorised") === course)
-    .sort((a, b) => String(b.n.y || "").localeCompare(String(a.n.y || "")))
-    .map(({ n, i }) => toResult(n, i));
+  const notes = scopedNotes
+    .map((n) => ({ n, i: bundle.notes.indexOf(n) }))
+    .map(({ n, i }) => toResult(n, i))
+    .sort(makeSortFn(sort));
   return jsonResponse({ meta: await getMeta(), notes }, 200);
 }
