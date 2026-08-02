@@ -1,13 +1,16 @@
 import { jsonResponse } from "./_helpers.js";
 import { getBundle } from "./kb-store.js";
 import { relatedNotes } from "./kb-retrieval.js";
+import { relatedResponseCacheState, RELATED_RESPONSE_CACHE_TTL_MS } from "./kb-related-cache.js";
 
 export const config = { runtime: "edge" };
 
-function timedJsonResponse(start, body, status = 200) {
-  const timing = `kb-related;dur=${Date.now() - start}`;
+function timedJsonResponse(start, body, status = 200, metric = "kb-related") {
+  const timing = `${metric};dur=${Date.now() - start}`;
   return jsonResponse(body, status, { "Server-Timing": timing, "X-Server-Timing": timing });
 }
+
+let relatedResponseCache = null;
 
 /**
  * GET /api/kb-related?id=<index>&limit=5
@@ -32,7 +35,18 @@ export default async function handler(req) {
     return timedJsonResponse(start, { error: "no knowledge base" }, 404);
   }
   if (id >= bundle.notes.length) return timedJsonResponse(start, { error: "note not found" }, 404);
+  const cacheKey = `${id}:${limit}`;
+  const cachedResponse = relatedResponseCacheState(
+    relatedResponseCache,
+    cacheKey,
+    bundle,
+    Date.now(),
+    RELATED_RESPONSE_CACHE_TTL_MS,
+  );
+  if (cachedResponse) return timedJsonResponse(start, cachedResponse, 200, "kb-related;desc=cache");
   const target = bundle.notes[id];
   const related = relatedNotes(bundle.notes, target, { limit });
-  return timedJsonResponse(start, { related });
+  const response = { related };
+  relatedResponseCache = { key: cacheKey, bundle, response, cachedAt: Date.now() };
+  return timedJsonResponse(start, response);
 }

@@ -26,6 +26,7 @@ import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
+import { relatedResponseCacheState, RELATED_RESPONSE_CACHE_TTL_MS } from "../api/kb-related-cache.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldProbeLegacyKb, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
@@ -661,6 +662,28 @@ test("/api/kb-related returns related notes for an index", async () => {
   assert.ok(!rd.related.some((n) => n.noteIndex === idx), "self excluded");
 });
 
+test("/api/kb-related invalidates cached responses after incremental ingestion", async () => {
+  await saveBundle({
+    version: 1,
+    source: "vault",
+    notes: [
+      { t: "Cache target", course: "Cache Course", topic: "Topic", y: "2025", x: "target", p: "cache/target" },
+      { t: "Old related", course: "Cache Course", topic: "Topic", y: "2025", x: "old", p: "cache/old" },
+    ],
+  });
+  const first = await kbRelated(makeReq("/api/kb-related?id=0&limit=5"));
+  assert.equal(first.status, 200);
+  const second = await kbRelated(makeReq("/api/kb-related?id=0&limit=5"));
+  assert.match(second.headers.get("Server-Timing") || "", /desc=cache/, "repeat lookup should use the bounded response cache");
+
+  const { appendBundle } = await import("../api/kb-store.js");
+  await appendBundle({ notes: [{ t: "New related", course: "Cache Course", topic: "Topic", y: "2026", x: "new", p: "cache/new" }] });
+  const afterWrite = await kbRelated(makeReq("/api/kb-related?id=0&limit=5"));
+  const data = await afterWrite.json();
+  assert.doesNotMatch(afterWrite.headers.get("Server-Timing") || "", /desc=cache/, "an ingestion write must force a fresh related lookup");
+  assert.ok(data.related.some((note) => note.t === "New related"), "fresh related response includes the incrementally ingested note");
+});
+
 test("/api/kb-related rejects out-of-range id with 404", async () => {
   await seed(sampleBundle());
   const rr = await kbRelated(makeReq("/api/kb-related?id=9999"));
@@ -1006,6 +1029,22 @@ test("resetRelatedTokenCache clears cached tokens and diagnostics", () => {
   const cold = relatedTokenCacheStats();
   assert.equal(cold.hits, 0, "reset should remove the prior target-token hit");
   assert.ok(cold.misses > 0 && cold.misses >= warm.misses, "reset preview should tokenize again");
+});
+
+test("related response cache rejects an entry after the ingestion bundle object changes", () => {
+  const oldBundle = { notes: [{ t: "Old" }] };
+  const newBundle = { notes: [{ t: "New" }] };
+  const response = { related: [{ t: "Old" }] };
+  const entry = { key: "0:5", bundle: oldBundle, response, cachedAt: 100 };
+  assert.deepEqual(
+    relatedResponseCacheState(entry, "0:5", oldBundle, 100 + RELATED_RESPONSE_CACHE_TTL_MS - 1),
+    response,
+  );
+  assert.equal(
+    relatedResponseCacheState(entry, "0:5", newBundle, 100 + RELATED_RESPONSE_CACHE_TTL_MS - 1),
+    null,
+    "a post-ingestion bundle must never reuse the old related response",
+  );
 });
 
 test("related cache summary formats bounded content-free diagnostics", async () => {
