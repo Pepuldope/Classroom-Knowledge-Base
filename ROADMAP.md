@@ -167,7 +167,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Continuity: verify Archive, Planner, and Knowledge Base all converge on the same local auth-session record after sign-in and sign-out (2026-08-01).
 - [x] Privacy: add a browser assertion that the tutor request payload stays bounded when a search returns many matching notes. Shipped this run: client-side grounding now strips source paths and caps each selected note before `/api/tutor` serialization; the many-match regression stays under 24,000 characters.
 - [ ] Continuity: verify the KB rebuild card remains hidden during a resumed incremental Classroom build and returns only after a true empty state.
-- [ ] Accessibility: verify the in-progress KB build status remains announced after the onboarding card is hidden.
+- [x] Accessibility: verify the in-progress KB build status remains announced after the onboarding card is hidden. Shipped 2026-08-02: build status now has a polite atomic live region and course-count progress announcements in both integrated and harness surfaces.
 - [ ] Privacy: verify interrupted local Classroom builds do not persist partial credentials or raw token values.
 - [x] Accessibility: add a narrow-screen browser smoke for related-preview status announcements and retry focus restoration (2026-08-01): `kb_related_mobile_status_test.mjs` now checks the real loading/error status layout, long-message wrapping, retry visibility, and no horizontal overflow at 390px; the gate is wired into `scripts/test.sh`.
 ## 🚧 Blocked (pinged — needs Pepuldo)

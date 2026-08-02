@@ -23,6 +23,7 @@ import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./stu
 import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
+import { kbBuildProgressStatusModel } from "./kb-local-status.js";
 import { buildTutorRetrievedNotes, tutorRequestNotesModel } from "./kb-tutor-context.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
@@ -993,7 +994,13 @@ async function doScrape(token) {
   if (onboarding) onboarding.hidden = buildSurface.onboardingHidden;
   if (main) main.hidden = !buildSurface.mainVisible;
   if (panel) panel.hidden = !buildSurface.panelVisible;
-  if (statusEl) { statusEl.textContent = "Reading your courses privately in this browser…"; statusEl.classList.remove("error"); }
+  if (statusEl) {
+    statusEl.setAttribute("role", "status");
+    statusEl.setAttribute("aria-live", "polite");
+    statusEl.setAttribute("aria-atomic", "true");
+    statusEl.textContent = "Reading your courses privately in this browser…";
+    statusEl.classList.remove("error");
+  }
   if (logEl) logEl.innerHTML = "";
   if (progress) progress.style.width = "5%";
   const log = (msg) => { if (logEl) { const li = document.createElement("div"); li.textContent = msg; logEl.appendChild(li); } };
@@ -1012,7 +1019,11 @@ async function doScrape(token) {
   try {
     const archive = await buildArchiveFromClassroom(gFetch, {
       onProgress: ({ message, done, total }) => {
-        if (message) { if (statusEl) statusEl.textContent = message; log(message); }
+        if (message) {
+          const status = kbBuildProgressStatusModel({ message, done, total });
+          if (statusEl) statusEl.textContent = status.message;
+          log(message);
+        }
         if (progress && total) progress.style.width = `${Math.round((done / total) * 90) + 5}%`;
       },
     });
