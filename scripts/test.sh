@@ -35,6 +35,11 @@ node --test tests/auth-redirect.test.js
 AUTH_REDIRECT_OK=$?
 if [ "$AUTH_REDIRECT_OK" -ne 0 ]; then echo "redirect sign-in tests FAILED"; exit 1; fi
 
+echo "==> Interrupted Classroom build privacy tests"
+node --test tests/archive-builder-abort.test.js
+ARCHIVE_ABORT_OK=$?
+if [ "$ARCHIVE_ABORT_OK" -ne 0 ]; then echo "interrupted Classroom build tests FAILED"; exit 1; fi
+
 echo "==> Study streak model tests"
 node scripts/study_streak_test.mjs
 STREAK_OK=$?

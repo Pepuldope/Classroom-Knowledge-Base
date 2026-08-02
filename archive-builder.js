@@ -452,6 +452,7 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
           fetchFacetGraceful(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${course.id}/announcements?pageSize=${PAGE_SIZE}&announcementStates=PUBLISHED${pt ? `&pageToken=${pt}` : ""}`, "announcements", signal, failCounter),
           fetchFacetGraceful(gFetch, (pt) => `${CLASSROOM_BASE}/courses/${course.id}/courseWork/-/studentSubmissions?userId=me&pageSize=${PAGE_SIZE}${pt ? `&pageToken=${pt}` : ""}`, "studentSubmissions", signal, failCounter),
         ]);
+        if (signal && signal.aborted) throw abortError();
         courseData[course.id] = { topics, courseWork, courseWorkMaterials, announcements, submissions };
         failures += failCounter.count;
         const noteCount = courseWork.length + courseWorkMaterials.length + (announcements.length > 0 ? 1 : 0);
@@ -467,6 +468,7 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
 
   const workerCount = Math.max(1, Math.min(COURSE_CONCURRENCY, courses.length));
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  if (signal && signal.aborted) throw abortError();
 
   onProgress({ phase: "build", message: "Building your archive…" });
   const bundle = bundleFromRaw({ courses, courseData });
