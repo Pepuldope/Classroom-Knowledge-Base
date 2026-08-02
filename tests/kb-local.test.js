@@ -50,3 +50,11 @@ test("browseKbBundle applies kind, family, and explicit sort filters locally", (
     { t: "Geometry", kind: "assignment", family: "math" },
   ]);
 });
+
+test("browseKbBundle applies a year filter alongside course facets", () => {
+  const result = browseKbBundle(bundle, "Math", { year: "2024" });
+
+  assert.deepEqual(result.notes.map((note) => ({ t: note.t, y: note.y, noteIndex: note.noteIndex })), [
+    { t: "Geometry", y: "2024", noteIndex: 2 },
+  ]);
+});

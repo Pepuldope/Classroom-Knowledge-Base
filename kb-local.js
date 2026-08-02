@@ -35,9 +35,10 @@ export async function saveKbBundle(bundle) {
 }
 
 /** Build the no-network browse response for the user's local bundle. */
-export function browseKbBundle(bundle, course = "", { kind = "", family = "", sort = "recency" } = {}) {
+export function browseKbBundle(bundle, course = "", { year = "", kind = "", family = "", sort = "recency" } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const cleanCourse = String(course || "").trim();
+  const cleanYear = String(year || "").trim();
   const cleanKind = String(kind || "").trim();
   const cleanFamily = String(family || "").trim();
   const sortKey = new Set(["relevance", "recency", "course", "title"]).has(sort) ? sort : "recency";
@@ -53,6 +54,7 @@ export function browseKbBundle(bundle, course = "", { kind = "", family = "", so
   };
   const scopedNotes = notes.filter((note) =>
     (!cleanCourse || (note?.course || "Uncategorised") === cleanCourse) &&
+    (!cleanYear || (note?.y || "") === cleanYear) &&
     (!cleanKind || (note?.kind || "") === cleanKind) &&
     (!cleanFamily || (note?.family || "") === cleanFamily)
   );
