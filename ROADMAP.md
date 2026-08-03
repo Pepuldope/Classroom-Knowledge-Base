@@ -175,8 +175,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Accessibility: add a narrow-screen browser smoke for related-preview status announcements and retry focus restoration (2026-08-01): `kb_related_mobile_status_test.mjs` now checks the real loading/error status layout, long-message wrapping, retry visibility, and no horizontal overflow at 390px; the gate is wired into `scripts/test.sh`.
 - [x] KB: expose the local browse year facet alongside course/type/class-type filters so students can narrow a course's notes without starting a text search (2026-08-03).
 - [x] KB: persist the selected browse course/year filter locally and restore it when reopening Browse (2026-08-03).
-- [x] Privacy: add route-level regression coverage proving legacy compatibility timing and error responses never echo note titles, snippets, paths, or bodies (2026-08-03).
-- [ ] Continuity: persist and restore an interrupted local Classroom build checkpoint without exposing partial credentials or showing a stale rebuild card.
+- [x] Privacy: route-level regression coverage proving legacy compatibility timing and error responses never echo note titles, snippets, paths, or bodies (2026-08-03).
+- [x] Continuity: persist and restore an interrupted local Classroom build checkpoint without exposing partial credentials or showing a stale rebuild card (2026-08-03).
+- [x] UX: show a bounded course-by-course resume summary before restarting an interrupted local Classroom build (2026-08-03).
+- [ ] Continuity: verify the KB rebuild card remains hidden during a resumed incremental Classroom build and returns only after a true empty state.
+- [ ] Privacy: add a browser assertion that resumed checkpoint records contain no authorization headers or token-shaped values.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item

@@ -40,6 +40,11 @@ node --test tests/archive-builder-abort.test.js
 ARCHIVE_ABORT_OK=$?
 if [ "$ARCHIVE_ABORT_OK" -ne 0 ]; then echo "interrupted Classroom build tests FAILED"; exit 1; fi
 
+echo "==> Resumable Classroom build checkpoint tests"
+node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.js
+CHECKPOINT_OK=$?
+if [ "$CHECKPOINT_OK" -ne 0 ]; then echo "resumable Classroom checkpoint tests FAILED"; exit 1; fi
+
 echo "==> Study streak model tests"
 node scripts/study_streak_test.mjs
 STREAK_OK=$?

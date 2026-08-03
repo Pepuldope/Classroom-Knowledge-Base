@@ -9,6 +9,7 @@ import { makeSortFn } from "./kb-client-search.js";
 
 const BUNDLE_ID = "kb-bundle";
 const META_ID = "kb-meta";
+const BUILD_CHECKPOINT_ID = "kb-build-checkpoint";
 
 /** Validate the small public contract shared by KB ingestion and local storage. */
 export function validateKbBundle(bundle) {
@@ -122,4 +123,19 @@ export async function loadKbBundle() {
 export async function removeKbBundle() {
   await idbDelete(BUNDLE_ID);
   await idbDelete(META_ID);
+}
+
+/** Persist only resumable Classroom course data; never persist OAuth tokens. */
+export async function saveKbBuildCheckpoint(checkpoint) {
+  await idbPut({ id: BUILD_CHECKPOINT_ID, data: checkpoint });
+  return checkpoint;
+}
+
+export async function loadKbBuildCheckpoint() {
+  const record = await idbGet(BUILD_CHECKPOINT_ID);
+  return record?.data || null;
+}
+
+export async function removeKbBuildCheckpoint() {
+  await idbDelete(BUILD_CHECKPOINT_ID);
 }

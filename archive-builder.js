@@ -418,15 +418,17 @@ const noop = () => {};
  * throughout for a live log + progress bar. `signal` (an AbortSignal) lets
  * the caller cancel cleanly — a pending abort surfaces as an `AbortError`.
  */
-export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, signal } = {}) {
-  onProgress({ phase: "courses", message: "Finding your courses…" });
-  const courses = await fetchAllPages(
-    gFetch,
-    (pageToken) =>
-      `${CLASSROOM_BASE}/courses?courseStates=ACTIVE&courseStates=ARCHIVED&pageSize=${PAGE_SIZE}${pageToken ? `&pageToken=${pageToken}` : ""}`,
-    "courses",
-    signal
-  );
+export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, signal, checkpoint = null, saveCheckpoint = noop } = {}) {
+  onProgress({ phase: "courses", message: checkpoint?.courses?.length ? "Resuming your saved course progress…" : "Finding your courses…" });
+  const courses = Array.isArray(checkpoint?.courses) && checkpoint.courses.length
+    ? checkpoint.courses
+    : await fetchAllPages(
+      gFetch,
+      (pageToken) =>
+        `${CLASSROOM_BASE}/courses?courseStates=ACTIVE&courseStates=ARCHIVED&pageSize=${PAGE_SIZE}${pageToken ? `&pageToken=${pageToken}` : ""}`,
+      "courses",
+      signal
+    );
   onProgress({
     phase: "courses",
     message: `Found ${courses.length} course${courses.length === 1 ? "" : "s"}.`,
@@ -434,7 +436,9 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
     total: courses.length,
   });
 
-  const courseData = {};
+  const courseData = checkpoint?.courseData && typeof checkpoint.courseData === "object"
+    ? { ...checkpoint.courseData }
+    : {};
   let failures = 0;
   let completed = 0;
   let cursor = 0;
@@ -443,6 +447,11 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
     while (cursor < courses.length) {
       if (signal && signal.aborted) throw abortError();
       const course = courses[cursor++];
+      if (courseData[course.id]) {
+        completed++;
+        onProgress({ phase: "course", message: `Resuming course ${completed}/${courses.length}… ${course.name || course.id}`, done: completed, total: courses.length });
+        continue;
+      }
       const failCounter = { count: 0 };
       try {
         const [topics, courseWork, courseWorkMaterials, announcements, submissions] = await Promise.all([
@@ -454,6 +463,7 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
         ]);
         if (signal && signal.aborted) throw abortError();
         courseData[course.id] = { topics, courseWork, courseWorkMaterials, announcements, submissions };
+        await saveCheckpoint({ courses, courseData });
         failures += failCounter.count;
         const noteCount = courseWork.length + courseWorkMaterials.length + (announcements.length > 0 ? 1 : 0);
         onProgress({ phase: "course", message: `Fetching course ${completed + 1}/${courses.length}… ${course.name} (${noteCount} note${noteCount === 1 ? "" : "s"})`, done: completed + 1, total: courses.length });

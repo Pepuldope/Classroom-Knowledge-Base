@@ -12,3 +12,47 @@ export function kbBuildProgressStatusModel({ message = "", done = 0, total = 0 }
     : "";
   return { message: `${label}${count}`, tone: "polite", live: "polite" };
 }
+
+/** Normalize a resumable, token-free Classroom build checkpoint. */
+export function kbBuildCheckpointModel(input = null) {
+  const courses = Array.isArray(input?.courses)
+    ? input.courses.filter((course) => course && course.id).map(({ id, name, section, description, ownerId, creationTime }) => ({
+      id: String(id),
+      ...(name ? { name: String(name) } : {}),
+      ...(section ? { section: String(section) } : {}),
+      ...(description ? { description: String(description) } : {}),
+      ...(ownerId ? { ownerId: String(ownerId) } : {}),
+      ...(creationTime ? { creationTime: String(creationTime) } : {}),
+    }))
+    : [];
+  const sourceData = input?.courseData && typeof input.courseData === "object" && !Array.isArray(input.courseData)
+    ? input.courseData
+    : {};
+  const courseData = Object.fromEntries(Object.entries(sourceData).filter(([id, value]) =>
+    courses.some((course) => course.id === id) && value && typeof value === "object" && !Array.isArray(value),
+  ));
+  return {
+    version: 1,
+    courses,
+    courseData,
+    completedCourseIds: courses.filter((course) => courseData[course.id]).map((course) => course.id),
+    showBuildCard: courses.length === 0 || Object.keys(courseData).length === 0,
+  };
+}
+
+/** Summarize resumable progress without including assignment or note content. */
+export function kbBuildResumeSummaryModel(input = null) {
+  const checkpoint = kbBuildCheckpointModel(input);
+  const completedCourses = checkpoint.courses.filter((course) => checkpoint.courseData[course.id]);
+  const names = completedCourses.map((course) => course.name || course.id).slice(0, 3);
+  const remaining = Math.max(0, checkpoint.courses.length - completedCourses.length);
+  const preview = names.join(", ");
+  const suffix = remaining > 0 ? ` (+${remaining} more)` : "";
+  return {
+    completed: completedCourses.length,
+    total: checkpoint.courses.length,
+    names,
+    remaining,
+    label: `Completed ${completedCourses.length} of ${checkpoint.courses.length} courses${preview ? `: ${preview}` : ""}${suffix}.`,
+  };
+}

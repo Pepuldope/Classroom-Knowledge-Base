@@ -16,14 +16,14 @@
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
-import { loadKbBundle, saveKbBundle, removeKbBundle, browseKbBundle, browseYearFacet } from "./kb-local.js";
+import { loadKbBundle, saveKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
 import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
-import { kbBuildProgressStatusModel } from "./kb-local-status.js";
+import { kbBuildProgressStatusModel, kbBuildCheckpointModel, kbBuildResumeSummaryModel } from "./kb-local-status.js";
 import { buildTutorRetrievedNotes, tutorRequestNotesModel } from "./kb-tutor-context.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
@@ -576,8 +576,10 @@ export async function refreshKb() {
   if (metaBar) metaBar.innerHTML = '<span class="kb-loading-inline">Loading your knowledge base…</span>';
   if (main) main.hidden = false;
   let meta = null;
+  let checkpoint = null;
   try {
     localKbBundle = await loadKbBundle();
+    checkpoint = kbBuildCheckpointModel(await loadKbBuildCheckpoint().catch(() => null));
     renderStudyProgress();
     renderReviewDigest();
     if (localKbBundle?.notes?.length) {
@@ -592,7 +594,11 @@ export async function refreshKb() {
       if (main) main.hidden = false;
       if (onboarding) onboarding.hidden = true;
     }
-  } catch {}
+  } catch (error) {
+    localKbBundle = null;
+    checkpoint = null;
+    console.warn("[KB] local state discovery failed", error?.name || "unknown");
+  }
   if (!localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
     try {
       const r = await fetch("/api/kb-search?q=__ping__");
@@ -603,9 +609,20 @@ export async function refreshKb() {
     } catch {}
   }
   const hasDb = !!(meta && meta.noteCount > 0);
-  const surface = kbBuildSurfaceModel({ state: hasDb ? "populated" : "empty" });
+  const hasCheckpoint = !hasDb && checkpoint && checkpoint.completedCourseIds.length > 0;
+  const surface = kbBuildSurfaceModel({ state: hasDb || hasCheckpoint ? "populated" : "empty" });
   if (onboarding) onboarding.hidden = !surface.showBuildCard;
   if (main) main.hidden = !surface.showMain;
+  if (hasCheckpoint) {
+    if (buildPanel) buildPanel.hidden = false;
+    const resume = $("kbResumeBuildBtn");
+    if (resume) resume.hidden = false;
+    const status = $("kbBuildStatus");
+    if (status) {
+      const summary = kbBuildResumeSummaryModel(checkpoint);
+      status.textContent = `${summary.label} Resume when signed in.`;
+    }
+  }
   if (hasDb) {
     renderKbMeta(meta);
     void checkForClassroomChanges(localKbBundle);
@@ -854,6 +871,7 @@ export function wireKbEvents() {
   kbActiveFamily = loadedSearchState.family;
   kbActiveSort = loadedSearchState.sort;
   const buildBtn = $("kbBuildBtn");
+  const resumeBtn = $("kbResumeBuildBtn");
   const fileLink = $("kbLoadFileLink");
   const fileInput = $("kbFileInput");
   const tutorOpen = $("kbTutorOpen");
@@ -864,6 +882,7 @@ export function wireKbEvents() {
   const tutorNewTopic = $("kbTutorNewTopic");
 
   buildBtn?.addEventListener("click", () => startScrape());
+  resumeBtn?.addEventListener("click", () => startScrape());
   fileLink?.addEventListener("click", () => fileInput?.click());
   fileInput?.addEventListener("change", (e) => handleKbFile(e));
 
@@ -975,7 +994,11 @@ function currentAccessToken() {
   return (typeof window !== "undefined" && window.__cwaAccessToken) || null;
 }
 
+let kbBuildInFlight = false;
+
 export async function startScrape() {
+  if (kbBuildInFlight) return;
+  kbBuildInFlight = true;
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
   const showStatus = (msg, isError) => {
@@ -987,25 +1010,27 @@ export async function startScrape() {
   if (!accessToken) {
     // Need a fresh Classroom token with the read-only scopes.
     if (!window.__cwaTokenClient) {
+      kbBuildInFlight = false;
       showStatus("Sign in with Google first (use the top-right button), then try again.", true);
       console.warn("[KB] startScrape: no token and no Google token client available.");
       return;
     }
     window.__cwaTokenClient.callback = (resp) => {
-      if (resp.error) { showStatus("Google sign-in failed: " + resp.error, true); return; }
+      if (resp.error) { kbBuildInFlight = false; showStatus("Google sign-in failed: " + resp.error, true); return; }
       doScrape(resp.access_token);
     };
     try {
       // Always show the account chooser so students can switch Classroom accounts;
       // scopes here MUST include the read-only set (see SCOPES in app.js).
       window.__cwaTokenClient.requestAccessToken({ prompt: INTERACTIVE_OAUTH_PROMPT });
-    } catch (e) { showStatus("Could not start Google sign-in: " + e.message, true); }
+    } catch (e) { kbBuildInFlight = false; showStatus("Could not start Google sign-in: " + e.message, true); }
     return;
   }
   doScrape(accessToken);
 }
 
 async function doScrape(token) {
+  const checkpoint = kbBuildCheckpointModel(await loadKbBuildCheckpoint().catch(() => null));
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
   const logEl = $("kbBuildLog");
@@ -1040,6 +1065,8 @@ async function doScrape(token) {
   };
   try {
     const archive = await buildArchiveFromClassroom(gFetch, {
+      checkpoint: checkpoint.showBuildCard ? null : checkpoint,
+      saveCheckpoint: (next) => saveKbBuildCheckpoint(kbBuildCheckpointModel(next)),
       onProgress: ({ message, done, total }) => {
         if (message) {
           const status = kbBuildProgressStatusModel({ message, done, total });
@@ -1051,6 +1078,7 @@ async function doScrape(token) {
     });
     const bundle = kbBundleFromClassroomArchive(archive);
     localKbBundle = await saveKbBundle(bundle);
+    await removeKbBuildCheckpoint();
     if (progress) progress.style.width = "100%";
     if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
     setTimeout(() => refreshKb(), 600);
@@ -1062,6 +1090,8 @@ async function doScrape(token) {
       return;
     }
     setKbBuildError(e.message);
+  } finally {
+    kbBuildInFlight = false;
   }
 }
 
