@@ -139,6 +139,7 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
 
 const KB_SETTINGS_KEY = "cwa_kb_settings";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
+const KB_BROWSE_STATE_KEY = "cwa_kb_browse_state";
 const KB_COPY_HISTORY_KEY = "cwa_kb_copy_history";
 let latestCopySearchContextText = "";
 
@@ -167,6 +168,25 @@ export function kbSearchStateModel(value = {}) {
     family: text("family"),
     sort: KB_SEARCH_SORTS.has(input.sort) ? input.sort : "relevance",
   };
+}
+
+/** Normalize the browser-local course/year selection used by Browse. */
+export function kbBrowseStateModel(value = {}) {
+  const input = value && typeof value === "object" ? value : {};
+  const text = (key) => typeof input[key] === "string" ? input[key].trim() : "";
+  return { course: text("course"), year: text("year") };
+}
+
+function loadKbBrowseState() {
+  try {
+    return kbBrowseStateModel(JSON.parse(localStorage.getItem(KB_BROWSE_STATE_KEY) || "null"));
+  } catch { return kbBrowseStateModel(); }
+}
+
+function saveKbBrowseState(value) {
+  const state = kbBrowseStateModel(value);
+  try { localStorage.setItem(KB_BROWSE_STATE_KEY, JSON.stringify(state)); } catch {}
+  return state;
 }
 
 export function initialKbSearchState(saved, settings = {}) {
@@ -886,6 +906,7 @@ export function wireKbEvents() {
     const yearLabel = $("kbBrowseYearLabel");
     if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
     if (yearLabel) yearLabel.hidden = true;
+    saveKbBrowseState();
   });
 
   // Keyboard shortcuts (agent-proposed backlog):
@@ -1097,10 +1118,9 @@ async function runKbSearch(query) {
     const chips = $("kbFilterChips");
     if (chips) chips.hidden = true;
     // No query → reveal the "discover by course" browse panel + example searches.
-    showBrowsePanel();
+    showBrowsePanel({ restore: false });
     return;
   }
-  // A real query supersedes browse; hide the browse panel.
   hideBrowsePanel();
   // Intentional IN-FLIGHT state: show a spinner so the brief fetch round-trip
   // (the KB reassembles 13 KV shards) never looks like a frozen/blank panel.
@@ -1358,18 +1378,21 @@ function renderExamples() {
   wrap.hidden = false;
 }
 
-function showBrowsePanel() {
+function showBrowsePanel({ restore = true } = {}) {
   renderExamples();
   const panel = $("kbBrowse");
   if (panel) panel.hidden = false;
-  // Fresh visit → show the course grid, hide the per-course notes list.
+  // Restore the last local course/year when it still exists in this bundle.
   const notesEl = $("kbBrowseNotes");
   if (notesEl) notesEl.hidden = true;
   const yearSelect = $("kbBrowseYear");
   const yearLabel = $("kbBrowseYearLabel");
   if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
   if (yearLabel) yearLabel.hidden = true;
-  loadBrowseCourses();
+  const saved = restore ? loadKbBrowseState() : kbBrowseStateModel();
+  const hasCourse = restore && saved.course && Array.isArray(localKbBundle?.notes) && localKbBundle.notes.some((note) => (note?.course || "Uncategorised") === saved.course);
+  if (hasCourse) openCourse(saved.course, saved.year);
+  else loadBrowseCourses();
 }
 
 function hideBrowsePanel() {
@@ -1419,7 +1442,8 @@ async function loadBrowseCourses() {
 
 async function openCourse(course, year = "") {
   kbCurrentCourse = String(course || "").trim();
-  const selectedYear = String(year || "").trim();
+  let selectedYear = String(year || "").trim();
+  saveKbBrowseState({ course: kbCurrentCourse, year: selectedYear });
   const list = $("kbBrowseCourses");
   const notesEl = $("kbBrowseNotes");
   const back = $("kbBrowseBack");
@@ -1435,6 +1459,8 @@ async function openCourse(course, year = "") {
       yearSelect.appendChild(option);
     }
     yearSelect.value = years.includes(selectedYear) ? selectedYear : "";
+    selectedYear = yearSelect.value;
+    saveKbBrowseState({ course: kbCurrentCourse, year: selectedYear });
     yearSelect.hidden = years.length === 0;
     if (yearLabel) yearLabel.hidden = years.length === 0;
     yearSelect.onchange = () => openCourse(kbCurrentCourse, yearSelect.value);

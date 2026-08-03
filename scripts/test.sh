@@ -95,6 +95,11 @@ node --test tests/kb-local-year-facet.test.js
 KB_LOCAL_YEAR_OK=$?
 if [ "$KB_LOCAL_YEAR_OK" -ne 0 ]; then echo "KB local year facet tests FAILED"; exit 1; fi
 
+echo "==> KB local browse state model tests"
+node --test tests/kb-browse-state.test.js
+KB_BROWSE_STATE_OK=$?
+if [ "$KB_BROWSE_STATE_OK" -ne 0 ]; then echo "KB browse state tests FAILED"; exit 1; fi
+
 echo "==> Live-check mitigation classifier tests"
 node --test tests/live-http.test.js
 LIVE_HTTP_OK=$?
