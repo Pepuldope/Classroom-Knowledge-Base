@@ -1,4 +1,13 @@
 const CLEARED_MESSAGE = "Your local knowledge base was cleared and is now empty. Build it again from Google Classroom when ready.";
+const SENSITIVE_CHECKPOINT_KEY = /authorization|headers?|token|(?:^|[_-])auth(?:$|[_-])|api[_-]?key|cookie|secret/i;
+
+function stripSensitiveCheckpointFields(value) {
+  if (Array.isArray(value)) return value.map(stripSensitiveCheckpointFields);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value)
+    .filter(([key]) => !SENSITIVE_CHECKPOINT_KEY.test(key))
+    .map(([key, nested]) => [key, stripSensitiveCheckpointFields(nested)]));
+}
 
 export function kbLocalStatusModel(state = "") {
   if (state === "cleared") return { message: CLEARED_MESSAGE, tone: "polite", focusTarget: "kbBuildBtn" };
@@ -30,7 +39,7 @@ export function kbBuildCheckpointModel(input = null) {
     : {};
   const courseData = Object.fromEntries(Object.entries(sourceData).filter(([id, value]) =>
     courses.some((course) => course.id === id) && value && typeof value === "object" && !Array.isArray(value),
-  ));
+  ).map(([id, value]) => [id, stripSensitiveCheckpointFields(value)]));
   return {
     version: 1,
     courses,

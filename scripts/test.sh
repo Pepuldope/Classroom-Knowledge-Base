@@ -225,6 +225,11 @@ BASE_URL="http://localhost:$PORT" node scripts/settings_clear_rebuild_test.mjs
 SETTINGS_CLEAR_OK=$?
 if [ "$SETTINGS_CLEAR_OK" -ne 0 ]; then echo "settings clear/rebuild e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Resumed Classroom checkpoint privacy and surface e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_checkpoint_browser_test.mjs
+CHECKPOINT_BROWSER_OK=$?
+if [ "$CHECKPOINT_BROWSER_OK" -ne 0 ]; then echo "resumed Classroom checkpoint browser e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Cross-view continuity smoke (local)"
 BASE_URL="http://localhost:$PORT" node scripts/continuity_smoke_test.mjs
 CONTINUITY_OK=$?

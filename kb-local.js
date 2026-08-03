@@ -6,6 +6,7 @@
 
 import { idbGet, idbPut, idbDelete } from "./archive.js";
 import { makeSortFn } from "./kb-client-search.js";
+import { kbBuildCheckpointModel } from "./kb-local-status.js";
 
 const BUNDLE_ID = "kb-bundle";
 const META_ID = "kb-meta";
@@ -125,10 +126,11 @@ export async function removeKbBundle() {
   await idbDelete(META_ID);
 }
 
-/** Persist only resumable Classroom course data; never persist OAuth tokens. */
+/** Persist only a normalized, resumable Classroom checkpoint; never persist OAuth tokens. */
 export async function saveKbBuildCheckpoint(checkpoint) {
-  await idbPut({ id: BUILD_CHECKPOINT_ID, data: checkpoint });
-  return checkpoint;
+  const safe = kbBuildCheckpointModel(checkpoint);
+  await idbPut({ id: BUILD_CHECKPOINT_ID, data: safe });
+  return safe;
 }
 
 export async function loadKbBuildCheckpoint() {

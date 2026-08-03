@@ -49,3 +49,24 @@ test("checkpoint model treats malformed or empty checkpoints as no resumable bui
     showBuildCard: true,
   });
 });
+
+test("checkpoint model removes authorization headers and token-shaped fields from resumed records", () => {
+  const checkpoint = kbBuildCheckpointModel({
+    courses: [{ id: "c1", name: "Algebra" }],
+    courseData: {
+      c1: {
+        headers: { Authorization: "Bearer secret", "x-test": "ok" },
+        request: { access_token: "secret", refreshToken: "secret", auth: "secret", api_key: "secret", cookie: "secret", keep: "yes" },
+        courseWork: [{ id: "a1", title: "Linear equations", materials: [{ link: { url: "https://example.test" } }] }],
+      },
+    },
+  });
+
+  assert.deepEqual(checkpoint.courseData.c1, {
+    request: { keep: "yes" },
+    courseWork: [{ id: "a1", title: "Linear equations", materials: [{ link: { url: "https://example.test" } }] }],
+  });
+  assert.equal(JSON.stringify(checkpoint).toLowerCase().includes("authorization"), false);
+  assert.equal(JSON.stringify(checkpoint).toLowerCase().includes("access_token"), false);
+  assert.equal(JSON.stringify(checkpoint).toLowerCase().includes("refreshtoken"), false);
+});
