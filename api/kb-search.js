@@ -3,6 +3,7 @@ import { getBundle, getMeta } from "./kb-store.js";
 import { searchNotes, suggestCorrection, makeSortFn } from "./kb-retrieval.js";
 import { deriveFamily } from "./kb-family.js";
 import { searchResponseCacheState, SEARCH_RESPONSE_CACHE_TTL_MS } from "./kb-response-cache.js";
+import { contentFreeTiming } from "./kb-route-privacy.js";
 
 export const config = { runtime: "edge" };
 
@@ -21,7 +22,7 @@ function withFamily(n) {
   return f ? { ...n, family: f } : n;
 }
 function timedJsonResponse(start, body, status = 200, metric = "kb-search") {
-  const timing = `${metric};dur=${Date.now() - start}`;
+  const timing = contentFreeTiming(metric, Date.now() - start);
   return jsonResponse(body, status, { "Server-Timing": timing, "X-Server-Timing": timing });
 }
 

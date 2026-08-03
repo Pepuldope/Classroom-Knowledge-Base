@@ -138,7 +138,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Search: guarantee every local result has a usable snippet, falling back to title/topic when source text is empty (2026-08-01).
 - [x] Compatibility: extend legacy and local browse-by-course paths with kind/family filters and explicit relevance/recency/course/title sorting; covered by route + local model tests (2026-08-02).
 - [x] Continuity: verify cached legacy related responses remain fresh after a live incremental ingestion write.
-- [ ] Privacy: audit legacy compatibility responses for note-content leakage in timing and error metadata.
+- [x] Privacy: audit legacy compatibility timing metadata for note-content leakage. Shipped 2026-08-03: search/related timing headers now use an allow-listed, numeric-only formatter covered by `tests/kb-route-privacy.test.js`.
 - [x] Accessibility: add a browser assertion that related-preview loading and error status remain announced after a cache hit. Shipped 2026-07-31: related previews now expose explicit polite status announcements for local-cache loading, ready counts, and retryable errors; covered by `tests/kb-related-status.test.js`.
 - [x] Privacy: add a browser assertion that tutor requests never include unselected bundle bodies. Shipped this run: local grounding selection is isolated in `kb-tutor-context.js` with a regression test and the canonical gate.
 - [x] Auth: add a browser smoke for silent session rehydration followed by account switching. Shipped 2026-07-30: private KB routing now rejects signed-out access, preserves the account chooser/revoke escape hatches, and returns to Planner after sign-out or wrong-account recovery.

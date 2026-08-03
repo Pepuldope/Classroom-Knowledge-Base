@@ -2,11 +2,12 @@ import { jsonResponse } from "./_helpers.js";
 import { getBundle } from "./kb-store.js";
 import { relatedNotes } from "./kb-retrieval.js";
 import { relatedResponseCacheState, RELATED_RESPONSE_CACHE_TTL_MS } from "./kb-related-cache.js";
+import { contentFreeTiming } from "./kb-route-privacy.js";
 
 export const config = { runtime: "edge" };
 
 function timedJsonResponse(start, body, status = 200, metric = "kb-related") {
-  const timing = `${metric};dur=${Date.now() - start}`;
+  const timing = contentFreeTiming(metric, Date.now() - start);
   return jsonResponse(body, status, { "Server-Timing": timing, "X-Server-Timing": timing });
 }
 

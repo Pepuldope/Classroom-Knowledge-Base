@@ -105,6 +105,11 @@ node --test tests/kb-related-status.test.js
 KB_RELATED_STATUS_OK=$?
 if [ "$KB_RELATED_STATUS_OK" -ne 0 ]; then echo "related preview accessibility tests FAILED"; exit 1; fi
 
+echo "==> Legacy route privacy metadata tests"
+node --test tests/kb-route-privacy.test.js
+KB_ROUTE_PRIVACY_OK=$?
+if [ "$KB_ROUTE_PRIVACY_OK" -ne 0 ]; then echo "legacy route privacy tests FAILED"; exit 1; fi
+
 echo "==> Starting dev server on :$PORT"
 node scripts/dev-server.mjs "$PORT" > /tmp/kb_dev.log 2>&1 &
 SRV=$!
