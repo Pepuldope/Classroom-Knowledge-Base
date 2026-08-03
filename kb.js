@@ -16,7 +16,7 @@
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
-import { loadKbBundle, saveKbBundle, removeKbBundle, browseKbBundle } from "./kb-local.js";
+import { loadKbBundle, saveKbBundle, removeKbBundle, browseKbBundle, browseYearFacet } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
@@ -882,6 +882,10 @@ export function wireKbEvents() {
     loadBrowseCourses();
     const back = $("kbBrowseBack");
     if (back) back.hidden = true;
+    const yearSelect = $("kbBrowseYear");
+    const yearLabel = $("kbBrowseYearLabel");
+    if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
+    if (yearLabel) yearLabel.hidden = true;
   });
 
   // Keyboard shortcuts (agent-proposed backlog):
@@ -1361,6 +1365,10 @@ function showBrowsePanel() {
   // Fresh visit → show the course grid, hide the per-course notes list.
   const notesEl = $("kbBrowseNotes");
   if (notesEl) notesEl.hidden = true;
+  const yearSelect = $("kbBrowseYear");
+  const yearLabel = $("kbBrowseYearLabel");
+  if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
+  if (yearLabel) yearLabel.hidden = true;
   loadBrowseCourses();
 }
 
@@ -1371,6 +1379,10 @@ function hideBrowsePanel() {
   if (ex) ex.hidden = true;
   const back = $("kbBrowseBack");
   if (back) back.hidden = true;
+  const yearSelect = $("kbBrowseYear");
+  const yearLabel = $("kbBrowseYearLabel");
+  if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
+  if (yearLabel) yearLabel.hidden = true;
 }
 
 async function loadBrowseCourses() {
@@ -1405,16 +1417,33 @@ async function loadBrowseCourses() {
   }
 }
 
-async function openCourse(course) {
+async function openCourse(course, year = "") {
   kbCurrentCourse = String(course || "").trim();
+  const selectedYear = String(year || "").trim();
   const list = $("kbBrowseCourses");
   const notesEl = $("kbBrowseNotes");
   const back = $("kbBrowseBack");
+  const yearSelect = $("kbBrowseYear");
+  const yearLabel = $("kbBrowseYearLabel");
+  if (yearSelect) {
+    const years = browseYearFacet(localKbBundle, kbCurrentCourse);
+    yearSelect.innerHTML = `<option value="">All years</option>`;
+    for (const value of years) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = value;
+      yearSelect.appendChild(option);
+    }
+    yearSelect.value = years.includes(selectedYear) ? selectedYear : "";
+    yearSelect.hidden = years.length === 0;
+    if (yearLabel) yearLabel.hidden = years.length === 0;
+    yearSelect.onchange = () => openCourse(kbCurrentCourse, yearSelect.value);
+  }
   if (list) list.hidden = true;
   if (notesEl) { notesEl.hidden = false; notesEl.innerHTML = `<div class="empty">Loading ${course}…</div>`; }
   if (back) back.hidden = false;
   try {
-    const d = browseKbBundle(localKbBundle, course);
+    const d = browseKbBundle(localKbBundle, course, { year: selectedYear });
     const notes = Array.isArray(d.notes) ? d.notes : [];
     if (!notes.length) { if (notesEl) notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`; return; }
     if (notesEl) {

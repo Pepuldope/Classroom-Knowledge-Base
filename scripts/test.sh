@@ -90,6 +90,11 @@ node --test tests/kb-local-status.test.js
 KB_LOCAL_STATUS_OK=$?
 if [ "$KB_LOCAL_STATUS_OK" -ne 0 ]; then echo "KB local status tests FAILED"; exit 1; fi
 
+echo "==> KB local year facet model tests"
+node --test tests/kb-local-year-facet.test.js
+KB_LOCAL_YEAR_OK=$?
+if [ "$KB_LOCAL_YEAR_OK" -ne 0 ]; then echo "KB local year facet tests FAILED"; exit 1; fi
+
 echo "==> Live-check mitigation classifier tests"
 node --test tests/live-http.test.js
 LIVE_HTTP_OK=$?

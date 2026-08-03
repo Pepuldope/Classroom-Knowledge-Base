@@ -34,6 +34,21 @@ export async function saveKbBundle(bundle) {
   return valid;
 }
 
+/** Return the distinct years represented by one course, newest first. */
+export function browseYearFacet(bundle, course = "") {
+  const cleanCourse = String(course || "").trim();
+  const years = new Set(
+    (Array.isArray(bundle?.notes) ? bundle.notes : [])
+      .filter((note) => !cleanCourse || (note?.course || "Uncategorised") === cleanCourse)
+      .map((note) => String(note?.y || "").trim())
+      .filter(Boolean),
+  );
+  return [...years].sort((a, b) => {
+    const undated = (value) => value.toLowerCase() === "undated";
+    return (undated(a) ? 1 : 0) - (undated(b) ? 1 : 0) || b.localeCompare(a);
+  });
+}
+
 /** Build the no-network browse response for the user's local bundle. */
 export function browseKbBundle(bundle, course = "", { year = "", kind = "", family = "", sort = "recency" } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
