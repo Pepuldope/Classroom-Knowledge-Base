@@ -102,8 +102,8 @@ export default async function handler(req) {
       try {
         const list = await listCourses(gFetch);
         return jsonResponse({ ok: true, mode: "list", courses: list, total: list.length });
-      } catch (e) {
-        return jsonResponse({ error: "list_failed", details: String(e.message || e) }, 502);
+      } catch {
+        return jsonResponse({ error: "list_failed" }, 502);
       }
     }
 
@@ -124,8 +124,8 @@ export default async function handler(req) {
           notes: bundle.notes.length,
           meta,
         });
-      } catch (e) {
-        return jsonResponse({ error: "course_failed", courseId, details: String(e.message || e) }, 502);
+      } catch {
+        return jsonResponse({ error: "course_failed" }, 502);
       }
     }
 
