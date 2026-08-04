@@ -1389,6 +1389,18 @@ async function runKbSearch(query) {
 // a course lists its notes from the cached private bundle
 // in the same card shape the search results use.
 // ---------------------------------------------------------------------------
+export function kbBrowseRecentEmptyStateModel({ course = "", year = "" } = {}) {
+  const cleanCourse = String(course || "").trim() || "this course";
+  const cleanYear = String(year || "").trim();
+  const scope = cleanYear ? `${cleanCourse} in ${cleanYear}` : cleanCourse;
+  return {
+    message: `No notes in ${scope} were studied in the last 7 days.`,
+    actionLabel: cleanYear ? `Show all ${cleanCourse} notes in ${cleanYear}` : `Show all ${cleanCourse} notes`,
+    actionAriaLabel: cleanYear ? `Show all ${cleanCourse} notes in ${cleanYear}` : `Show all ${cleanCourse} notes`,
+    clearRecent: true,
+  };
+}
+
 function exampleSearches() {
   return ["STAR method", "cover letter", "soft skills", "interview", "study guide"];
 }
@@ -1521,7 +1533,30 @@ async function openCourse(course, year = "") {
       progress: loadStudyProgress(),
     });
     const notes = Array.isArray(d.notes) ? d.notes : [];
-    if (!notes.length) { if (notesEl) notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`; return; }
+    if (!notes.length) {
+      if (notesEl) {
+        if (recent?.checked) {
+          const emptyState = kbBrowseRecentEmptyStateModel({ course, year: selectedYear });
+          notesEl.innerHTML = "";
+          const message = document.createElement("div");
+          message.className = "empty";
+          message.textContent = emptyState.message;
+          const recover = document.createElement("button");
+          recover.type = "button";
+          recover.className = "secondary kb-browse-recent-recover";
+          recover.textContent = emptyState.actionLabel;
+          recover.setAttribute("aria-label", emptyState.actionAriaLabel);
+          recover.addEventListener("click", () => {
+            recent.checked = false;
+            openCourse(kbCurrentCourse, yearSelect?.value || selectedYear);
+          });
+          notesEl.append(message, recover);
+        } else {
+          notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`;
+        }
+      }
+      return;
+    }
     if (notesEl) {
       notesEl.innerHTML = "";
       // Owner request #11 — fold the (often 100+) notes into collapsible

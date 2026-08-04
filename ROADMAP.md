@@ -183,7 +183,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: add a local “recently studied” filter for notes opened in the last 7 days. Shipped this run: Browse now filters the private local bundle using existing note-open progress.
 - [ ] Tutor: add a local per-thread rename control without uploading thread metadata.
 - [ ] Continuity: add a browser smoke for mobile Settings navigation after clearing and rebuilding a local KB.
-- [ ] KB: show a clear empty-state recovery action when the recently studied filter has no matches.
+- [x] KB: show a clear empty-state recovery action when the recently studied filter has no matches (2026-08-04).
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item
