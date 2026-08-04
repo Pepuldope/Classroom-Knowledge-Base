@@ -186,7 +186,8 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: show a clear empty-state recovery action when the recently studied filter has no matches (2026-08-04).
 - [ ] Tutor: add a local per-thread archive/delete control without uploading thread metadata.
 - [ ] Continuity: add a mobile smoke for switching from the KB rebuild prompt back to Planner without stale modal state.
-- [ ] Privacy: add a browser assertion that local Settings export/clear actions never issue a network request containing bundle content.
+- [x] Privacy: add a browser assertion that local Settings export/clear actions never issue a network request containing bundle content (2026-08-04).
+- [ ] Privacy: add a browser assertion that local KB download filenames and MIME types remain explicit and content-safe.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item

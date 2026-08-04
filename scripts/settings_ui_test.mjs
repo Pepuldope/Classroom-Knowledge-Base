@@ -82,6 +82,31 @@ try {
   assert.match(await privacy.textContent(), /read-only Google Classroom/i);
   assert.match(await privacy.textContent(), /short-lived.*IndexedDB/i, "Settings must explain where the persistent sign-in token is stored");
 
+  // Privacy regression: export and clear must stay entirely on the local
+  // IndexedDB path even when the bundle contains student note content.
+  const marker = "PRIVATE-SETTINGS-NETWORK-MARKER";
+  await page.evaluate(async (content) => {
+    const { saveKbBundle } = await import("/kb-local.js");
+    await saveKbBundle({ version: 1, generatedAt: new Date().toISOString(), notes: [{ t: "Private note", x: content, course: "Math" }] });
+  }, marker);
+  const kbRequests = [];
+  const leakedRequests = [];
+  const recordRequest = (request) => {
+    const headers = Object.values(request.headers()).join(" ");
+    if (request.url().includes("/api/kb-")) kbRequests.push(request.url());
+    if (request.url().includes(marker) || (request.postData() || "").includes(marker) || headers.includes(marker)) leakedRequests.push(request.url());
+  };
+  page.on("request", recordRequest);
+  const download = page.waitForEvent("download");
+  await page.locator("#kbPrefExport").click();
+  await download;
+  await page.locator("#kbPrefClear").click();
+  await page.waitForFunction(() => /cleared/i.test(document.querySelector("#kbPrefStatus")?.textContent || ""));
+  page.off("request", recordRequest);
+  assert.deepEqual(kbRequests, [], "local Settings export/clear must not call legacy KB endpoints");
+  assert.deepEqual(leakedRequests, [], "bundle content must not appear in any request body");
+  assert.match(await page.locator("#kbPrefStatus").textContent(), /cleared/i, "clear should report the local transition");
+
   assert.match(result.className, /settings-select/);
   assert.equal(result.borderRadius, "6px");
   assert.equal(result.padding, "7.2px 12px");
