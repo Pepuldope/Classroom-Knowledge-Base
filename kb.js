@@ -925,6 +925,10 @@ export function wireKbEvents() {
     const yearLabel = $("kbBrowseYearLabel");
     if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
     if (yearLabel) yearLabel.hidden = true;
+    const recent = $("kbBrowseRecent");
+    const recentLabel = $("kbBrowseRecentLabel");
+    if (recent) recent.checked = false;
+    if (recentLabel) recentLabel.hidden = true;
     saveKbBrowseState();
   });
 
@@ -1436,6 +1440,10 @@ function hideBrowsePanel() {
   const yearLabel = $("kbBrowseYearLabel");
   if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
   if (yearLabel) yearLabel.hidden = true;
+  const recent = $("kbBrowseRecent");
+  const recentLabel = $("kbBrowseRecentLabel");
+  if (recent) recent.checked = false;
+  if (recentLabel) recentLabel.hidden = true;
 }
 
 async function loadBrowseCourses() {
@@ -1479,6 +1487,8 @@ async function openCourse(course, year = "") {
   const back = $("kbBrowseBack");
   const yearSelect = $("kbBrowseYear");
   const yearLabel = $("kbBrowseYearLabel");
+  const recent = $("kbBrowseRecent");
+  const recentLabel = $("kbBrowseRecentLabel");
   if (yearSelect) {
     const years = browseYearFacet(localKbBundle, kbCurrentCourse);
     yearSelect.innerHTML = `<option value="">All years</option>`;
@@ -1495,11 +1505,21 @@ async function openCourse(course, year = "") {
     if (yearLabel) yearLabel.hidden = years.length === 0;
     yearSelect.onchange = () => openCourse(kbCurrentCourse, yearSelect.value);
   }
+  if (recent) {
+    recent.hidden = false;
+    if (recentLabel) recentLabel.hidden = false;
+    recent.onchange = () => openCourse(kbCurrentCourse, yearSelect?.value || selectedYear);
+  }
   if (list) list.hidden = true;
   if (notesEl) { notesEl.hidden = false; notesEl.innerHTML = `<div class="empty">Loading ${course}…</div>`; }
   if (back) back.hidden = false;
   try {
-    const d = browseKbBundle(localKbBundle, course, { year: selectedYear });
+    const d = browseKbBundle(localKbBundle, course, {
+      year: selectedYear,
+      recentDays: recent?.checked ? 7 : 0,
+      today: todayIso(),
+      progress: loadStudyProgress(),
+    });
     const notes = Array.isArray(d.notes) ? d.notes : [];
     if (!notes.length) { if (notesEl) notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`; return; }
     if (notesEl) {

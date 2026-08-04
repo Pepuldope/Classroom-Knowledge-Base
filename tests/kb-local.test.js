@@ -58,3 +58,24 @@ test("browseKbBundle applies a year filter alongside course facets", () => {
     { t: "Geometry", y: "2024", noteIndex: 2 },
   ]);
 });
+
+test("browseKbBundle can filter to notes opened in the last seven days", () => {
+  const result = browseKbBundle({
+    ...bundle,
+    notes: [
+      { ...bundle.notes[0], course: "Math" },
+      { ...bundle.notes[1], course: "Math" },
+      { ...bundle.notes[2], course: "Math" },
+    ],
+  }, "Math", {
+    recentDays: 7,
+    today: "2026-08-04",
+    progress: {
+      0: { opened: 1, lastOpened: "2026-08-04" },
+      1: { opened: 1, lastOpened: "2026-07-20" },
+      2: { opened: 1, lastOpened: "2026-07-29" },
+    },
+  });
+
+  assert.deepEqual(result.notes.map((note) => note.noteIndex), [0, 2]);
+});

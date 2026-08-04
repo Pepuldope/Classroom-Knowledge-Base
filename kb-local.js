@@ -52,12 +52,21 @@ export function browseYearFacet(bundle, course = "") {
 }
 
 /** Build the no-network browse response for the user's local bundle. */
-export function browseKbBundle(bundle, course = "", { year = "", kind = "", family = "", sort = "recency" } = {}) {
+function isRecentlyStudied(progress, noteIndex, today, recentDays) {
+  if (!Number.isInteger(recentDays) || recentDays < 1) return true;
+  const opened = String(progress?.[noteIndex]?.lastOpened || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opened) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return false;
+  const delta = (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${opened}T00:00:00Z`)) / 86_400_000;
+  return Number.isFinite(delta) && delta >= 0 && delta < recentDays;
+}
+
+export function browseKbBundle(bundle, course = "", { year = "", kind = "", family = "", sort = "recency", progress = null, today = "", recentDays = 0 } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const cleanCourse = String(course || "").trim();
   const cleanYear = String(year || "").trim();
   const cleanKind = String(kind || "").trim();
   const cleanFamily = String(family || "").trim();
+  const cleanToday = String(today || "").trim();
   const sortKey = new Set(["relevance", "recency", "course", "title"]).has(sort) ? sort : "recency";
   const browseSnippet = (note) => {
     const source = String(note?.s || note?.x || "").trim();
@@ -73,7 +82,8 @@ export function browseKbBundle(bundle, course = "", { year = "", kind = "", fami
     (!cleanCourse || (note?.course || "Uncategorised") === cleanCourse) &&
     (!cleanYear || (note?.y || "") === cleanYear) &&
     (!cleanKind || (note?.kind || "") === cleanKind) &&
-    (!cleanFamily || (note?.family || "") === cleanFamily)
+    (!cleanFamily || (note?.family || "") === cleanFamily) &&
+    isRecentlyStudied(progress, notes.indexOf(note), cleanToday, recentDays)
   );
   if (cleanCourse) {
     return {

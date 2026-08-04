@@ -1869,8 +1869,9 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; }
 .kb-examples-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.1rem; }
 .kb-browse { margin: 0.75rem 0 1rem; }
-.kb-browse-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+.kb-browse-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
 .kb-browse-head h3 { margin: 0; font-size: 1rem; }
+.kb-browse-recent-label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.8rem; }
 .kb-browse-courses { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.6rem; }
 .kb-course-card {
   display: flex; flex-direction: column; gap: 0.25rem; text-align: left;

@@ -180,9 +180,10 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] UX: show a bounded course-by-course resume summary before restarting an interrupted local Classroom build (2026-08-03).
 - [x] Continuity: verify the KB rebuild card remains hidden during a resumed incremental Classroom build and returns only after a true empty state. Shipped 2026-08-03: `scripts/kb_checkpoint_browser_test.mjs` exercises the real IndexedDB checkpoint, resume surface, and true-empty transition.
 - [x] Privacy: add a browser assertion that resumed checkpoint records contain no authorization headers or token-shaped values. Shipped 2026-08-03: the browser test verifies the storage seam strips token-shaped fields and values before IndexedDB persistence.
-- [ ] KB: add a local “recently studied” filter for notes opened in the last 7 days.
+- [x] KB: add a local “recently studied” filter for notes opened in the last 7 days. Shipped this run: Browse now filters the private local bundle using existing note-open progress.
 - [ ] Tutor: add a local per-thread rename control without uploading thread metadata.
 - [ ] Continuity: add a browser smoke for mobile Settings navigation after clearing and rebuilding a local KB.
+- [ ] KB: show a clear empty-state recovery action when the recently studied filter has no matches.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item
