@@ -182,9 +182,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Privacy: add a browser assertion that resumed checkpoint records contain no authorization headers or token-shaped values. Shipped 2026-08-03: the browser test verifies the storage seam strips token-shaped fields and values before IndexedDB persistence.
 - [x] KB: add a local “recently studied” filter for notes opened in the last 7 days. Shipped this run: Browse now filters the private local bundle using existing note-open progress.
 - [x] Tutor: add a local per-thread rename control without uploading thread metadata (2026-08-04).
-- [ ] Continuity: add a browser smoke for mobile Settings navigation after clearing and rebuilding a local KB.
+- [x] Continuity: add a browser smoke for mobile Settings navigation after clearing and rebuilding a local KB (2026-08-04): `settings_mobile_rebuild_test.mjs` covers the real menu → Settings → clear → reopen path at 390px.
 - [x] KB: show a clear empty-state recovery action when the recently studied filter has no matches (2026-08-04).
 - [ ] Tutor: add a local per-thread archive/delete control without uploading thread metadata.
+- [ ] Continuity: add a mobile smoke for switching from the KB rebuild prompt back to Planner without stale modal state.
+- [ ] Privacy: add a browser assertion that local Settings export/clear actions never issue a network request containing bundle content.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item
