@@ -1876,6 +1876,11 @@ export function tutorThreadDeleteModel(value = [], id = "") {
   return tutorThreadArchiveModel(value).filter((thread) => thread.id !== cleanId);
 }
 
+export function tutorThreadRestoreModel(value = [], id = "") {
+  const cleanId = String(id || "").trim().slice(0, 80);
+  return tutorThreadArchiveModel(value).find((thread) => thread.id === cleanId) || null;
+}
+
 function loadTutorThreadArchive() {
   try { return tutorThreadArchiveModel(JSON.parse(localStorage.getItem(TUTOR_THREAD_ARCHIVE_KEY) || "[]")); }
   catch { return []; }
@@ -1898,6 +1903,12 @@ function renderTutorThreadArchive() {
     row.className = "kb-tutor-archived-thread";
     const label = document.createElement("span");
     label.textContent = thread.title;
+    const restore = document.createElement("button");
+    restore.type = "button";
+    restore.className = "link-btn";
+    restore.textContent = "Restore";
+    restore.title = `Restore archived thread ${thread.title}`;
+    restore.addEventListener("click", () => restoreTutorThread(thread.id));
     const del = document.createElement("button");
     del.type = "button";
     del.className = "link-btn";
@@ -1907,7 +1918,7 @@ function renderTutorThreadArchive() {
       saveTutorThreadArchive(tutorThreadDeleteModel(loadTutorThreadArchive(), thread.id));
       renderTutorThreadArchive();
     });
-    row.append(label, del);
+    row.append(label, restore, del);
     list.appendChild(row);
   }
 }
@@ -1921,6 +1932,21 @@ function archiveCurrentTutorThread() {
   ]);
   renderTutorThreadArchive();
   resetTutorUi();
+}
+
+function restoreTutorThread(id) {
+  const thread = tutorThreadRestoreModel(loadTutorThreadArchive(), id);
+  if (!thread) return;
+  tutorMessages = thread.messages.map((message) => ({ ...message }));
+  saveTutorThreadTitle(thread.title);
+  const messages = $("kbTutorMessages");
+  if (messages) {
+    messages.replaceChildren();
+    for (const message of tutorMessages) addTutorMessage(message.role, message.content, false);
+  }
+  const sources = $("kbTutorSources");
+  if (sources) sources.innerHTML = '<span class="ai-context-note">Restored locally — answers will still use your knowledge base.</span>';
+  $("kbTutorInput")?.focus();
 }
 
 function loadTutorThreadTitle() {

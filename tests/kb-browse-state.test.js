@@ -6,6 +6,7 @@ import {
   tutorThreadTitleModel,
   tutorThreadArchiveModel,
   tutorThreadDeleteModel,
+  tutorThreadRestoreModel,
 } from "../kb.js";
 
 test("kbBrowseStateModel persists and restores the selected course and year", () => {
@@ -52,4 +53,20 @@ test("tutorThreadDeleteModel removes only the requested local thread", () => {
   const threads = [{ id: "t1", title: "One", messages: [], archivedAt: 1 }, { id: "t2", title: "Two", messages: [], archivedAt: 2 }];
   assert.deepEqual(tutorThreadDeleteModel(threads, "t1"), [threads[1]]);
   assert.deepEqual(tutorThreadDeleteModel(threads, "missing"), threads);
+});
+
+test("tutorThreadRestoreModel returns one normalized archived thread by id", () => {
+  const threads = [
+    { id: "t1", title: "  Algebra  ", messages: [{ role: "user", content: " Explain roots " }], archivedAt: 1 },
+    { id: "t2", title: "Other", messages: [], archivedAt: 2 },
+  ];
+  assert.deepEqual(tutorThreadRestoreModel(threads, "t1"), {
+    id: "t1",
+    title: "Algebra",
+    messages: [{ role: "user", content: "Explain roots" }],
+    archivedAt: 1,
+  });
+  assert.equal(tutorThreadRestoreModel(threads, "missing"), null);
+  const longId = "x".repeat(90);
+  assert.equal(tutorThreadRestoreModel([{ id: longId, title: "Long", messages: [] }], longId)?.id, "x".repeat(80));
 });
