@@ -142,6 +142,7 @@ const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const KB_BROWSE_STATE_KEY = "cwa_kb_browse_state";
 const KB_COPY_HISTORY_KEY = "cwa_kb_copy_history";
 const TUTOR_THREAD_TITLE_KEY = "cwa_tutor_thread_title";
+const TUTOR_THREAD_ARCHIVE_KEY = "cwa_tutor_thread_archive";
 let latestCopySearchContextText = "";
 
 function announceCopyStatus(element, message) {
@@ -884,12 +885,14 @@ export function wireKbEvents() {
   tutorThreadTitle = loadTutorThreadTitle();
   const threadTitle = $("kbTutorThreadTitle");
   if (threadTitle) threadTitle.textContent = tutorThreadTitle;
+  renderTutorThreadArchive();
   $("kbTutorRenameThread")?.addEventListener("click", () => {
     const next = typeof window.prompt === "function"
       ? window.prompt("Name this tutor thread", tutorThreadTitle)
       : null;
     if (next !== null) saveTutorThreadTitle(next);
   });
+  $("kbTutorArchiveThread")?.addEventListener("click", archiveCurrentTutorThread);
 
   buildBtn?.addEventListener("click", () => startScrape());
   resumeBtn?.addEventListener("click", () => startScrape());
@@ -1849,6 +1852,75 @@ let tutorThreadTitle = "New tutor thread";
 export function tutorThreadTitleModel(value) {
   const title = typeof value === "string" ? value.trim().slice(0, 80) : "";
   return title || "New tutor thread";
+}
+
+/** Normalize bounded, browser-local archived tutor threads; never sent to the server. */
+export function tutorThreadArchiveModel(value = []) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((thread) => thread && typeof thread.id === "string" && thread.id.trim())
+    .slice(0, 20)
+    .map((thread) => ({
+      id: thread.id.trim().slice(0, 80),
+      title: tutorThreadTitleModel(thread.title),
+      messages: (Array.isArray(thread.messages) ? thread.messages : [])
+        .filter((message) => (message?.role === "user" || message?.role === "assistant") && typeof message.content === "string" && message.content.trim())
+        .slice(-40)
+        .map((message) => ({ role: message.role, content: message.content.trim().slice(0, 12000) })),
+      archivedAt: Number.isFinite(Number(thread.archivedAt)) ? Number(thread.archivedAt) : 0,
+    }));
+}
+
+export function tutorThreadDeleteModel(value = [], id = "") {
+  const cleanId = String(id || "").trim();
+  return tutorThreadArchiveModel(value).filter((thread) => thread.id !== cleanId);
+}
+
+function loadTutorThreadArchive() {
+  try { return tutorThreadArchiveModel(JSON.parse(localStorage.getItem(TUTOR_THREAD_ARCHIVE_KEY) || "[]")); }
+  catch { return []; }
+}
+
+function saveTutorThreadArchive(value) {
+  const threads = tutorThreadArchiveModel(value);
+  try { localStorage.setItem(TUTOR_THREAD_ARCHIVE_KEY, JSON.stringify(threads)); } catch {}
+  return threads;
+}
+
+function renderTutorThreadArchive() {
+  const list = $("kbTutorThreadArchive");
+  if (!list) return;
+  list.replaceChildren();
+  const threads = loadTutorThreadArchive();
+  list.hidden = threads.length === 0;
+  for (const thread of threads) {
+    const row = document.createElement("div");
+    row.className = "kb-tutor-archived-thread";
+    const label = document.createElement("span");
+    label.textContent = thread.title;
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "link-btn";
+    del.textContent = "Delete";
+    del.title = `Delete archived thread ${thread.title}`;
+    del.addEventListener("click", () => {
+      saveTutorThreadArchive(tutorThreadDeleteModel(loadTutorThreadArchive(), thread.id));
+      renderTutorThreadArchive();
+    });
+    row.append(label, del);
+    list.appendChild(row);
+  }
+}
+
+function archiveCurrentTutorThread() {
+  if (!tutorMessages.length) return;
+  const id = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+  saveTutorThreadArchive([
+    { id, title: tutorThreadTitle, messages: tutorMessages, archivedAt: Date.now() },
+    ...loadTutorThreadArchive(),
+  ]);
+  renderTutorThreadArchive();
+  resetTutorUi();
 }
 
 function loadTutorThreadTitle() {
