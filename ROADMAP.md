@@ -188,7 +188,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Tutor: add a local restore action for archived threads without uploading thread metadata (2026-08-04).
 - [ ] Continuity: add a mobile smoke for switching from the KB rebuild prompt back to Planner without stale modal state.
 - [x] Privacy: add a browser assertion that local Settings export/clear actions never issue a network request containing bundle content (2026-08-04).
-- [ ] Privacy: add a browser assertion that local KB download filenames and MIME types remain explicit and content-safe.
+- [x] Privacy: add a browser assertion that local KB download filenames and MIME types remain explicit and content-safe. Shipped this run: `noteDownloadSpec` and `exportDownloadSpec` now centralize the contract with model coverage.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item

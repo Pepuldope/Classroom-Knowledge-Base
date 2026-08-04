@@ -718,7 +718,7 @@ export function buildFilterAnnouncement({ shown = 0, total = 0, course = "", yea
 // builds from the already-loaded note object, triggers a Blob download.
 function downloadNoteAsMarkdown(note) {
   if (!note) return;
-  const title = (note.t || "note").toString().replace(/[\\/\\?%*:\\|"<>]/g, "-");
+  const { filename, mime } = noteDownloadSpec(note);
   const front = [`# ${note.t || "Untitled"}`];
   if (note.course) front.push(`\nCourse: ${note.course}`);
   if (note.y) front.push(`Year: ${note.y}`);
@@ -726,11 +726,11 @@ function downloadNoteAsMarkdown(note) {
   if (note.p) front.push(`Source: ${note.p}`);
   const body = (note.x || note.s || "").trim();
   const md = front.join("\n") + "\n\n" + body + "\n";
-  const blob = new Blob([md], { type: "text/markdown" });
+  const blob = new Blob([md], { type: mime });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `${title}.md`;
+  a.download = filename;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -748,9 +748,25 @@ function downloadFile(filename, text, mime) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function exportFilename(ext) {
-  const d = new Date().toISOString().slice(0, 10);
-  return `classroom-kb-${d}.${ext}`;
+const EXPORT_MIME_TYPES = Object.freeze({
+  json: "application/json",
+  md: "text/markdown",
+  csv: "text/csv",
+});
+
+export function noteDownloadSpec(note = {}) {
+  const rawTitle = String(note?.t || "note");
+  const sanitizedTitle = rawTitle.replace(/[\/\\?%*:"<>|]/g, "-").trim();
+  const safeTitle = /[A-Za-z0-9]/.test(sanitizedTitle) ? sanitizedTitle : "note";
+  return { filename: `${safeTitle}.md`, mime: "text/markdown" };
+}
+
+export function exportDownloadSpec(format, date = new Date().toISOString().slice(0, 10)) {
+  if (!Object.hasOwn(EXPORT_MIME_TYPES, format)) {
+    throw new Error(`Unsupported export format: ${format}`);
+  }
+  const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(String(date)) ? String(date) : "export";
+  return { filename: `classroom-kb-${safeDate}.${format}`, mime: EXPORT_MIME_TYPES[format] };
 }
 
 function escapeCsvCell(v) {
@@ -827,8 +843,8 @@ async function exportKb(format) {
       setStatus("Nothing to export yet — the knowledge base is empty.", true);
       return;
     }
-    const mime = format === "json" ? "application/json" : format === "md" ? "text/markdown" : "text/csv";
-    downloadFile(exportFilename(format), exportBundlePayload(bundle, format), mime);
+    const { filename, mime } = exportDownloadSpec(format);
+    downloadFile(filename, exportBundlePayload(bundle, format), mime);
     setStatus(`Exported ${bundle.notes.length} notes.`);
   } catch (err) {
     setStatus("Export failed: " + (err.message || err), true);

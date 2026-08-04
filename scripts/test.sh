@@ -80,6 +80,11 @@ node --test tests/kb-client-search.test.js
 LOCAL_RETRIEVAL_OK=$?
 if [ "$LOCAL_RETRIEVAL_OK" -ne 0 ]; then echo "local retrieval tests FAILED"; exit 1; fi
 
+echo "==> Local download filename/MIME privacy model tests"
+node --test tests/kb-download-spec.test.js
+download_spec_ok=$?
+if [ "$download_spec_ok" -ne 0 ]; then echo "local download filename/MIME tests FAILED"; exit 1; fi
+
 echo "==> Hosted latency model tests"
 node --test tests/kb-latency-model.test.js
 LATENCY_MODEL_OK=$?
