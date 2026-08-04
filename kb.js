@@ -141,6 +141,7 @@ const KB_SETTINGS_KEY = "cwa_kb_settings";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const KB_BROWSE_STATE_KEY = "cwa_kb_browse_state";
 const KB_COPY_HISTORY_KEY = "cwa_kb_copy_history";
+const TUTOR_THREAD_TITLE_KEY = "cwa_tutor_thread_title";
 let latestCopySearchContextText = "";
 
 function announceCopyStatus(element, message) {
@@ -880,6 +881,15 @@ export function wireKbEvents() {
   const tutorInput = $("kbTutorInput");
   const tutorClearChat = $("kbTutorClearChat");
   const tutorNewTopic = $("kbTutorNewTopic");
+  tutorThreadTitle = loadTutorThreadTitle();
+  const threadTitle = $("kbTutorThreadTitle");
+  if (threadTitle) threadTitle.textContent = tutorThreadTitle;
+  $("kbTutorRenameThread")?.addEventListener("click", () => {
+    const next = typeof window.prompt === "function"
+      ? window.prompt("Name this tutor thread", tutorThreadTitle)
+      : null;
+    if (next !== null) saveTutorThreadTitle(next);
+  });
 
   buildBtn?.addEventListener("click", () => startScrape());
   resumeBtn?.addEventListener("click", () => startScrape());
@@ -1833,6 +1843,26 @@ function renderResultCount(data, { course, year, kind = kbActiveKind, family = k
 // AI Tutor (RAG over the user's local bundle)
 // ---------------------------------------------------------------------------
 let tutorMessages = [];
+let tutorThreadTitle = "New tutor thread";
+
+/** Normalize a browser-local tutor thread title; thread metadata never leaves the browser. */
+export function tutorThreadTitleModel(value) {
+  const title = typeof value === "string" ? value.trim().slice(0, 80) : "";
+  return title || "New tutor thread";
+}
+
+function loadTutorThreadTitle() {
+  try { return tutorThreadTitleModel(localStorage.getItem(TUTOR_THREAD_TITLE_KEY)); }
+  catch { return tutorThreadTitleModel(); }
+}
+
+function saveTutorThreadTitle(value) {
+  tutorThreadTitle = tutorThreadTitleModel(value);
+  try { localStorage.setItem(TUTOR_THREAD_TITLE_KEY, tutorThreadTitle); } catch {}
+  const title = $("kbTutorThreadTitle");
+  if (title) title.textContent = tutorThreadTitle;
+  return tutorThreadTitle;
+}
 
 /** Return a fresh thread without mutating the previous conversation. */
 export function resetTutorConversation() {
@@ -2200,6 +2230,7 @@ function addTutorRetryAction(messageEl, prompt) {
 
 function resetTutorUi() {
   tutorMessages = resetTutorConversation();
+  saveTutorThreadTitle("New tutor thread");
   const messages = $("kbTutorMessages");
   if (messages) messages.replaceChildren();
   const sources = $("kbTutorSources");

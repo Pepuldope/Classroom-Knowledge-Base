@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { kbBrowseStateModel, kbBrowseRecentEmptyStateModel } from "../kb.js";
+import { kbBrowseStateModel, kbBrowseRecentEmptyStateModel, tutorThreadTitleModel } from "../kb.js";
 
 test("kbBrowseStateModel persists and restores the selected course and year", () => {
   assert.deepEqual(kbBrowseStateModel({ course: "Math", year: "2024" }), {
@@ -23,4 +23,10 @@ test("recently studied empty state offers a bounded recovery action", () => {
     actionAriaLabel: "Show all Math notes in 2024",
     clearRecent: true,
   });
+});
+
+test("tutorThreadTitleModel normalizes a local thread title", () => {
+  assert.equal(tutorThreadTitleModel("  Quadratic equations  "), "Quadratic equations");
+  assert.equal(tutorThreadTitleModel(""), "New tutor thread");
+  assert.equal(tutorThreadTitleModel("x".repeat(200)).length, 80);
 });
