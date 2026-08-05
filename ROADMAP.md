@@ -196,7 +196,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Continuity: verify Archive and Planner navigation focus remains visible after a KB modal transition.
 - [x] KB: announce note-modal open and close state changes to screen readers without exposing note bodies.
 - [x] KB: add a local “pin note” action that persists only note identifiers and titles (2026-08-05).
-- [ ] Continuity: add a warm local cross-view smoke for returning from note detail to the same KB result.
+- [x] Continuity: add a warm local cross-view smoke for returning from note detail to the same KB result (2026-08-05): `scripts/kb_note_roundtrip_test.mjs` seeds IndexedDB, measures three warm close/focus cycles, and rejects legacy note-route fallback.
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

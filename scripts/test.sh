@@ -256,6 +256,11 @@ BASE_URL="http://localhost:$PORT" node scripts/cache_diagnostics_isolation_test.
 CACHE_ISOLATION_OK=$?
 if [ "$CACHE_ISOLATION_OK" -ne 0 ]; then echo "cache diagnostics isolation smoke FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Warm local KB note round-trip e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_note_roundtrip_test.mjs
+KB_NOTE_ROUNDTRIP_OK=$?
+if [ "$KB_NOTE_ROUNDTRIP_OK" -ne 0 ]; then echo "warm local KB note round-trip e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Planner tutor mobile grounding e2e"
 BASE_URL="http://localhost:$PORT" node scripts/planner_tutor_mobile_test.mjs
 PLANNER_MOBILE_OK=$?
