@@ -136,7 +136,9 @@ try {
     await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
     const title = await page.locator("#kbNoteTitle").textContent();
     assert.ok(title && title.trim().length > 0, "course note should open in detail modal");
+    await page.waitForFunction(() => /Opened note:/.test(document.getElementById("kbNoteModalStatus")?.textContent || ""));
     await page.click("#kbNoteClose");
+    await page.waitForFunction(() => document.getElementById("kbNoteModalStatus")?.textContent === "Note closed.");
   });
 
   await check("opening a note updates the local study progress card", async () => {

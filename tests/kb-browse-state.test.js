@@ -7,6 +7,7 @@ import {
   tutorThreadArchiveModel,
   tutorThreadDeleteModel,
   tutorThreadRestoreModel,
+  noteModalAnnouncementModel,
 } from "../kb.js";
 
 test("kbBrowseStateModel persists and restores the selected course and year", () => {
@@ -69,6 +70,28 @@ test("note modal close restores the originating result focus target when it is s
   assert.equal(noteModalFocusTargetModel({ origin: "", connected: true }), null);
 });
 
+test("note modal announcement exposes state without including note body text", () => {
+  assert.deepEqual(noteModalAnnouncementModel("open", "  Quadratic equations  "), {
+    role: "status",
+    live: "polite",
+    atomic: "true",
+    text: "Opened note: Quadratic equations.",
+  });
+  assert.deepEqual(noteModalAnnouncementModel("close"), {
+    role: "status",
+    live: "polite",
+    atomic: "true",
+    text: "Note closed.",
+  });
+  assert.deepEqual(noteModalAnnouncementModel("error"), {
+    role: "status",
+    live: "polite",
+    atomic: "true",
+    text: "Note could not be loaded.",
+  });
+  const longTitle = "Visible title " + "x".repeat(200);
+  assert.equal(noteModalAnnouncementModel("open", longTitle).text.length <= 180, true);
+});
 test("tutorThreadRestoreModel returns one normalized archived thread by id", () => {
   const threads = [
     { id: "t1", title: "  Algebra  ", messages: [{ role: "user", content: " Explain roots " }], archivedAt: 1 },

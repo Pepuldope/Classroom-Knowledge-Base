@@ -194,7 +194,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [ ] Performance: measure and keep the KB rebuild-to-Planner transition under 100ms on warm local state.
 - [x] Accessibility: restore focus to the originating KB result after closing a note-detail modal (2026-08-05).
 - [ ] Continuity: verify Archive and Planner navigation focus remains visible after a KB modal transition.
-- [ ] KB: announce note-modal open and close state changes to screen readers without exposing note bodies.
+- [x] KB: announce note-modal open and close state changes to screen readers without exposing note bodies.
 - [ ] KB: add a local “pin note” action that persists only note identifiers and titles.
 - [ ] Continuity: add a warm local cross-view smoke for returning from note detail to the same KB result.
 

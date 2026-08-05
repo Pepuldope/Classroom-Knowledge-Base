@@ -537,6 +537,36 @@ export function noteModalFocusTargetModel({ origin = "", connected = false } = {
   return target && connected ? target : null;
 }
 
+/** Describe note-modal transitions without ever including note body content. */
+export function noteModalAnnouncementModel(state, title = "") {
+  const normalizedState = typeof state === "string" ? state.trim() : "";
+  if (normalizedState === "open") {
+    const safeTitle = typeof title === "string" ? title.trim().slice(0, 160) : "";
+    return {
+      role: "status",
+      live: "polite",
+      atomic: "true",
+      text: safeTitle ? `Opened note: ${safeTitle}.` : "Opened note.",
+    };
+  }
+  if (normalizedState === "error") {
+    return { role: "status", live: "polite", atomic: "true", text: "Note could not be loaded." };
+  }
+  return { role: "status", live: "polite", atomic: "true", text: "Note closed." };
+}
+
+function announceNoteModal(state, title = "") {
+  const status = $("kbNoteModalStatus");
+  if (!status) return;
+  const announcement = noteModalAnnouncementModel(state, title);
+  status.setAttribute("role", announcement.role);
+  status.setAttribute("aria-live", announcement.live);
+  status.setAttribute("aria-atomic", announcement.atomic);
+  // Clear first so repeated opens/closes with the same title are announced.
+  status.textContent = "";
+  status.textContent = announcement.text;
+}
+
 export async function maybeAutoBuildKb() {
   const bundle = await loadKbBundle();
   if (!shouldAutoBuildKb(loadKbSettings(), bundle)) return false;
@@ -2533,6 +2563,7 @@ async function openKbNote(index) {
     }
     if (!note) throw new Error("note not found in local knowledge base");
     if (titleEl) titleEl.textContent = note.t || "(untitled)";
+    announceNoteModal("open", note.t || "(untitled)");
     if (metaEl) metaEl.textContent = [note.course, note.y, note.topic].filter(Boolean).join("  ·  ");
     markNoteProgress(index);
     // Prefer the full body, fall back to summary. renderLightMarkdown escapes
@@ -2578,6 +2609,7 @@ async function openKbNote(index) {
     // Feature A: cross-link related notes.
     await renderRelatedNotes(index);
   } catch (e) {
+    announceNoteModal("error");
     bodyEl.innerHTML = `<div class="empty">Failed to load note: ${e.message}</div>`;
   }
 }
@@ -2622,6 +2654,7 @@ async function renderRelatedNotes(index) {
 function closeKbNote() {
   const modal = $("kbNoteModal");
   if (modal) modal.hidden = true;
+  announceNoteModal("close");
   const origin = noteModalOrigin;
   noteModalOrigin = null;
   if (origin && origin.isConnected && noteModalFocusTargetModel({ origin: origin.id, connected: true })) {
