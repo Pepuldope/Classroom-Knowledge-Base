@@ -191,7 +191,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Privacy: add a browser assertion that local KB download filenames and MIME types remain explicit and content-safe. Shipped this run: `noteDownloadSpec` and `exportDownloadSpec` now centralize the contract with model coverage.
 - [x] Continuity: add an authenticated mobile smoke proving the KB tutor modal also closes when switching to Planner (2026-08-05).
 - [x] Accessibility: restore focus to the Planner navigation control after closing a KB modal during a view switch (2026-08-05).
-- [ ] Performance: measure and keep the KB rebuild-to-Planner transition under 100ms on warm local state.
+- [x] Performance: measure and keep the KB rebuild-to-Planner transition under 100ms on warm local state (2026-08-05): the authenticated mobile smoke now records three in-page warm samples and enforces a nearest-rank p95 budget; observed p95 was 7.00ms locally.
 - [x] Accessibility: restore focus to the originating KB result after closing a note-detail modal (2026-08-05).
 - [ ] Continuity: verify Archive and Planner navigation focus remains visible after a KB modal transition.
 - [x] KB: announce note-modal open and close state changes to screen readers without exposing note bodies.
