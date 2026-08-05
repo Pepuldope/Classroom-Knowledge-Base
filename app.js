@@ -706,6 +706,18 @@ function setView(view) {
   if (archiveView) archiveView.hidden = view !== "archive";
   if (plannerView) plannerView.hidden = view === "archive" || view === "kb";
   if (kbView) kbView.hidden = view !== "kb";
+  if (view !== "kb") {
+    const closeKbModals = () => {
+      const kbNoteModal = $("kbNoteModal");
+      const kbTutorModal = $("kbTutorModal");
+      if (kbNoteModal) kbNoteModal.hidden = true;
+      if (kbTutorModal) kbTutorModal.hidden = true;
+    };
+    closeKbModals();
+    // A lazy KB module may finish wiring after the route click; close again
+    // after that asynchronous import so a stale modal cannot survive the transition.
+    setTimeout(closeKbModals, 100);
+  }
   document.querySelectorAll(".view-toggle-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === view);
   });

@@ -235,6 +235,11 @@ BASE_URL="http://localhost:$PORT" node scripts/settings_mobile_rebuild_test.mjs
 SETTINGS_MOBILE_REBUILD_OK=$?
 if [ "$SETTINGS_MOBILE_REBUILD_OK" -ne 0 ]; then echo "settings mobile clear/rebuild e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> KB rebuild-to-Planner mobile e2e (local)"
+BASE_URL="http://localhost:$PORT" node scripts/kb_rebuild_to_planner_mobile_test.mjs
+KB_REBUILD_PLANNER_MOBILE_OK=$?
+if [ "$KB_REBUILD_PLANNER_MOBILE_OK" -ne 0 ]; then echo "KB rebuild-to-Planner mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Resumed Classroom checkpoint privacy and surface e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_checkpoint_browser_test.mjs
 CHECKPOINT_BROWSER_OK=$?

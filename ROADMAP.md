@@ -186,9 +186,12 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] KB: show a clear empty-state recovery action when the recently studied filter has no matches (2026-08-04).
 - [x] Tutor: add a local per-thread archive/delete control without uploading thread metadata.
 - [x] Tutor: add a local restore action for archived threads without uploading thread metadata (2026-08-04).
-- [ ] Continuity: add a mobile smoke for switching from the KB rebuild prompt back to Planner without stale modal state.
+- [x] Continuity: add a mobile smoke for switching from the KB rebuild prompt back to Planner without stale modal state (2026-08-05).
 - [x] Privacy: add a browser assertion that local Settings export/clear actions never issue a network request containing bundle content (2026-08-04).
 - [x] Privacy: add a browser assertion that local KB download filenames and MIME types remain explicit and content-safe. Shipped this run: `noteDownloadSpec` and `exportDownloadSpec` now centralize the contract with model coverage.
+- [ ] Continuity: add an authenticated mobile smoke proving the KB tutor modal also closes when switching to Planner.
+- [ ] Accessibility: restore focus to the Planner navigation control after closing a KB modal during a view switch.
+- [ ] Performance: measure and keep the KB rebuild-to-Planner transition under 100ms on warm local state.
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item
