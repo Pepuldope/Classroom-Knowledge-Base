@@ -72,6 +72,7 @@ if [ "$TUTOR_RETRY_OK" -ne 0 ]; then echo "tutor retry tests FAILED"; exit 1; fi
 
 echo "==> API / retrieval tests"
 node scripts/kb_e2e_test.mjs
+node scripts/pinned_notes_test.mjs
 API_OK=$?
 if [ "$API_OK" -ne 0 ]; then echo "API tests FAILED"; exit 1; fi
 

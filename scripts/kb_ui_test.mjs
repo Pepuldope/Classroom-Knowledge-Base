@@ -166,6 +166,20 @@ try {
     assert.ok(n > 0, "expected at least one result card");
   });
 
+  await check("result-card pin keeps only note id and title locally", async () => {
+    await page.evaluate(() => localStorage.removeItem("cwa_kb_pinned_notes"));
+    const pin = page.locator("#kbResults .kb-note-pin").first();
+    await pin.click();
+    await page.waitForFunction(() => document.querySelector("#kbResults .kb-note-pin")?.getAttribute("aria-pressed") === "true");
+    const stored = await page.evaluate(() => JSON.parse(localStorage.getItem("cwa_kb_pinned_notes") || "null"));
+    assert.equal(stored.length, 1, "one note should be pinned");
+    assert.deepEqual(Object.keys(stored[0]).sort(), ["id", "title"]);
+    assert.ok(stored[0].title, "pinned note should retain its title");
+    await pin.click();
+    await page.waitForFunction(() => document.querySelector("#kbResults .kb-note-pin")?.getAttribute("aria-pressed") === "false");
+    assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("cwa_kb_pinned_notes") || "[]")), []);
+  });
+
   await check("related preview error exposes scoped retry without losing the parent card", async () => {
     await page.evaluate(() => new Promise((resolve, reject) => {
       const req = indexedDB.open("cwa-archive", 1);

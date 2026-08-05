@@ -158,6 +158,7 @@ const STUDY_PROGRESS_KEY = "cwa_kb_note_progress";
 const STUDY_MODE_PROGRESS_KEY = "cwa_kb_study_mode_progress";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
 const KB_PINNED_COURSES_KEY = "cwa_kb_pinned_courses";
+const KB_PINNED_NOTES_KEY = "cwa_kb_pinned_notes";
 
 /** Normalize the last-used local KB filter state; unknown values never persist. */
 export function kbSearchStateModel(value = {}) {
@@ -249,6 +250,71 @@ export function saveKbPinnedCourses(value) {
   const courses = kbPinnedCoursesModel(value);
   try { localStorage.setItem(KB_PINNED_COURSES_KEY, JSON.stringify(courses)); } catch {}
   return courses;
+}
+
+/** Normalize the small local pin records; note bodies and source paths never persist. */
+export function pinnedNotesModel(value = []) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const item of value) {
+    const id = typeof item?.id === "string" ? item.id.trim().slice(0, 240) : "";
+    const title = typeof item?.title === "string" ? item.title.trim().slice(0, 240) : "";
+    if (!id || !title || seen.has(id)) continue;
+    seen.add(id);
+    result.push({ id, title });
+  }
+  return result.slice(0, 100);
+}
+
+export function togglePinnedNote(current, note) {
+  const list = pinnedNotesModel(current);
+  const record = pinnedNoteRecord(note);
+  if (!record) return list;
+  if (list.some((item) => item.id === record.id)) return list.filter((item) => item.id !== record.id);
+  return pinnedNotesModel([...list, record]);
+}
+
+function pinnedNoteRecord(note) {
+  const title = typeof note?.t === "string" ? note.t.trim() : typeof note?.title === "string" ? note.title.trim() : "";
+  const id = typeof note?.id === "string" ? note.id.trim() : "";
+  const fallback = [note?.course, note?.y, title, note?.topic].map((value) => String(value || "").trim()).join("|");
+  const stableId = id || fallback;
+  return stableId && title ? { id: stableId.slice(0, 240), title: title.slice(0, 240) } : null;
+}
+
+function loadPinnedNotes() {
+  try { return pinnedNotesModel(JSON.parse(localStorage.getItem(KB_PINNED_NOTES_KEY) || "[]")); } catch { return []; }
+}
+
+function savePinnedNotes(value) {
+  const notes = pinnedNotesModel(value);
+  try { localStorage.setItem(KB_PINNED_NOTES_KEY, JSON.stringify(notes)); } catch {}
+  return notes;
+}
+
+function notePinId(note) {
+  return pinnedNoteRecord(note)?.id || "";
+}
+
+function renderNotePinButton(note) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "kb-note-pin";
+  const update = () => {
+    const pinned = loadPinnedNotes().some((item) => item.id === notePinId(note));
+    button.classList.toggle("pinned", pinned);
+    button.textContent = pinned ? "★ Pinned" : "☆ Pin note";
+    button.title = pinned ? "Unpin note" : "Pin note locally";
+    button.setAttribute("aria-pressed", String(pinned));
+  };
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    savePinnedNotes(togglePinnedNote(loadPinnedNotes(), note));
+    update();
+  });
+  update();
+  return button;
 }
 
 /** Normalize locally saved tutor answers; malformed entries never reach the UI. */
@@ -1417,6 +1483,7 @@ async function runKbSearch(query) {
       const meta = document.createElement("div");
       meta.className = "meta";
       meta.textContent = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
+      meta.appendChild(renderNotePinButton(note));
       body.appendChild(meta);
       if (note._snippet) {
         const snip = document.createElement("div");
@@ -1673,6 +1740,7 @@ async function openCourse(course, year = "") {
           const meta = document.createElement("div");
           meta.className = "meta";
           meta.textContent = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
+          meta.appendChild(renderNotePinButton(note));
           body.appendChild(meta);
           if (note._snippet) {
             const snip = document.createElement("div");
@@ -2565,6 +2633,10 @@ async function openKbNote(index) {
     if (titleEl) titleEl.textContent = note.t || "(untitled)";
     announceNoteModal("open", note.t || "(untitled)");
     if (metaEl) metaEl.textContent = [note.course, note.y, note.topic].filter(Boolean).join("  ·  ");
+    if (metaEl) {
+      metaEl.replaceChildren(document.createTextNode([note.course, note.y, note.topic].filter(Boolean).join("  ·  ")));
+      metaEl.appendChild(renderNotePinButton(note));
+    }
     markNoteProgress(index);
     // Prefer the full body, fall back to summary. renderLightMarkdown escapes
     // HTML and turns markdown links ([text](url)) into clickable <a> tags, so

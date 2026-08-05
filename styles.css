@@ -1273,6 +1273,23 @@ summary::-webkit-details-marker { color: var(--muted); }
   padding-bottom: 0.6rem;
   border-bottom: 1px solid var(--border, #eee);
 }
+.kb-note-pin {
+  margin-left: 0.65rem;
+  border: 1px solid var(--border, #eee);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.2rem 0.55rem;
+}
+.kb-note-pin:hover,
+.kb-note-pin:focus-visible,
+.kb-note-pin.pinned {
+  border-color: var(--p3, var(--accent));
+  color: var(--p3, var(--accent));
+}
 
 /* Owner request #11 — course view folds notes into collapsible sprint/topic
    groups (see groupCourseNotesBySprint in kb.js) instead of a flat 100+ dump. */
