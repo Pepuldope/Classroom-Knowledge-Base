@@ -192,8 +192,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Continuity: add an authenticated mobile smoke proving the KB tutor modal also closes when switching to Planner (2026-08-05).
 - [x] Accessibility: restore focus to the Planner navigation control after closing a KB modal during a view switch (2026-08-05).
 - [ ] Performance: measure and keep the KB rebuild-to-Planner transition under 100ms on warm local state.
-- [ ] Accessibility: restore focus to the originating KB result after closing a note-detail modal.
+- [x] Accessibility: restore focus to the originating KB result after closing a note-detail modal (2026-08-05).
 - [ ] Continuity: verify Archive and Planner navigation focus remains visible after a KB modal transition.
+- [ ] KB: announce note-modal open and close state changes to screen readers without exposing note bodies.
+- [ ] KB: add a local “pin note” action that persists only note identifiers and titles.
+- [ ] Continuity: add a warm local cross-view smoke for returning from note detail to the same KB result.
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,

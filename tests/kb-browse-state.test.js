@@ -62,6 +62,13 @@ test("KB view transition returns focus to Planner after closing a modal", async 
   assert.equal(kbViewTransitionFocusTargetModel({ from: "kb", to: "archive", modalWasOpen: true }), "archive");
 });
 
+test("note modal close restores the originating result focus target when it is still connected", async () => {
+  const { noteModalFocusTargetModel } = await import("../kb.js");
+  assert.equal(noteModalFocusTargetModel({ origin: "kb-result-12", connected: true }), "kb-result-12");
+  assert.equal(noteModalFocusTargetModel({ origin: "kb-result-12", connected: false }), null);
+  assert.equal(noteModalFocusTargetModel({ origin: "", connected: true }), null);
+});
+
 test("tutorThreadRestoreModel returns one normalized archived thread by id", () => {
   const threads = [
     { id: "t1", title: "  Algebra  ", messages: [{ role: "user", content: " Explain roots " }], archivedAt: 1 },

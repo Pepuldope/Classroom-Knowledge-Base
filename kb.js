@@ -531,6 +531,12 @@ export function relatedPreviewErrorModel(attempt = 1) {
   };
 }
 
+/** Return a safe focus target for the control that opened the note modal. */
+export function noteModalFocusTargetModel({ origin = "", connected = false } = {}) {
+  const target = typeof origin === "string" ? origin.trim() : "";
+  return target && connected ? target : null;
+}
+
 export async function maybeAutoBuildKb() {
   const bundle = await loadKbBundle();
   if (!shouldAutoBuildKb(loadKbSettings(), bundle)) return false;
@@ -564,6 +570,7 @@ export function kbSearchTopic(topic) {
 }
 
 let localKbBundle = null;
+let noteModalOrigin = null;
 
 export async function refreshKb() {
   const onboarding = $("kbOnboarding");
@@ -1369,6 +1376,7 @@ async function runKbSearch(query) {
       row.tabIndex = 0;
       row.setAttribute("role", "button");
       row.dataset.noteIndex = String(note.noteIndex ?? "");
+      if (note.noteIndex != null) row.id = `kb-result-${note.noteIndex}`;
       row.setAttribute("aria-label", `Open note: ${note.t || "(untitled)"}`);
       const body = document.createElement("div");
       body.className = "assignment-body";
@@ -2509,6 +2517,7 @@ async function openKbNote(index) {
   const linkEl = $("kbNoteOpenLink");      // PRIMARY universal-open action
   const obsLink = $("kbNoteObsidianLink"); // SECONDARY obsidian opt-in
   if (!modal || !bodyEl) return;
+  noteModalOrigin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   bodyEl.innerHTML = `<div class="empty">Loading…</div>`;
   if (metaEl) metaEl.textContent = "";
   if (titleEl) titleEl.textContent = "Loading…";
@@ -2613,6 +2622,11 @@ async function renderRelatedNotes(index) {
 function closeKbNote() {
   const modal = $("kbNoteModal");
   if (modal) modal.hidden = true;
+  const origin = noteModalOrigin;
+  noteModalOrigin = null;
+  if (origin && origin.isConnected && noteModalFocusTargetModel({ origin: origin.id, connected: true })) {
+    origin.focus();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -2647,13 +2661,14 @@ if (typeof document !== "undefined") {
     if (e.key === "Escape") {
       const nm = $("kbNoteModal");
       const tm = $("kbTutorModal");
-      if (nm && !nm.hidden) nm.hidden = true;
+      if (nm && !nm.hidden) closeKbNote();
       if (tm && !tm.hidden) tm.hidden = true;
     }
   });
   document.addEventListener("click", (e) => {
     if (e.target && e.target.classList && e.target.classList.contains("modal")) {
-      e.target.hidden = true;
+      if (e.target.id === "kbNoteModal") closeKbNote();
+      else e.target.hidden = true;
     }
   });
 }
