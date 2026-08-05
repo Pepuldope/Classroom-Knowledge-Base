@@ -17,6 +17,7 @@ import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
 import { kbLocalStatusModel } from "./kb-local-status.js";
+import { kbViewTransitionFocusTargetModel } from "./kb.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 
@@ -707,9 +708,10 @@ function setView(view) {
   if (plannerView) plannerView.hidden = view === "archive" || view === "kb";
   if (kbView) kbView.hidden = view !== "kb";
   if (view !== "kb") {
+    const kbNoteModal = $("kbNoteModal");
+    const kbTutorModal = $("kbTutorModal");
+    const modalWasOpen = Boolean((kbNoteModal && !kbNoteModal.hidden) || (kbTutorModal && !kbTutorModal.hidden));
     const closeKbModals = () => {
-      const kbNoteModal = $("kbNoteModal");
-      const kbTutorModal = $("kbTutorModal");
       if (kbNoteModal) kbNoteModal.hidden = true;
       if (kbTutorModal) kbTutorModal.hidden = true;
     };
@@ -717,6 +719,10 @@ function setView(view) {
     // A lazy KB module may finish wiring after the route click; close again
     // after that asynchronous import so a stale modal cannot survive the transition.
     setTimeout(closeKbModals, 100);
+    const focusTarget = kbViewTransitionFocusTargetModel({ from: "kb", to: view, modalWasOpen });
+    if (focusTarget) {
+      setTimeout(() => document.querySelector(`.view-toggle-btn[data-view="${focusTarget}"]`)?.focus(), 0);
+    }
   }
   document.querySelectorAll(".view-toggle-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.view === view);

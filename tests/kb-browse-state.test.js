@@ -55,6 +55,13 @@ test("tutorThreadDeleteModel removes only the requested local thread", () => {
   assert.deepEqual(tutorThreadDeleteModel(threads, "missing"), threads);
 });
 
+test("KB view transition returns focus to Planner after closing a modal", async () => {
+  const { kbViewTransitionFocusTargetModel } = await import("../kb.js");
+  assert.equal(kbViewTransitionFocusTargetModel({ from: "kb", to: "planner", modalWasOpen: true }), "planner");
+  assert.equal(kbViewTransitionFocusTargetModel({ from: "kb", to: "planner", modalWasOpen: false }), null);
+  assert.equal(kbViewTransitionFocusTargetModel({ from: "kb", to: "archive", modalWasOpen: true }), "archive");
+});
+
 test("tutorThreadRestoreModel returns one normalized archived thread by id", () => {
   const threads = [
     { id: "t1", title: "  Algebra  ", messages: [{ role: "user", content: " Explain roots " }], archivedAt: 1 },

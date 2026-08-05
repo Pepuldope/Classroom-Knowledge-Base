@@ -499,6 +499,12 @@ export function kbBuildSurfaceModel({ state = "loading" } = {}) {
   return { showBuildCard, showMain: !showBuildCard };
 }
 
+/** Return the destination nav target that should regain focus after a KB modal closes. */
+export function kbViewTransitionFocusTargetModel({ from = "", to = "", modalWasOpen = false } = {}) {
+  if (from !== "kb" || !modalWasOpen || !["planner", "archive"].includes(to)) return null;
+  return to;
+}
+
 /** Describe the visible surface while an incremental Classroom build is running. */
 export function kbBuildStartModel() {
   return { onboardingHidden: true, mainVisible: true, panelVisible: true };

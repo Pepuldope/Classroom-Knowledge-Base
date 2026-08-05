@@ -190,8 +190,11 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Privacy: add a browser assertion that local Settings export/clear actions never issue a network request containing bundle content (2026-08-04).
 - [x] Privacy: add a browser assertion that local KB download filenames and MIME types remain explicit and content-safe. Shipped this run: `noteDownloadSpec` and `exportDownloadSpec` now centralize the contract with model coverage.
 - [x] Continuity: add an authenticated mobile smoke proving the KB tutor modal also closes when switching to Planner (2026-08-05).
-- [ ] Accessibility: restore focus to the Planner navigation control after closing a KB modal during a view switch.
+- [x] Accessibility: restore focus to the Planner navigation control after closing a KB modal during a view switch (2026-08-05).
 - [ ] Performance: measure and keep the KB rebuild-to-Planner transition under 100ms on warm local state.
+- [ ] Accessibility: restore focus to the originating KB result after closing a note-detail modal.
+- [ ] Continuity: verify Archive and Planner navigation focus remains visible after a KB modal transition.
+
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
 OAuth authorized-domain, or a product decision from Pepuldo), it moves the item

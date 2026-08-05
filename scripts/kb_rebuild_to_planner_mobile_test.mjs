@@ -87,6 +87,8 @@ try {
   await page.waitForFunction(() => document.querySelector('.view-toggle-btn[data-view="planner"]')?.classList.contains("active"));
   assert.equal(await page.locator("#kbNoteModal").isHidden(), true, "note modal must close when leaving KB");
   assert.equal(await page.locator("#kbTutorModal").isHidden(), true, "tutor modal must close when leaving KB");
+  await page.waitForFunction(() => document.activeElement?.matches('.view-toggle-btn[data-view="planner"]'));
+  assert.equal(await page.evaluate(() => document.activeElement?.dataset.view), "planner", "Planner navigation control must regain focus after KB modal closes");
   assert.deepEqual(await page.evaluate(() => window.__kbModalSwitchPrompts || []), [], "switching views must not trigger interactive account prompts");
   assert.deepEqual(errors, [], `page errors: ${errors.join(" | ")}`);
   console.log(`✓ mobile KB rebuild prompt returns cleanly to Planner (${BASE})`);
