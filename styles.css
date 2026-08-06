@@ -820,6 +820,10 @@ summary::-webkit-details-marker { color: var(--muted); }
   color: var(--muted);
   padding: 0.2rem 0.5rem;
 }
+.modal-card header button:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
 .modal-card header .link-btn {
   font-size: 0.8rem;
   padding: 0.35rem 0.5rem;
