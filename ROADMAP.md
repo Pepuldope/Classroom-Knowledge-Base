@@ -146,7 +146,6 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Accessibility: announce the KB empty/rebuild transition after a Settings clear with a dedicated polite status (2026-07-31).
 - [x] Accessibility: restore focus to the KB build button after the empty/rebuild transition so keyboard users can continue without hunting.
 - [x] Privacy: add a local-storage audit that confirms sign-out removes cached Classroom credentials but preserves no token values in page storage. Shipped 2026-07-31: access tokens now live in the shared IndexedDB store; legacy `cwa_token_v9` / `cwa_kb_token` values are migrated once and removed.
-- [ ] Continuity: verify the KB rebuild card remains hidden during a resumed incremental Classroom build and returns only after a true empty state.
 - [x] Planner tutor: show a visible “grounded in this assignment” context badge and source summary before sending a question. Shipped 2026-07-24 with a bounded local context model and pre-send assignment/material summary.
 - [x] Planner tutor: keep the grounding badge readable on narrow mobile layouts and add a focused browser assertion (2026-07-24).
 - [x] KB: keyboard-first result navigation (j/k or arrows through cards, Enter opens note, Esc closes) with visible focus rings (2026-07-23).
