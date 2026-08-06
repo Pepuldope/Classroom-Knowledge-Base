@@ -78,6 +78,7 @@ try {
   assert.notEqual(focused.outline, "none", "Archive modal close control must expose a visible focus outline");
   await page.locator("#archiveNoteClose").click();
   await page.waitForFunction(() => document.getElementById("archiveNoteModal")?.hidden === true);
+  assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("archive-note-row")), true, "closing an Archive note modal must restore focus to its originating row");
   assert.deepEqual(errors, [], `page errors: ${errors.join(" | ")}`);
   console.log(`✓ Archive modal remains focused and inside 390px viewport (${BASE})`);
 } finally {

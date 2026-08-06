@@ -32,6 +32,11 @@ export function getArchive() {
   return archive;
 }
 
+/** Return the originating Archive row only while it is still connected. */
+export function archiveNoteFocusTargetModel({ origin = "", connected = false } = {}) {
+  return connected && typeof origin === "string" && origin ? origin : null;
+}
+
 // ---------------------------------------------------------------------------
 // Pure, DOM-free search functions
 // ---------------------------------------------------------------------------

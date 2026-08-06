@@ -10,6 +10,7 @@ import {
   renderLightMarkdown,
   renderRichMarkdown,
   renderAssignmentDescription,
+  archiveNoteFocusTargetModel,
 } from "./archive.js";
 import { buildArchiveFromClassroom, subjectKeyOf } from "./archive-builder.js";
 import { loadKbBundle, removeKbBundle } from "./kb-local.js";
@@ -191,6 +192,8 @@ let activeArchiveNotes = []; // findRelated() results for the currently open AI 
 let archiveSubview = "browse"; // "browse" | "curriculum" — tabs inside the Archive view, once a bundle exists
 let archiveBuildAbort = null; // AbortController for an in-flight buildArchiveFromClassroom() call
 let archiveBuildInFlight = false;
+let archiveNoteFocusOrigin = null;
+let archiveNoteFocusSequence = 0;
 const chatHistories = new Map();
 let chatStorageAvailable = true;
 
@@ -914,6 +917,9 @@ function renderArchiveBrowse() {
 function archiveBrowseNoteRow(note) {
   const row = document.createElement("div");
   row.className = "archive-note-row";
+  row.id = `archive-note-row-${++archiveNoteFocusSequence}`;
+  row.tabIndex = 0;
+  row.setAttribute("role", "button");
   const title = document.createElement("div");
   title.className = "archive-note-row-title";
   title.textContent = note.t || "(untitled)";
@@ -924,7 +930,12 @@ function archiveBrowseNoteRow(note) {
     sum.textContent = (note.s.split("\n")[0] || "").slice(0, 140);
     row.appendChild(sum);
   }
-  row.addEventListener("click", () => openArchiveNote(note));
+  row.addEventListener("click", () => openArchiveNote(note, row));
+  row.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openArchiveNote(note, row);
+  });
   return row;
 }
 
@@ -1074,9 +1085,10 @@ function curriculumCell(cls, text) {
   return el;
 }
 
-function openArchiveNote(note) {
+function openArchiveNote(note, origin = null) {
   const modal = $("archiveNoteModal");
   if (!modal) return;
+  archiveNoteFocusOrigin = origin;
   $("archiveNoteTitle").textContent = note.t || "(untitled)";
   const metaLine = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
   const parts = [`<div class="archive-note-meta">${escapeHtml(metaLine)}</div>`];
@@ -1097,6 +1109,7 @@ function openArchiveNote(note) {
     if (!r) return;
     btn.addEventListener("click", () => {
       modal.hidden = true;
+      archiveNoteFocusOrigin = null;
       jumpToTopicInBrowse(r.y, r.course, r.topic);
     });
   });
@@ -1114,6 +1127,18 @@ function openArchiveNote(note) {
   }
 
   modal.hidden = false;
+}
+
+function closeArchiveNoteModal({ restoreFocus = true } = {}) {
+  const modal = $("archiveNoteModal");
+  if (modal) modal.hidden = true;
+  const origin = archiveNoteFocusOrigin;
+  archiveNoteFocusOrigin = null;
+  const focusTarget = archiveNoteFocusTargetModel({
+    origin: origin?.id || "",
+    connected: Boolean(origin?.isConnected),
+  });
+  if (restoreFocus && focusTarget) document.getElementById(focusTarget)?.focus();
 }
 
 function renderArchiveStrip(a) {
@@ -1246,8 +1271,8 @@ document.addEventListener("DOMContentLoaded", () => {
     clearTimeout(archiveSearchDebounce);
     archiveSearchDebounce = setTimeout(renderArchiveView, 150);
   });
-  $("archiveNoteClose")?.addEventListener("click", () => { $("archiveNoteModal").hidden = true; });
-  $("archiveNoteCloseBtn")?.addEventListener("click", () => { $("archiveNoteModal").hidden = true; });
+  $("archiveNoteClose")?.addEventListener("click", () => closeArchiveNoteModal());
+  $("archiveNoteCloseBtn")?.addEventListener("click", () => closeArchiveNoteModal());
 });
 
 document.addEventListener("DOMContentLoaded", () => {
