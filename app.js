@@ -17,7 +17,7 @@ import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
 import { kbLocalStatusModel } from "./kb-local-status.js";
-import { kbViewTransitionFocusTargetModel } from "./kb.js";
+import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel } from "./kb.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 
@@ -726,6 +726,14 @@ function setView(view) {
         document.querySelectorAll(".view-toggle-btn").forEach((button) => button.classList.remove("view-toggle-focus-restored"));
         targetButton?.focus();
         targetButton?.classList.add("view-toggle-focus-restored");
+        const focusStatus = document.getElementById("routeTransitionFocusStatus");
+        const announcement = kbViewTransitionFocusAnnouncementModel(focusTarget);
+        if (focusStatus && announcement) {
+          focusStatus.setAttribute("role", announcement.role);
+          focusStatus.setAttribute("aria-live", announcement.live);
+          focusStatus.setAttribute("aria-atomic", announcement.atomic);
+          focusStatus.textContent = announcement.text;
+        }
       }, 0);
     }
   }

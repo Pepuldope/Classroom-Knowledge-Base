@@ -63,6 +63,23 @@ test("KB view transition returns focus to Planner after closing a modal", async 
   assert.equal(kbViewTransitionFocusTargetModel({ from: "kb", to: "archive", modalWasOpen: true }), "archive");
 });
 
+test("route transition focus hint is bounded and does not expose note content", async () => {
+  const { kbViewTransitionFocusAnnouncementModel } = await import("../kb.js");
+  assert.deepEqual(kbViewTransitionFocusAnnouncementModel("planner"), {
+    role: "status",
+    live: "polite",
+    atomic: "true",
+    text: "Planner view opened. Focus restored to Planner navigation.",
+  });
+  assert.deepEqual(kbViewTransitionFocusAnnouncementModel("archive"), {
+    role: "status",
+    live: "polite",
+    atomic: "true",
+    text: "Archive view opened. Focus restored to Archive navigation.",
+  });
+  assert.equal(kbViewTransitionFocusAnnouncementModel("kb"), null);
+});
+
 test("note modal close restores the originating result focus target when it is still connected", async () => {
   const { noteModalFocusTargetModel } = await import("../kb.js");
   assert.equal(noteModalFocusTargetModel({ origin: "kb-result-12", connected: true }), "kb-result-12");

@@ -571,6 +571,19 @@ export function kbViewTransitionFocusTargetModel({ from = "", to = "", modalWasO
   return to;
 }
 
+/** Describe route-transition focus restoration without persisting or exposing note content. */
+export function kbViewTransitionFocusAnnouncementModel(view = "") {
+  const labels = { planner: "Planner", archive: "Archive" };
+  const label = labels[view];
+  if (!label) return null;
+  return {
+    role: "status",
+    live: "polite",
+    atomic: "true",
+    text: `${label} view opened. Focus restored to ${label} navigation.`,
+  };
+}
+
 /** Describe the visible surface while an incremental Classroom build is running. */
 export function kbBuildStartModel() {
   return { onboardingHidden: true, mainVisible: true, panelVisible: true };
