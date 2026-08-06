@@ -721,7 +721,12 @@ function setView(view) {
     setTimeout(closeKbModals, 100);
     const focusTarget = kbViewTransitionFocusTargetModel({ from: "kb", to: view, modalWasOpen });
     if (focusTarget) {
-      setTimeout(() => document.querySelector(`.view-toggle-btn[data-view="${focusTarget}"]`)?.focus(), 0);
+      setTimeout(() => {
+        const targetButton = document.querySelector(`.view-toggle-btn[data-view="${focusTarget}"]`);
+        document.querySelectorAll(".view-toggle-btn").forEach((button) => button.classList.remove("view-toggle-focus-restored"));
+        targetButton?.focus();
+        targetButton?.classList.add("view-toggle-focus-restored");
+      }, 0);
     }
   }
   document.querySelectorAll(".view-toggle-btn").forEach((btn) => {

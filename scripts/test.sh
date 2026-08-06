@@ -241,6 +241,11 @@ BASE_URL="http://localhost:$PORT" node scripts/kb_rebuild_to_planner_mobile_test
 KB_REBUILD_PLANNER_MOBILE_OK=$?
 if [ "$KB_REBUILD_PLANNER_MOBILE_OK" -ne 0 ]; then echo "KB rebuild-to-Planner mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> KB cross-view modal focus visibility e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_cross_view_focus_test.mjs
+KB_CROSS_VIEW_FOCUS_OK=$?
+if [ "$KB_CROSS_VIEW_FOCUS_OK" -ne 0 ]; then echo "KB cross-view modal focus e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Resumed Classroom checkpoint privacy and surface e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_checkpoint_browser_test.mjs
 CHECKPOINT_BROWSER_OK=$?

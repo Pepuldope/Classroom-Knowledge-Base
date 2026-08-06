@@ -193,10 +193,14 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Accessibility: restore focus to the Planner navigation control after closing a KB modal during a view switch (2026-08-05).
 - [x] Performance: measure and keep the KB rebuild-to-Planner transition under 100ms on warm local state (2026-08-05): the authenticated mobile smoke now records three in-page warm samples and enforces a nearest-rank p95 budget; observed p95 was 7.00ms locally.
 - [x] Accessibility: restore focus to the originating KB result after closing a note-detail modal (2026-08-05).
-- [ ] Continuity: verify Archive and Planner navigation focus remains visible after a KB modal transition.
+- [x] Continuity: verify Archive and Planner navigation focus remains visible after a KB modal transition (2026-08-06).
 - [x] KB: announce note-modal open and close state changes to screen readers without exposing note bodies.
 - [x] KB: add a local “pin note” action that persists only note identifiers and titles (2026-08-05).
 - [x] Continuity: add a warm local cross-view smoke for returning from note detail to the same KB result (2026-08-05): `scripts/kb_note_roundtrip_test.mjs` seeds IndexedDB, measures three warm close/focus cycles, and rejects legacy note-route fallback.
+- [ ] Accessibility: expose route-transition focus restoration in a persistent, theme-safe status hint for keyboard users.
+- [ ] Continuity: add a narrow-screen Archive modal transition check for focus visibility and no horizontal overflow.
+- [ ] Privacy: add a browser assertion that route-transition focus markers never serialize into local storage or tutor payloads.
+
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
 When the loop hits a blocker it cannot climb (needs the Vercel URL, KV keys,
