@@ -96,6 +96,11 @@ node --test tests/kb-tutor-context.test.js
 TUTOR_CONTEXT_OK=$?
 if [ "$TUTOR_CONTEXT_OK" -ne 0 ]; then echo "tutor grounding privacy tests FAILED"; exit 1; fi
 
+echo "==> KB route-transition privacy model tests"
+node --test tests/route-transition-privacy.test.js
+ROUTE_TRANSITION_PRIVACY_OK=$?
+if [ "$ROUTE_TRANSITION_PRIVACY_OK" -ne 0 ]; then echo "route-transition privacy tests FAILED"; exit 1; fi
+
 echo "==> KB local status accessibility model tests"
 node --test tests/kb-local-status.test.js
 KB_LOCAL_STATUS_OK=$?

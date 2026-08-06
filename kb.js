@@ -584,6 +584,20 @@ export function kbViewTransitionFocusAnnouncementModel(view = "") {
   };
 }
 
+/**
+ * Keep route-transition focus markers in the UI-only channel. Unknown text is
+ * discarded so note bodies or other private content cannot be persisted or
+ * accidentally included in a tutor request by future callers.
+ */
+export function routeTransitionFocusPrivacyModel(text = "") {
+  const allowed = new Set([
+    kbViewTransitionFocusAnnouncementModel("planner")?.text,
+    kbViewTransitionFocusAnnouncementModel("archive")?.text,
+  ]);
+  const safeText = allowed.has(String(text)) ? String(text) : "";
+  return { storage: null, tutor: null, text: safeText };
+}
+
 /** Describe the visible surface while an incremental Classroom build is running. */
 export function kbBuildStartModel() {
   return { onboardingHidden: true, mainVisible: true, panelVisible: true };

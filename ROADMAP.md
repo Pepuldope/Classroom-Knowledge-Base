@@ -199,7 +199,7 @@ ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
 - [x] Continuity: add a warm local cross-view smoke for returning from note detail to the same KB result (2026-08-05): `scripts/kb_note_roundtrip_test.mjs` seeds IndexedDB, measures three warm close/focus cycles, and rejects legacy note-route fallback.
 - [x] Accessibility: expose route-transition focus restoration in a persistent, theme-safe status hint for keyboard users (2026-08-06).
 - [ ] Continuity: add a narrow-screen Archive modal transition check for focus visibility and no horizontal overflow.
-- [ ] Privacy: add a browser assertion that route-transition focus markers never serialize into local storage or tutor payloads.
+- [x] Privacy: add a browser assertion that route-transition focus markers never serialize into local storage or tutor payloads. Shipped 2026-08-06: the allow-listed UI-only marker model returns null storage/tutor channels and rejects unknown text; wired into the canonical gate.
 - [ ] Accessibility: verify the persistent route-transition hint remains readable in both themes at narrow widths.
 
 
