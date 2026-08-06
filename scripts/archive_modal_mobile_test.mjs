@@ -49,7 +49,8 @@ try {
   await page.waitForSelector(".archive-note-row", { state: "attached", timeout: 10000 });
   await page.evaluate(() => document.querySelectorAll("#archiveMain details").forEach((detail) => { detail.open = true; }));
   const row = page.locator(".archive-note-row").first();
-  await row.click();
+  await row.focus();
+  await row.press("Enter");
   await page.waitForFunction(() => !document.getElementById("archiveNoteModal")?.hidden);
   const state = await page.evaluate(() => {
     const modal = document.getElementById("archiveNoteModal");
@@ -78,7 +79,14 @@ try {
   assert.notEqual(focused.outline, "none", "Archive modal close control must expose a visible focus outline");
   await page.locator("#archiveNoteClose").click();
   await page.waitForFunction(() => document.getElementById("archiveNoteModal")?.hidden === true);
-  assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("archive-note-row")), true, "closing an Archive note modal must restore focus to its originating row");
+  assert.equal(await row.evaluate((el) => el === document.activeElement), true, "closing an Archive note modal opened with Enter must restore focus to its originating row");
+
+  await row.focus();
+  await row.press(" ");
+  await page.waitForFunction(() => !document.getElementById("archiveNoteModal")?.hidden);
+  await page.locator("#archiveNoteClose").click();
+  await page.waitForFunction(() => document.getElementById("archiveNoteModal")?.hidden === true);
+  assert.equal(await row.evaluate((el) => el === document.activeElement), true, "closing an Archive note modal opened with Space must restore focus to its originating row");
   assert.deepEqual(errors, [], `page errors: ${errors.join(" | ")}`);
   console.log(`✓ Archive modal remains focused and inside 390px viewport (${BASE})`);
 } finally {
