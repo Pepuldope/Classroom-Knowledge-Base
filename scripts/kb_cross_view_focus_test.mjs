@@ -38,6 +38,7 @@ try {
   await page.waitForFunction(() => document.getElementById("welcome")?.hidden === true, null, { timeout: 10000 });
   await page.locator('.view-toggle-btn[data-view="kb"]').click({ force: true });
   await page.waitForFunction(() => !document.getElementById("kbView")?.hidden);
+  const storageBeforeTransition = await page.evaluate(() => Object.entries(localStorage));
 
   for (const target of ["planner", "archive"]) {
     await page.evaluate(() => {
@@ -55,6 +56,9 @@ try {
     assert.equal(state.focused, true, `${target} navigation must regain focus`);
     assert.equal(state.marked, true, `${target} navigation focus must be visibly marked after a KB modal transition`);
     assert.notEqual(state.outline, "none", `${target} navigation focus must expose a visible outline`);
+    const storageAfterTransition = await page.evaluate(() => Object.entries(localStorage));
+    assert.deepEqual(storageAfterTransition, storageBeforeTransition, `${target} route transition must not write focus markers to localStorage`);
+    assert.equal(JSON.stringify(storageAfterTransition).includes("Focus restored"), false, `${target} localStorage must not contain route-transition marker text`);
     if (target === "planner") {
       await page.locator('.view-toggle-btn[data-view="kb"]').click({ force: true });
       await page.waitForFunction(() => !document.getElementById("kbView")?.hidden);
