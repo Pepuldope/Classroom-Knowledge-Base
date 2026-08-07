@@ -163,15 +163,55 @@ believed**, not a description of the system right now. Treat them accordingly.
   | C3 | Performance budget breach | a **measured** number over a budget already stated in this repo |
   | C4 | Untested route or module | a file with no test referencing it, shown by `grep` |
   | C5 | Dead code | an export or file with zero inbound references, shown by `grep` |
+  | C6 | Exposed capability gap | the data or the API already supports something the UI does not let a student reach, both halves shown by `grep` |
 
-  Nothing outside C1–C5. "It would be nicer if…" is not a category.
+  Nothing outside C1–C6. "It would be nicer if…" is not a category.
+
+- **C6 — EXPOSED CAPABILITY GAP (hard — owner 2026-08-07).** This is the only
+  category that adds a feature rather than fixing a defect, so it is fenced
+  tighter than the rest. C6 closes the gap between what the app can *already* do
+  and what a student can actually *reach*.
+
+  **Evidence is two greps, both pasted raw, and both must be in the commit body:**
+
+  1. the capability exists — a field in the note schema, a parameter an `api/*`
+     route already accepts, an exported function that is already implemented;
+  2. no UI reaches it — that identifier appears in no view, template or handler.
+
+  Example of a real C6, verified 2026-08-07: `api/kb-browse.js` implements
+  `?course=`, `&kind=`, `&family=` and `&sort=`, and has five passing e2e tests
+  in `scripts/kb_e2e_test.mjs` — but the only files importing it are
+  `scripts/dev-server.mjs` and that test. No client code calls it, so a student
+  cannot browse or filter at all, although the server has always supported it.
+
+  That same example shows the precedence rule: "sort and filter the KB" is
+  **currently listed under `## 💭 Proposed — needs Pepuldo`**, so it is off-limits
+  to C6 today no matter how good the evidence is. It becomes available to you
+  only if Pepuldo removes that proposal line, and becomes Mode-1 work if he moves
+  it up instead. Check the Proposed section before you start, every time.
+
+  **A C6 commit MUST change what a student can do.** If the diff touches only
+  tests, comments, ARIA attributes, CSS, copy, or existing assertions, it is not
+  C6 — it is the polish loop wearing a new label, and it is a failed run. State
+  in the commit body, in one sentence: what a student can do after this commit
+  that they could not do before.
+
+  **C6 may not implement anything currently listed under
+  `## 💭 Proposed — needs Pepuldo`.** Those are waiting on Pepuldo, and C6 is not
+  a way around him. If the gap you found is already proposed there, pick another
+  or report `NO AVAILABLE WORK`.
+
+  **C6 may not** touch the auth path (see LOOP-GUARDRAILS.md §7), change or
+  remove an existing `api/*` contract, or alter the storage layer. It builds on
+  top of what exists. If closing the gap needs any of those, it is too big to be
+  charter work: propose it instead.
 
 - **CHARTER EVIDENCE GATE (hard — owner 2026-08-07).** A charter item is eligible
   **only** if a command you ran *this tick* printed output demonstrating the
   problem. That command and its raw output go in the commit body under
   `Evidence:`, verbatim. Not paraphrased, not summarised, not described.
 
-  - **No evidence → no work.** If no C1–C5 category produces evidence this tick,
+  - **No evidence → no work.** If no C1–C6 category produces evidence this tick,
     report `NO AVAILABLE WORK` and end. **That is a successful run**, and on a
     healthy repo it is the normal outcome. There is no quota. Never manufacture a
     problem to have something to do.
@@ -191,7 +231,7 @@ believed**, not a description of the system right now. Treat them accordingly.
   covered; reduced-motion variants; narrow-screen variants of a covered surface.
 
 - **PROPOSALS (hard — owner 2026-08-07).** Anything you think is worth building
-  that is **not** a C1–C5 fix: append it, at most one per run, as a single
+  that is **not** a C1–C6 fix: append it, at most one per run, as a single
   `- 💭` line under `## 💭 Proposed — needs Pepuldo` in `ROADMAP.md`, with a
   one-sentence reason. Then **stop. You may not implement a proposal.** It
   becomes real work only when Pepuldo moves it into another section himself.
@@ -226,11 +266,11 @@ believed**, not a description of the system right now. Treat them accordingly.
 
   Paste the number that command printed. Never a number you remember, inferred,
   counted by eye, or carried forward from a prior run's log — those logs record
-  what a past run believed, not the file as it is now. Count the whole file; the
-  `## 💭 Proposed — needs Pepuldo` section is included in `<N>` even though you
-  may not implement from it.
+  what a past run believed, not the file as it is now. Count the whole file.
+  Proposals are written `- 💭`, so that command does not count them and `<N>` is
+  the true size of your Mode-1 queue.
 
-  `<MODE>` is exactly one of: `roadmap-item`, `charter-C1` … `charter-C5`,
+  `<MODE>` is exactly one of: `roadmap-item`, `charter-C1` … `charter-C6`,
   `proposal`, `no-available-work`.
 
   If the first line cannot be written exactly as shown, the rules above have been
