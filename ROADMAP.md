@@ -3,11 +3,16 @@
 Long-term goal (Pepuldo, 2026-07-11): the AI fleet continuously upgrades this
 site so it's increasingly user-friendly and feature-rich for students.
 
-This file is the living backlog. The long-term-site-dev cron job reads it,
-picks an item, implements it, marks it done, and APPENDS NEW IDEAS OF ITS OWN.
-The loop is fully autonomous: when the static lists below are empty, it INVENTS
-the next valuable feature and writes it under "## 🤖 Agent-Proposed Backlog",
-then builds it. Keep items concrete and student-facing where possible.
+**This file is owned by Pepuldo. The loop may not add to it.** (Changed
+2026-08-07; it previously told the loop to invent its own items.)
+
+The long-term-site-dev cron job reads this file, takes the FIRST unchecked item —
+"Reported by Pepuldo" sections first, then top to bottom — implements exactly one
+per run, and ticks it. It may not add, reorder, or re-prioritise items, in any
+section, including "## 🤖 Agent-Proposed Backlog". If there is no unchecked item
+anywhere in this file, the correct outcome is to report NO AVAILABLE WORK and end
+the run — that is a successful run, not an empty one. New work comes from Pepuldo
+editing this file. Keep items concrete and student-facing.
 
 ## 🔥 Ready (high priority)
 - [x] KB: subject/course filter chips above the search results.
@@ -65,9 +70,11 @@ Fresh user reports from live use. **Prefer these over Agent-Proposed polish.**
 - [x] KB course/year filter chips (faceted search).
 
 ## 🤖 Agent-Proposed Backlog
-The autonomous loop writes its own feature ideas here when the lists above are
-drained, then implements them. This section is machine-owned — the loop adds,
-ticks off, and re-prioritises freely. Seed ideas (the loop may reorder/extend):
+**Closed as of 2026-08-07 — the loop may no longer add here.** This section was
+machine-owned: the loop appended its own feature ideas whenever the lists above
+were drained. That is what produced the invented-polish runs, so it is now read
+only, like every other section. The loop may tick an item it shipped; nothing
+else. History below is kept for the record.
 - [x] Tutor: "summarise this note" quick action on each search result card.
 - [x] KB: sort results by relevance / recency / course (sort toggle chips).
 - [x] KB: keyboard shortcut (press "/" to focus search, Esc to clear).
