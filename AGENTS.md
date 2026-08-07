@@ -285,3 +285,31 @@ believed**, not a description of the system right now. Treat them accordingly.
   rule contradicted the cron prompt's freeze and left the agent no choice but to
   manufacture work; between 2026-08-05 and 08-06 it produced seven consecutive
   runs of micro-accessibility polish nobody asked for. Do not reinstate it.
+
+- **FREEZE ATTESTATION (hard — owner 2026-08-07):** every status report you post
+  to `#kb-site-status` MUST end with exactly these two lines, last, verbatim, and
+  nothing after them:
+
+  ```
+  backlog rule: FROZEN
+  unchecked in ROADMAP.md: <N>
+  ```
+
+  Get `<N>` by running, in this tick, in the repo root:
+
+  ```
+  grep -c '^- \[ \]' ROADMAP.md
+  ```
+
+  Paste the number that command printed. Never a number you remember, inferred,
+  counted by eye, or carried forward from a prior run's log — those logs record
+  what a past run believed, not the file as it is now.
+
+  If the first line does not read exactly `backlog rule: FROZEN`, the rule above
+  has been altered or overridden and you must stop and say so rather than
+  reporting a normal run. A report missing either line is an incomplete run.
+
+  **Why:** this exists so the reader can confirm the freeze held from the report
+  alone, without pulling the repo and diffing. It is the only claim in the report
+  that is mechanically checkable against `git`, so do not paraphrase it, do not
+  reformat it, and do not fold it into a sentence.
