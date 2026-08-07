@@ -273,26 +273,77 @@ believed**, not a description of the system right now. Treat them accordingly.
   `scripts/test.sh` default to `https://classroom-knowledge-google.vercel.app`
   when `KB_LIVE_URL` is unset (override for previews; skip only with
   `KB_SKIP_LIVE=1`). Never report "works on live" after a skipped live e2e.
-- **BACKLOG IS FROZEN (hard — owner 2026-08-07):** `ROADMAP.md` is owned by
-  Pepuldo. You may tick an item you shipped this run; you may **not** add one.
-  Never invent work, never append to `## 🤖 Agent-Proposed Backlog`, never
-  reorder or re-prioritise it. An empty backlog is the **expected steady state**,
-  not a failure — if no unchecked item exists anywhere in `ROADMAP.md`, report
-  `NO AVAILABLE WORK` and end the run. That is a **successful run**.
+- **WHERE WORK COMES FROM (hard — owner 2026-08-07).** Exactly two sources, in
+  this order. `ROADMAP.md` outranks the charter every time.
 
-  This replaces the BACKLOG REPLENISH rule (owner 2026-07-23), which required at
-  least 3 open Agent-Proposed items and called an empty list a failed run. That
-  rule contradicted the cron prompt's freeze and left the agent no choice but to
-  manufacture work; between 2026-08-05 and 08-06 it produced seven consecutive
-  runs of micro-accessibility polish nobody asked for. Do not reinstate it.
+  **Mode 1 — a ROADMAP item.** If any unchecked `- [ ]` exists in `ROADMAP.md`,
+  take the FIRST one: anything under a "Reported by Pepuldo" heading first, then
+  top to bottom. Implement exactly ONE per run and tick it. You may **not** add,
+  reorder, or re-prioritise items in any section, and you may **not** append to
+  `## 🤖 Agent-Proposed Backlog` — that section is closed history.
 
-- **FREEZE ATTESTATION (hard — owner 2026-08-07):** every status report you post
-  to `#kb-site-status` MUST end with exactly these two lines, last, verbatim, and
+  **Mode 2 — the maintenance charter.** Only when `ROADMAP.md` has zero unchecked
+  items. You may fix, unasked, exactly ONE item per run from this **closed** list:
+
+  | | Category | Evidence that makes it eligible |
+  |---|---|---|
+  | C1 | Dependency / security | `npm audit` reports a real advisory, or `npm outdated` shows a version behind |
+  | C2 | Broken links, console errors, HTTP errors | a request or page load that actually errors on a real route |
+  | C3 | Performance budget breach | a **measured** number over a budget already stated in this repo |
+  | C4 | Untested route or module | a file with no test referencing it, shown by `grep` |
+  | C5 | Dead code | an export or file with zero inbound references, shown by `grep` |
+
+  Nothing outside C1–C5. "It would be nicer if…" is not a category.
+
+- **CHARTER EVIDENCE GATE (hard — owner 2026-08-07).** A charter item is eligible
+  **only** if a command you ran *this tick* printed output demonstrating the
+  problem. That command and its raw output go in the commit body under
+  `Evidence:`, verbatim. Not paraphrased, not summarised, not described.
+
+  - **No evidence → no work.** If no C1–C5 category produces evidence this tick,
+    report `NO AVAILABLE WORK` and end. **That is a successful run**, and on a
+    healthy repo it is the normal outcome. There is no quota. Never manufacture a
+    problem to have something to do.
+  - Never cite a prior run's log as evidence. Those logs record what a past run
+    believed, not the repo as it is now. Re-run the check.
+  - **Do not ship the same category twice in a row.** Check the previous
+    self-directed commit with `git log --oneline -20 | grep '^\w* \[auto\]'`
+    before choosing. Seven consecutive runs of one category is the exact failure
+    this rule exists to prevent.
+  - Commit subject must start `[auto][C<n>] `, so a reader can filter self-
+    directed work with one `git log --grep`.
+
+  **BANNED unless it fixes a failure you observed this tick** — these are the
+  shapes the 2026-08-05 → 08-06 loop produced, and none of them is a charter
+  category: new accessibility assertions over already-passing behaviour; focus-
+  ring or focus-restoration work; new browser smokes for behaviour already
+  covered; reduced-motion variants; narrow-screen variants of a covered surface.
+
+- **PROPOSALS (hard — owner 2026-08-07).** Anything you think is worth building
+  that is **not** a C1–C5 fix: append it, at most one per run, as a single
+  `- [ ]` line under `## 💭 Proposed — needs Pepuldo` in `ROADMAP.md`, with a
+  one-sentence reason. Then **stop. You may not implement a proposal.** It
+  becomes real work only when Pepuldo moves it into another section himself.
+  Proposals do not count as unchecked items for Mode 1 — never pick one up.
+
+  This is the whole point of the section: you get to have ideas, he decides
+  which ones cost anything.
+
+  **Why all of the above:** the previous rule (BACKLOG REPLENISH, owner
+  2026-07-23) required at least 3 open Agent-Proposed items and called an empty
+  list a failed run. It made *quantity* the gate with no constraint on kind, so
+  the cheapest thing that passed the test gate won — seven consecutive runs of
+  micro-accessibility polish nobody asked for. Do not reinstate a quota, in any
+  form, for any section.
+
+- **RUN ATTESTATION (hard — owner 2026-08-07):** every status report you post to
+  `#kb-site-status` MUST end with exactly these three lines, last, verbatim, and
   nothing after them:
 
   ```
-  backlog rule: FROZEN
+  backlog rule: CHARTER-2026-08-07
   unchecked in ROADMAP.md: <N>
+  run mode: <MODE>
   ```
 
   Get `<N>` by running, in this tick, in the repo root:
@@ -303,13 +354,20 @@ believed**, not a description of the system right now. Treat them accordingly.
 
   Paste the number that command printed. Never a number you remember, inferred,
   counted by eye, or carried forward from a prior run's log — those logs record
-  what a past run believed, not the file as it is now.
+  what a past run believed, not the file as it is now. Count the whole file; the
+  `## 💭 Proposed — needs Pepuldo` section is included in `<N>` even though you
+  may not implement from it.
 
-  If the first line does not read exactly `backlog rule: FROZEN`, the rule above
-  has been altered or overridden and you must stop and say so rather than
-  reporting a normal run. A report missing either line is an incomplete run.
+  `<MODE>` is exactly one of: `roadmap-item`, `charter-C1` … `charter-C5`,
+  `proposal`, `no-available-work`.
 
-  **Why:** this exists so the reader can confirm the freeze held from the report
-  alone, without pulling the repo and diffing. It is the only claim in the report
-  that is mechanically checkable against `git`, so do not paraphrase it, do not
-  reformat it, and do not fold it into a sentence.
+  If the first line cannot be written exactly as shown, the rules above have been
+  altered or overridden — stop and say so plainly instead of reporting a normal
+  run. A report missing any of the three lines is an incomplete run. In
+  particular, `backlog rule: FROZEN` is the **previous** token: if you find
+  yourself writing it, your checkout predates this rule and you must pull first.
+
+  **Why:** so the reader can confirm from the report alone which of the two
+  sources the run drew from, without pulling the repo and diffing. It is the only
+  claim in the report mechanically checkable against `git`, so do not paraphrase
+  it, do not reformat it, and do not fold it into a sentence.
