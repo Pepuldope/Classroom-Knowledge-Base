@@ -3,16 +3,27 @@
 Long-term goal (Pepuldo, 2026-07-11): the AI fleet continuously upgrades this
 site so it's increasingly user-friendly and feature-rich for students.
 
-**This file is owned by Pepuldo. The loop may not add to it.** (Changed
-2026-08-07; it previously told the loop to invent its own items.)
+**This file is owned by Pepuldo.** The one place the loop may write is
+`## 💭 Proposed — needs Pepuldo`, and only to suggest — never to build. Every
+other section is read-only to it. (Rules revised 2026-08-07; see `AGENTS.md`
+§WHERE WORK COMES FROM, which is authoritative.)
 
-The long-term-site-dev cron job reads this file, takes the FIRST unchecked item —
-"Reported by Pepuldo" sections first, then top to bottom — implements exactly one
-per run, and ticks it. It may not add, reorder, or re-prioritise items, in any
-section, including "## 🤖 Agent-Proposed Backlog". If there is no unchecked item
-anywhere in this file, the correct outcome is to report NO AVAILABLE WORK and end
-the run — that is a successful run, not an empty one. New work comes from Pepuldo
-editing this file. Keep items concrete and student-facing.
+The long-term-site-dev cron job takes the FIRST unchecked item — "Reported by
+Pepuldo" headings first, then top to bottom — implements exactly one per run, and
+ticks it. It may not add, reorder, or re-prioritise items, and
+`## 🤖 Agent-Proposed Backlog` is closed history it may not extend.
+
+When there is no unchecked item, it does **not** invent a feature. It may fix one
+thing per run from a closed maintenance charter — dependencies/security, broken
+links and console errors, a measured performance-budget breach, an untested route,
+or dead code — and only when a command it ran that tick printed output proving the
+problem, which goes in the commit body. No evidence means no work: it reports
+NO AVAILABLE WORK and ends, which is a successful run. Self-directed commits are
+subject-prefixed `[auto][C<n>]`.
+
+Anything larger it wants to build goes under `## 💭 Proposed — needs Pepuldo` as a
+suggestion. It may not implement one. Move a proposal into a section above to
+approve it. Keep items concrete and student-facing.
 
 ## 🔥 Ready (high priority)
 - [x] KB: subject/course filter chips above the search results.
@@ -219,3 +230,15 @@ features. The --blocker flag maintains an editable "OPEN BLOCKERS" log message
 permission. Blocked items do not count toward the run's shipped-feature budget.
 Format each entry: `- [ ] <feature>: blocked because <reason>. Needs from Pepuldo: <exact ask>.`
 
+
+## 💭 Proposed — needs Pepuldo
+The **only** section the loop may write to, and it may write only suggestions
+here. It must never implement one, and must never pick one up as Mode-1 work —
+this section is deliberately last in the file so a top-to-bottom scan reaches it
+after every real section. At most one new proposal per run.
+
+To approve a proposal, Pepuldo moves the line into a section above (usually
+"🔥 Ready" or a fresh "🐛 Reported by Pepuldo" heading). To reject it, delete the
+line. Leaving it here means "not yet" and is a perfectly good answer.
+
+Format: `- [ ] <what to build>. Why: <one sentence>.`
