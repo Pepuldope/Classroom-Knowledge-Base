@@ -273,12 +273,15 @@ believed**, not a description of the system right now. Treat them accordingly.
   `scripts/test.sh` default to `https://classroom-knowledge-google.vercel.app`
   when `KB_LIVE_URL` is unset (override for previews; skip only with
   `KB_SKIP_LIVE=1`). Never report "works on live" after a skipped live e2e.
-- **BACKLOG REPLENISH (hard — owner 2026-07-23):** before ending the run,
-  `ROADMAP.md` section `## 🤖 Agent-Proposed Backlog` MUST contain **at least
-  3 unchecked** `- [ ]` items that the *next* tick can pick up. Shipping and
-  ticking the item you just built is required; ending with an all-`[x]`
-  Agent-Proposed list is a **failed run** even if code shipped. When static
-  Ready/Reported/Soon/Ideas are drained, invent concrete student-facing work
-  from the Phase-1 survey (upgrades OR net-new), append open `- [ ]` rows
-  first, then implement at most one of them this tick and leave the rest open.
-  Status report MUST quote the open residual count (e.g. `open Agent-Proposed: 4`).
+- **BACKLOG IS FROZEN (hard — owner 2026-08-07):** `ROADMAP.md` is owned by
+  Pepuldo. You may tick an item you shipped this run; you may **not** add one.
+  Never invent work, never append to `## 🤖 Agent-Proposed Backlog`, never
+  reorder or re-prioritise it. An empty backlog is the **expected steady state**,
+  not a failure — if no unchecked item exists anywhere in `ROADMAP.md`, report
+  `NO AVAILABLE WORK` and end the run. That is a **successful run**.
+
+  This replaces the BACKLOG REPLENISH rule (owner 2026-07-23), which required at
+  least 3 open Agent-Proposed items and called an empty list a failed run. That
+  rule contradicted the cron prompt's freeze and left the agent no choice but to
+  manufacture work; between 2026-08-05 and 08-06 it produced seven consecutive
+  runs of micro-accessibility polish nobody asked for. Do not reinstate it.
