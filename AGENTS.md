@@ -223,6 +223,30 @@ believed**, not a description of the system right now. Treat them accordingly.
     this rule exists to prevent.
   - Commit subject must start `[auto][C<n>] `, so a reader can filter self-
     directed work with one `git log --grep`.
+  - **DAILY CEILING: at most 2 self-directed commits per rolling 24 hours
+    (hard — owner 2026-08-07).** Before starting charter work, run:
+
+    ```
+    git log --since='24 hours ago' --format='%s' | grep -c '^\[auto\]'
+    ```
+
+    Count subjects, not messages: `git log --grep='^\[auto\]'` anchors `^` at the
+    start of *any* line in the commit message, so a body that merely mentions
+    `[auto]` inflates the count. (Measured on this repo: `--grep='^Co-Authored-By'`
+    matches 16 commits, the subject-only form matches 0.) `grep -c` exits 1 when
+    it prints `0` — that is the normal case, not an error; do not chain it with
+    `&&`.
+
+    If that prints 2 or more, you are done for this tick: report
+    `NO AVAILABLE WORK` with `run mode: no-available-work` and stop, even if you
+    have perfectly good evidence in hand. Paste the number in the report.
+
+    **This is a ceiling, not a quota.** It caps how much you may do; it never
+    obliges you to do anything. Finding no eligible work is still a successful
+    run, and being under the ceiling is never a reason to go looking harder. The
+    rule that broke this loop in 2026-07 was a *floor* (at least 3 items or the
+    run failed) — do not read this as its mirror image and do not reinstate one.
+    Mode-1 ROADMAP work is not capped; this counts `[auto]` commits only.
 
   **BANNED unless it fixes a failure you observed this tick** — these are the
   shapes the 2026-08-05 → 08-06 loop produced, and none of them is a charter
