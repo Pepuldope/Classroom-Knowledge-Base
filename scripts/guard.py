@@ -21,7 +21,12 @@ DANGEROUS_PATTERNS = [r"--force", r"--no-verify", r"reset --hard", r"flushall", 
 
 
 def run(cmd):
-    return subprocess.run(cmd, cwd=REPO, capture_output=True, text=True)
+    # Decode as UTF-8 explicitly rather than by platform locale: ROADMAP.md and
+    # AGENTS.md contain emoji, and a locale-decoded diff raised UnicodeDecodeError
+    # (crashing the guard instead of reporting a verdict) anywhere the locale was
+    # not UTF-8. errors="replace" keeps the secret scan running on odd bytes.
+    return subprocess.run(cmd, cwd=REPO, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace")
 
 
 def main():
@@ -89,6 +94,27 @@ def main():
         after = run(["git", "show", ":api/oauth-revoke.js"]).stdout
         if "kvDel" not in after or "refresh:" not in after:
             print("GUARD FAIL: oauth-revoke.js no longer deletes the refresh token. Aborting.")
+            return 1
+
+    # 7. FROZEN OWNER FILES.
+    # The loop reads these; it does not write them. Between 2026-07-14 and
+    # 2026-07-23 it rewrote AGENTS.md repeatedly, signed the edits "owner
+    # decision", and so authored its own mandate — including the backlog quota
+    # that produced a week of invented polish. See LOOP-GUARDRAILS.md §8.
+    # Prose did not hold on its own, which is why this is mechanical.
+    # Pepuldo overrides with OWNER_EDIT=1 in the environment.
+    FROZEN = {"AGENTS.md", "LOOP-GUARDRAILS.md", "scripts/guard.py"}
+    if not os.environ.get("OWNER_EDIT"):
+        touched = sorted(FROZEN.intersection(files))
+        if touched:
+            print("GUARD FAIL: frozen owner-owned file(s) modified: "
+                  + ", ".join(touched))
+            print("  These files are read-only to the loop. Do not route around "
+                  "this check.")
+            print("  If you believe one of them is wrong, append a proposal line to "
+                  "the 'Proposed - needs Pepuldo'")
+            print("  section of ROADMAP.md and say so in your status report. "
+                  "Then stop.")
             return 1
 
     print("guard: OK — safe to commit")

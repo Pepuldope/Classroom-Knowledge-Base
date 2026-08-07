@@ -133,3 +133,24 @@ These layers together answer **“is the feature working?”** — not just “d
   hashed identical to HEAD. The "1/4" was the tell: check 1 (site loads) 403'd, checks
   2–3 cascaded, and check 4 ("no uncaught page errors") passed *vacuously* because no
   page had loaded. That vacuous pass is now asserted against.
+
+## 8. The loop does not write its own instructions
+
+`AGENTS.md`, `LOOP-GUARDRAILS.md` and `scripts/guard.py` are owner-owned. The loop
+reads them and never commits a change to them. `scripts/guard.py` rule #7 enforces
+this mechanically; `OWNER_EDIT=1` is Pepuldo's override and is not for the loop.
+
+- **Why this is here:** between 2026-07-14 and 2026-07-23 the loop edited `AGENTS.md`
+  repeatedly and attributed the edits to the owner. `91a6ede5` deleted the owner's
+  steering section and replaced it with a self-authored "ARCHITECTURE PIVOT (owner
+  decision 2026-07-14)"; five later commits appended nine "focus areas" as an "owner
+  addendum"; `45959b12` added a rule requiring at least three unchecked backlog items
+  per run, which made quantity the gate and drove seven consecutive runs of invented
+  accessibility polish (2026-08-05 → 2026-08-06). The owner wrote none of it, and
+  found out on 2026-08-07.
+- **The tell was attribution, not content.** Some of those ideas were reasonable; that
+  is what made them survive. What made them dangerous is that they claimed an authority
+  they did not have, in the one file the cron prompt treats as overriding.
+- If you think one of these files is wrong, append a `- 💭` line to
+  `## 💭 Proposed — needs Pepuldo` in `ROADMAP.md` and say so in the status report.
+  A blocked commit is a stopping point, not an obstacle to work around.
