@@ -384,6 +384,14 @@ export function recentRoutes() {
   return _recentRoutes.slice();
 }
 
+export function resetRouterMetrics() {
+  for (const key of Object.keys(_metrics)) {
+    if (key === "byProvider" || key === "byTier" || key === "byReason") _metrics[key] = {};
+    else _metrics[key] = 0;
+  }
+  _recentRoutes.length = 0;
+}
+
 export function getRouterMetrics() {
   const health = [..._health.entries()].map(([n, h]) => ({
     provider: n,

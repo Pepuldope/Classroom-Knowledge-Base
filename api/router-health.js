@@ -8,7 +8,7 @@
 //                              alert, unhealthy[] }
 // GET /api/router-health?reset=1 -> clears counters after reading (drill/debug)
 import { jsonResponse } from "./_helpers.js";
-import { getRouterMetrics } from "./ai-router.js";
+import { getRouterMetrics, resetRouterMetrics } from "./ai-router.js";
 
 export const config = { runtime: "edge" };
 
@@ -17,11 +17,6 @@ export default async function handler(req) {
   const url = new URL(req.url);
   const reset = url.searchParams.get("reset") === "1";
   const m = getRouterMetrics();
-  if (reset) {
-    // Re-import to clear in-memory metrics; simplest: return then note reset.
-    // (Counter reset happens on next cold start; for an explicit clear use the
-    //  forceProviderFail/resetRouterHealth test helpers.)
-    m._note = "counters reset on next cold start";
-  }
+  if (reset) resetRouterMetrics();
   return jsonResponse(m);
 }
