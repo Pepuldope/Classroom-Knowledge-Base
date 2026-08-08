@@ -112,3 +112,29 @@ test("parseAuthRedirectResponse surfaces a denied consent from the query string"
 test("parseAuthRedirectResponse ignores a URL carrying neither response", () => {
   assert.equal(parseAuthRedirectResponse("?utm_source=x", "#top", "abc123"), null);
 });
+
+// The authorization-code exchange must not let a caller redirect Google back
+// to an unrelated origin. This imports the real Edge handler rather than
+// testing a copied validation helper.
+test("oauth exchange rejects a cross-origin redirect before contacting Google", async () => {
+  const previousSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const previousFetch = globalThis.fetch;
+  process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+  let fetchCalls = 0;
+  globalThis.fetch = async () => { fetchCalls += 1; throw new Error("unexpected network call"); };
+  try {
+    const { default: handler } = await import(`../api/oauth-exchange.js?test=${Date.now()}`);
+    const response = await handler(new Request("https://app.example/api/oauth-exchange", {
+      method: "POST",
+      body: JSON.stringify({ code: "auth-code", redirectUri: "https://attacker.example/callback" }),
+      headers: { "content-type": "application/json" },
+    }));
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { error: "redirect_uri invalid" });
+    assert.equal(fetchCalls, 0);
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousSecret === undefined) delete process.env.GOOGLE_CLIENT_SECRET;
+    else process.env.GOOGLE_CLIENT_SECRET = previousSecret;
+  }
+});
