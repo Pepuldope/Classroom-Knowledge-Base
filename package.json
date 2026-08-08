@@ -28,6 +28,6 @@
     "playwright": "^1.61.1"
   },
   "dependencies": {
-    "vercel": "^55.0.0"
+    "vercel": "^58.9.0"
   }
 }
