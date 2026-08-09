@@ -7,12 +7,16 @@ async function verifyUser(req) {
   const auth = req.headers.get("authorization") || "";
   const token = auth.replace(/^Bearer\s+/i, "").trim();
   if (!token) return null;
-  const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!r.ok) return null;
-  const data = await r.json();
-  return data.sub || null;
+  try {
+    const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.sub || null;
+  } catch {
+    return null;
+  }
 }
 
 async function kv(command, ...args) {
