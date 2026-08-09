@@ -569,6 +569,38 @@ test("highlightSnippet wraps matched query tokens in <mark> and escapes HTML", (
   assert.equal(highlightSnippet("", "x"), "");
 });
 
+test("getBundle reads the shard index only once for a populated remote bundle", async () => {
+  const previousUrl = process.env.KV_REST_API_URL;
+  const previousToken = process.env.KV_REST_API_TOKEN;
+  const previousFetch = globalThis.fetch;
+  const shardIndexCalls = [];
+  process.env.KV_REST_API_URL = "https://kv.test";
+  process.env.KV_REST_API_TOKEN = "test-token";
+  globalThis.fetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/get/kb%3Ashards")) {
+      shardIndexCalls.push(value);
+      return new Response(JSON.stringify({ result: { count: 1 } }), { status: 200 });
+    }
+    if (value.endsWith("/get/kb%3Ashard%3A0")) {
+      return new Response(JSON.stringify({ result: JSON.stringify([{ t: "Remote note", x: "body", p: "remote" }]) }), { status: 200 });
+    }
+    throw new Error("unexpected KV request: " + value);
+  };
+  try {
+    const { getBundle } = await import("../api/kb-store.js?single-shard-index");
+    const bundle = await getBundle();
+    assert.equal(bundle.notes.length, 1);
+    assert.equal(shardIndexCalls.length, 1, "a populated bundle should not refetch the shard index");
+  } finally {
+    globalThis.fetch = previousFetch;
+    if (previousUrl === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = previousToken;
+  }
+});
+
 test("getBundle returns the seeded bundle", async () => {
   await seed(sampleBundle());
   const b = await getBundle();

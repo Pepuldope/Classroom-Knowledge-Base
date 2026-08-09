@@ -188,8 +188,12 @@ export async function getBundle() {
   const cached = bundleCacheState(bundleCache);
   if (cached) return cached;
   const notes = await readShardedNotes();
-  const shardsPresent = kvAvailable() ? !!(await kvGetJSON(SHARDS_KEY)) : !!mem.get(SHARDS_KEY);
-  if (notes.length === 0 && !shardsPresent) return null;
+  // A non-empty shard read already proves that the bundle exists. Avoid a
+  // second round-trip to the shard index on the cold path.
+  if (notes.length === 0) {
+    const shardsPresent = kvAvailable() ? !!(await kvGetJSON(SHARDS_KEY)) : !!mem.get(SHARDS_KEY);
+    if (!shardsPresent) return null;
+  }
   const source = !kvAvailable() ? mem.get("kb:src") || "vault" : "vault";
   return cacheBundle(bundleFromNotes(notes, { source }));
 }
