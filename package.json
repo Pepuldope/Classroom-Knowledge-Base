@@ -25,7 +25,7 @@
   },
   "homepage": "https://github.com/Pepuldope/Classroom-Knowledge-Base#readme",
   "devDependencies": {
-    "playwright": "^1.61.1"
+    "playwright": "^1.62.1"
   },
   "dependencies": {
     "vercel": "^58.9.0"
