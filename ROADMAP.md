@@ -218,7 +218,7 @@ else. History below is kept for the record.
 - [x] Accessibility: restore focus to the originating Archive note row after closing its modal without exposing note content (2026-08-06): Archive browse rows are keyboard-operable and modal close returns focus only to a still-connected origin.
 - [x] Privacy: add a browser assertion that route-transition focus markers never serialize into local storage or tutor payloads. Shipped 2026-08-06: the allow-listed UI-only marker model returns null storage/tutor channels and rejects unknown text; wired into the canonical gate.
 - [x] Accessibility: verify the persistent route-transition hint remains readable in both themes at narrow widths. Shipped 2026-08-06: `route_transition_hint_mobile_test.mjs` covers 390px light/dark contrast, wrapping, bounded width, and long-word safety.
-- [x] Accessibility: add a keyboard smoke proving Archive note rows activate with Space as well as Enter and preserve focus after modal close.
+- [x] Accessibility: add a keyboard smoke proving Archive note rows activate with Space as well as Enter and preserve focus after modal close (2026-08-10).
 
 
 ## 🚧 Blocked (pinged — needs Pepuldo)
