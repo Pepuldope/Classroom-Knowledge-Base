@@ -29,7 +29,10 @@ export default async function handler(req) {
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "method not allowed" }), { status: 405 });
+    return new Response(JSON.stringify({ error: "method not allowed" }), {
+      status: 405,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   if (!DRILL_KEY || token !== DRILL_KEY) {

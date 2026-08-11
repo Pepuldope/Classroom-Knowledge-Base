@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { contentFreeTiming } from "../api/kb-route-privacy.js";
 import routerHealth from "../api/router-health.js";
+import routerDrill from "../api/router-drill.js";
 
 test("legacy timing metadata contains only an allow-listed metric and numeric duration", () => {
   const noteMarker = "Algebra private student note body";
@@ -37,6 +38,14 @@ test("router health reset clears counters without adding a debug note", async ()
   assert.equal(body.fallbacks, 0);
   assert.equal(body.recentRoutes.length, 0);
   assert.equal(Object.hasOwn(body, "_note"), false);
+});
+
+test("router drill rejects unsupported methods with a JSON content type", async () => {
+  const response = await routerDrill(new Request("https://example.test/api/router-drill", { method: "PUT" }));
+
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get("content-type"), "application/json");
+  assert.deepEqual(await response.json(), { error: "method not allowed" });
 });
 
 test("chat prune returns unauthorized when user verification cannot reach OAuth", async () => {
