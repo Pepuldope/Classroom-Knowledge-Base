@@ -25,6 +25,7 @@ import kbSearch from "../api/kb-search.js";
 import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
+import enrich from "../api/enrich.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { relatedResponseCacheState, RELATED_RESPONSE_CACHE_TTL_MS } from "../api/kb-related-cache.js";
 import { bundleFromVault } from "../archive-builder.js";
@@ -42,6 +43,12 @@ import { normalizeTutorNotes, tutorLanguageInstruction, buildTutorMessages } fro
 function makeReq(url, method = "GET") {
   return new Request("http://localhost" + url, { method });
 }
+
+test("/api/enrich rejects non-POST requests before authentication", async () => {
+  const response = await enrich(makeReq("/api/enrich", "GET"));
+  assert.equal(response.status, 405);
+  assert.deepEqual(await response.json(), { error: "Method not allowed" });
+});
 
 test("deriveFamily maps representative course names to stable class facets", () => {
   assert.equal(deriveFamily("Advanced Mathematics"), "Science/Math");
