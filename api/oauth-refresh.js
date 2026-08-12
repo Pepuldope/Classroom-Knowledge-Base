@@ -15,12 +15,13 @@ const CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 // which is a public identifier — that was an account-takeover hole.
 export default async function handler(req) {
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
-  if (!CLIENT_SECRET) return jsonResponse({ error: "GOOGLE_CLIENT_SECRET not configured" }, 500);
 
   const refreshToken = await openToken(readCookie(req));
   if (!refreshToken) {
     return jsonResponse({ error: "no_refresh_token" }, 401, { "Set-Cookie": buildClearCookie() });
   }
+
+  if (!CLIENT_SECRET) return jsonResponse({ error: "GOOGLE_CLIENT_SECRET not configured" }, 500);
 
   const params = new URLSearchParams({
     client_id: CLIENT_ID,

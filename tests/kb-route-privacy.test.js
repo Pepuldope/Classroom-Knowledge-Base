@@ -48,6 +48,17 @@ test("router drill rejects unsupported methods with a JSON content type", async 
   assert.deepEqual(await response.json(), { error: "method not allowed" });
 });
 
+test("oauth refresh rejects a request without a refresh cookie", async () => {
+  const { default: oauthRefresh } = await import("../api/oauth-refresh.js?test=oauth-refresh-no-cookie");
+  const response = await oauthRefresh(new Request("https://example.test/api/oauth-refresh", {
+    method: "POST",
+  }));
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "no_refresh_token" });
+  assert.match(response.headers.get("set-cookie") || "", /cwa_rt=.*Max-Age=0/);
+});
+
 test("chat prune returns unauthorized when user verification cannot reach OAuth", async () => {
   const previousUrl = process.env.KV_REST_API_URL;
   const previousToken = process.env.KV_REST_API_TOKEN;
