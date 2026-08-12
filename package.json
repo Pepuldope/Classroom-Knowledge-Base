@@ -28,7 +28,7 @@
     "playwright": "^1.62.1"
   },
   "dependencies": {
-    "vercel": "58.9.2"
+    "vercel": "58.9.4"
   },
   "overrides": {
     "@tootallnate/once": "2.0.1",
