@@ -26,6 +26,7 @@ import kbNote from "../api/kb-note.js";
 import kbRelated from "../api/kb-related.js";
 import kbBrowse from "../api/kb-browse.js";
 import enrich from "../api/enrich.js";
+import routerHealth from "../api/router-health.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { relatedResponseCacheState, RELATED_RESPONSE_CACHE_TTL_MS } from "../api/kb-related-cache.js";
 import { bundleFromVault } from "../archive-builder.js";
@@ -47,6 +48,13 @@ function makeReq(url, method = "GET") {
 test("/api/enrich rejects non-POST requests before authentication", async () => {
   const response = await enrich(makeReq("/api/enrich", "GET"));
   assert.equal(response.status, 405);
+  assert.deepEqual(await response.json(), { error: "Method not allowed" });
+});
+
+test("/api/router-health rejects non-GET requests with JSON", async () => {
+  const response = await routerHealth(makeReq("/api/router-health", "POST"));
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get("content-type"), "application/json");
   assert.deepEqual(await response.json(), { error: "Method not allowed" });
 });
 
