@@ -59,6 +59,17 @@ test("oauth refresh rejects a request without a refresh cookie", async () => {
   assert.match(response.headers.get("set-cookie") || "", /cwa_rt=.*Max-Age=0/);
 });
 
+test("feedback rejects an unauthenticated submission", async () => {
+  const { default: feedback } = await import("../api/feedback.js?test=feedback-unauthorized");
+  const response = await feedback(new Request("https://example.test/api/feedback", {
+    method: "POST",
+    body: JSON.stringify({ text: "private feedback" }),
+  }));
+
+  assert.equal(response.status, 401);
+  assert.deepEqual(await response.json(), { error: "unauthorized" });
+});
+
 test("chat prune returns unauthorized when user verification cannot reach OAuth", async () => {
   const previousUrl = process.env.KV_REST_API_URL;
   const previousToken = process.env.KV_REST_API_TOKEN;
