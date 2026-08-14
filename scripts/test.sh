@@ -15,6 +15,9 @@ cd "$ROOT"
 # cache at /opt/hermes is root-owned and not writable by the agent).
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$ROOT/.pw-browsers}"
 
+# Force the dev server to use the repo browsers (inherited by the background 'node' process)
+export PLAYWRIGHT_BROWSERS_PATH="$ROOT/.pw-browsers"
+
 echo "==> Theme model tests"
 node scripts/theme_test.mjs
 THEME_OK=$?
@@ -136,7 +139,8 @@ node --test tests/kb-route-content-privacy.test.js
 KB_ROUTE_CONTENT_PRIVACY_OK=$?
 if [ "$KB_ROUTE_CONTENT_PRIVACY_OK" -ne 0 ]; then echo "legacy route content privacy tests FAILED"; exit 1; fi
 
-echo "==> Starting dev server on :$PORT"
+# Starting dev server on :$PORT
+export PLAYWRIGHT_BROWSERS_PATH="$ROOT/.pw-browsers"
 node scripts/dev-server.mjs "$PORT" > /tmp/kb_dev.log 2>&1 &
 SRV=$!
 # wait for server
