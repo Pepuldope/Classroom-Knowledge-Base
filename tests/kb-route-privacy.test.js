@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { contentFreeTiming } from "../api/kb-route-privacy.js";
 import routerHealth from "../api/router-health.js";
 import routerDrill from "../api/router-drill.js";
+import oauthConfig from "../api/oauth-config.js";
 
 test("legacy timing metadata contains only an allow-listed metric and numeric duration", () => {
   const noteMarker = "Algebra private student note body";
@@ -48,6 +49,45 @@ test("router drill rejects unsupported methods with a JSON content type", async 
   assert.deepEqual(await response.json(), { error: "method not allowed" });
 });
 
+test("oauth config disables refresh tokens when either secret is missing", async () => {
+  const previousSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const previousKey = process.env.TOKEN_ENC_KEY;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+  process.env.TOKEN_ENC_KEY = "test-key";
+
+  try {
+    const response = await oauthConfig();
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.hasRefreshTokens, false);
+    assert.equal(body.pickerApiKey, null);
+  } finally {
+    if (previousSecret === undefined) delete process.env.GOOGLE_CLIENT_SECRET;
+    else process.env.GOOGLE_CLIENT_SECRET = previousSecret;
+    if (previousKey === undefined) delete process.env.TOKEN_ENC_KEY;
+    else process.env.TOKEN_ENC_KEY = previousKey;
+  }
+});
+
+test("oauth config enables refresh tokens only when both server secrets exist", async () => {
+  const previousSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const previousKey = process.env.TOKEN_ENC_KEY;
+  process.env.GOOGLE_CLIENT_SECRET = "test-client-secret";
+  process.env.TOKEN_ENC_KEY = "test-key";
+
+  try {
+    const response = await oauthConfig();
+    assert.equal(response.status, 200);
+    const body = await response.json();
+    assert.equal(body.hasRefreshTokens, true);
+    assert.equal(body.pickerApiKey, null);
+  } finally {
+    if (previousSecret === undefined) delete process.env.GOOGLE_CLIENT_SECRET;
+    else process.env.GOOGLE_CLIENT_SECRET = previousSecret;
+    if (previousKey === undefined) delete process.env.TOKEN_ENC_KEY;
+    else process.env.TOKEN_ENC_KEY = previousKey;
+  }
+});
 test("oauth refresh rejects a request without a refresh cookie", async () => {
   const { default: oauthRefresh } = await import("../api/oauth-refresh.js?test=oauth-refresh-no-cookie");
   const response = await oauthRefresh(new Request("https://example.test/api/oauth-refresh", {
