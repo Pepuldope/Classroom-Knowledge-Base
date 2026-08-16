@@ -1873,7 +1873,8 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
     }
     restoreParentFocus();
   } catch {
-    renderRelatedPreviewError(container);
+    renderRelatedPreviewError(container, noteIndex);
+    restoreParentFocus();
   }
 }
 
