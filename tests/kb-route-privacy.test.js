@@ -4,6 +4,11 @@ import { contentFreeTiming } from "../api/kb-route-privacy.js";
 import routerHealth from "../api/router-health.js";
 import routerDrill from "../api/router-drill.js";
 import oauthConfig from "../api/oauth-config.js";
+import * as helpers from "../api/_helpers.js";
+
+test("rate helper exports contain only the live rate operations", () => {
+  assert.equal(Object.hasOwn(helpers, "readRate"), false);
+});
 
 test("legacy timing metadata contains only an allow-listed metric and numeric duration", () => {
   const noteMarker = "Algebra private student note body";

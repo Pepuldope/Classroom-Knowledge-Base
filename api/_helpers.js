@@ -56,18 +56,6 @@ export async function checkAndIncrementRate(sub, limit = DEFAULT_DAILY_LIMIT) {
   } catch { return { ok: true, count: 0, limit }; }
 }
 
-export async function readRate(sub, limit = DEFAULT_DAILY_LIMIT) {
-  if (!KV_URL || !KV_TOKEN) return { count: 0, limit };
-  try {
-    const r = await fetch(`${KV_URL}/get/${encodeURIComponent(rateKey(sub))}`, {
-      headers: { Authorization: `Bearer ${KV_TOKEN}` },
-    });
-    if (!r.ok) return { count: 0, limit };
-    const data = await r.json();
-    return { count: Number(data.result) || 0, limit };
-  } catch { return { count: 0, limit }; }
-}
-
 export function jsonResponse(body, status = 200, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
