@@ -88,6 +88,27 @@ test("oauth config enables refresh tokens only when both server secrets exist", 
     else process.env.TOKEN_ENC_KEY = previousKey;
   }
 });
+test("prefs reports unavailable storage before attempting authentication", async () => {
+  const previousUrl = process.env.KV_REST_API_URL;
+  const previousToken = process.env.KV_REST_API_TOKEN;
+  delete process.env.KV_REST_API_URL;
+  delete process.env.KV_REST_API_TOKEN;
+
+  try {
+    const { default: prefs } = await import("../api/prefs.js?test=prefs-storage-unavailable");
+    const response = await prefs(new Request("https://example.test/api/prefs"));
+
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get("content-type"), "application/json");
+    assert.deepEqual(await response.json(), { error: "storage_not_configured" });
+  } finally {
+    if (previousUrl === undefined) delete process.env.KV_REST_API_URL;
+    else process.env.KV_REST_API_URL = previousUrl;
+    if (previousToken === undefined) delete process.env.KV_REST_API_TOKEN;
+    else process.env.KV_REST_API_TOKEN = previousToken;
+  }
+});
+
 test("oauth refresh rejects a request without a refresh cookie", async () => {
   const { default: oauthRefresh } = await import("../api/oauth-refresh.js?test=oauth-refresh-no-cookie");
   const response = await oauthRefresh(new Request("https://example.test/api/oauth-refresh", {
