@@ -276,11 +276,6 @@ export async function appendBundle(incoming) {
   return merged;
 }
 
-/** True when a shared knowledge base exists. */
-export async function hasBundle() {
-  return (await getBundle()) != null;
-}
-
 // ---------------------------------------------------------------------------
 // HTTP route: GET /api/kb-store?action=export
 // Returns the full shared knowledge-base bundle (reassembled from shards) as JSON.

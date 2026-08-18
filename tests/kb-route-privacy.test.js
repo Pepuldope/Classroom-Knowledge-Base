@@ -5,9 +5,14 @@ import routerHealth from "../api/router-health.js";
 import routerDrill from "../api/router-drill.js";
 import oauthConfig from "../api/oauth-config.js";
 import * as helpers from "../api/_helpers.js";
+import * as kbStore from "../api/kb-store.js";
 
 test("rate helper exports contain only the live rate operations", () => {
   assert.equal(Object.hasOwn(helpers, "readRate"), false);
+});
+
+test("legacy KB store exports only its HTTP handler", () => {
+  assert.equal(Object.hasOwn(kbStore, "hasBundle"), false);
 });
 
 test("legacy timing metadata contains only an allow-listed metric and numeric duration", () => {
