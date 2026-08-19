@@ -724,21 +724,19 @@ function setView(view) {
     setTimeout(closeKbModals, 100);
     const focusTarget = kbViewTransitionFocusTargetModel({ from: "kb", to: view, modalWasOpen });
     if (focusTarget) {
-      setTimeout(() => {
-        const targetButton = document.querySelector(`.view-toggle-btn[data-view="${focusTarget}"]`);
-        document.querySelectorAll(".view-toggle-btn").forEach((button) => button.classList.remove("view-toggle-focus-restored"));
-        targetButton?.focus();
-        targetButton?.classList.add("view-toggle-focus-restored");
-        const focusStatus = document.getElementById("routeTransitionFocusStatus");
-        const announcement = kbViewTransitionFocusAnnouncementModel(focusTarget);
-        if (focusStatus && announcement) {
-          const safeMarker = routeTransitionFocusPrivacyModel(announcement.text);
-          focusStatus.setAttribute("role", announcement.role);
-          focusStatus.setAttribute("aria-live", announcement.live);
-          focusStatus.setAttribute("aria-atomic", announcement.atomic);
-          focusStatus.textContent = safeMarker.text;
-        }
-      }, 0);
+      const targetButton = document.querySelector(`.view-toggle-btn[data-view="${focusTarget}"]`);
+      document.querySelectorAll(".view-toggle-btn").forEach((button) => button.classList.remove("view-toggle-focus-restored"));
+      targetButton?.focus();
+      targetButton?.classList.add("view-toggle-focus-restored");
+      const focusStatus = document.getElementById("routeTransitionFocusStatus");
+      const announcement = kbViewTransitionFocusAnnouncementModel(focusTarget);
+      if (focusStatus && announcement) {
+        const safeMarker = routeTransitionFocusPrivacyModel(announcement.text);
+        focusStatus.setAttribute("role", announcement.role);
+        focusStatus.setAttribute("aria-live", announcement.live);
+        focusStatus.setAttribute("aria-atomic", announcement.atomic);
+        focusStatus.textContent = safeMarker.text;
+      }
     }
   }
   document.querySelectorAll(".view-toggle-btn").forEach((btn) => {
