@@ -68,7 +68,6 @@ Fresh user reports from live use. **Prefer these over Agent-Proposed polish.**
 ## 💡 Ideas / experiments
 - [x] Multi-language tutor (Slovak) using the existing prefLanguage plumbing. Shipped 2026-07-21: Display → Language now persists locally and sends a bounded Slovak instruction with grounded tutor requests.
 - [x] "Study streak" gamification on the KB home. Shipped 2026-07-21; local calendar-date validation hardened 2026-07-21.
-- [x] Auto-generate a weekly "what to review" digest from the KB + planner. Shipped 2026-07-22: local weekly review card prioritizes unopened notes and falls back to recent notes.
 - [x] Voice tutor: read tutor answers aloud with the browser's built-in speech engine for hands-free study (2026-07-22).
 - [x] Per-student progress tracking (which notes they've opened / quizzed on). Shipped 2026-07-21: note opens are tracked locally and summarized in the KB view.
 
