@@ -20,3 +20,6 @@ scripts/screenshots/
 _*.json
 _*.mjs
 _*.py
+
+# Out-of-band gate results (machine-local, never committed)
+.gate/
