@@ -23,3 +23,7 @@ _*.py
 
 # Out-of-band gate results (machine-local, never committed)
 .gate/
+
+# Loop/build noise in the agent workspace (never committed)
+server.log
+.playwright/

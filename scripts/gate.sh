@@ -47,7 +47,13 @@ cmd_run() {
 
   local sha dirty started started_epoch
   sha="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-  if [ -n "$(git status --porcelain 2>/dev/null)" ]; then dirty=1; else dirty=0; fi
+  # Tracked modifications only (-uno). Untracked files must NOT count as
+  # dirty: the workspace permanently carries build noise (.playwright/,
+  # server.log) and test.sh names every file it runs, so an untracked file
+  # cannot change what the gate measures. Counting them would pin
+  # GATE_DIRTY=1 forever, making GATE_APPLIES_TO_HEAD permanently "no"
+  # and the gate permanently unusable.
+  if [ -n "$(git status --porcelain -uno 2>/dev/null)" ]; then dirty=1; else dirty=0; fi
   started="$(now_utc)"
   started_epoch="$(date -u +%s)"
 
