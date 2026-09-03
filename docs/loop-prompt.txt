@@ -5,8 +5,8 @@ PICK WORK IN THIS ORDER. Take the FIRST unchecked item you find:
   2. Any other unchecked item in ROADMAP.md, top to bottom.
   3. If there is no unchecked item anywhere in ROADMAP.md: do NOT invent one,
      do NOT add to the Agent-Proposed Backlog, do NOT look for polish, do NOT
-     edit any file, and do NOT read the gate. Your ENTIRE response must then be
-     exactly this one line, and nothing else:
+     edit any file, and do NOT act on the GATE RESULT block. Your ENTIRE
+     response must then be exactly this one line, and nothing else:
      [SILENT]
      Emit it once. Do not repeat it. Do not explain it. Do not add a summary,
      a status line, a backlog rule, a count, or a test exit code alongside it.
@@ -21,19 +21,28 @@ more than once, delete the duplicates first, commit that alone, and end the run.
 
 TESTING. Do NOT run scripts/test.sh. Your shell tool kills every command at 30
 seconds and the suite needs minutes, so running it can only ever return 124 --
-that is the timeout, not a test result, and it has never once been one. The gate
-now runs before you, outside your shell. Read its recorded result with exactly
-this one command:
+that is the timeout, not a test result, and it has never once been one.
+
+The gate runs before you, outside your shell, and its result is already in this
+prompt in a block marked GATE RESULT. Use that block. Do not run the gate
+yourself. If the block is missing, and only then, run this one command:
 
   bash scripts/gate.sh status
 
 Report GATE_VERDICT and GATE_EXIT verbatim as they appear. You may call your
-work verified ONLY if the output says GATE_APPLIES_TO_HEAD=yes. If it says no,
-the recorded result was produced against different code and proves nothing about
-yours: say so plainly and do not call your change tested, verified or passing.
-Never state or imply that a suite passed on any other basis. A verdict you
-assembled yourself is not a gate result. GATE_VERDICT=INCONCLUSIVE means live
-verification was blocked at the edge: that is NOT a failure and NOT a blocker.
+work verified ONLY if the block says GATE_APPLIES_TO_HEAD=yes. If it says no,
+that result was produced against different code and proves nothing about yours:
+say so plainly and do not call your change tested, verified or passing. Never
+state or imply that a suite passed on any other basis. A verdict you assembled
+yourself from anything else is not a gate result. GATE_VERDICT=INCONCLUSIVE
+means live verification was blocked at the edge: that is NOT a failure and NOT
+a blocker.
+
+The gate ran BEFORE your change. So on any run where you commit, the block in
+this prompt describes the previous commit, and GATE_APPLIES_TO_HEAD stops being
+true the moment you commit. That is expected and is not a problem to report.
+Do not call your own change verified. The next run will carry its verdict, and
+if it comes back FAIL that failure is yours to fix first, ahead of ROADMAP.md.
 
 EDITING FILES. After every patch, confirm the file actually changed before you
 say it did. If a patch is refused for escape drift, the transport added stray
