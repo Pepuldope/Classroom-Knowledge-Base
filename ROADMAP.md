@@ -247,17 +247,29 @@ Mode 1 scans for, and a suggestion must not be able to look like queued work to 
 mechanical scan. Pepuldo turns a proposal into real work by moving the line into a
 section above and rewriting it as `- [ ]` there.
 
-The nine below were filed on 2026-08-07. They were recovered from `AGENTS.md`,
-where the loop had written them as "focus areas" attributed to Pepuldo, who did
-not write them. They are kept because some may be worth doing — but none of them
-is approved, and none is owner steering. See the freeze note in `AGENTS.md`.
+Nine were filed on 2026-08-07. They were recovered from `AGENTS.md`, where the
+loop had written them as "focus areas" attributed to Pepuldo, who did not write
+them. **Five were deleted on 2026-09-06: each had already shipped before it was
+proposed**, so the section was largely the loop re-filing completed work as new
+ideas — the "polish loop under a new label" shape C6 exists to catch. Checked
+against this file's own `- [x]` entries:
+
+- *Hide the "Scrape my Classroom" onboarding card* — shipped 2026-07-25 (§Reported
+  by Pepuldo 2026-07-25), with `scripts/kb_loading_test.mjs` asserting the card is
+  hidden during discovery.
+- *Tutor chat with history* — shipped 2026-07-20: conversation memory across
+  messages, "new topic" reset, clear-chat.
+- *Route planner AI through the tutor pipeline* — shipped: "unify Planner
+  assignment-help tutor with the KB tutor pipeline".
+- *Sort and filter over KB dimensions* — shipped: filter chips, faceted
+  course/year search, and relevance/recency/course sort toggle chips.
+- *Lazy-load panels and debounce search* — shipped 2026-07-20 as sub-items of the
+  KB load-time work.
+
+The four below are the remainder. None is approved and none is owner steering;
+leaving them here means "not yet", which is a perfectly good answer.
 
 - 💭 Make the knowledge base configurable from the existing Settings page (tutor on/off + effort, default search scope, related-notes count, density, export / clear-local-data). Why: KB behaviour is currently fixed in code constants with no user control.
 - 💭 Add a whole-site regression check to the run gate so KB changes cannot silently break archive, planner, settings or home. Why: past runs optimised the KB while the rest of the app drifted.
-- 💭 Lazy-load the build panel, tutor and related-notes preview, and debounce search input. Why: first paint currently pays for panels most visits never open.
 - 💭 Write down the student-privacy posture in Settings in plain language: what is stored, where, and what leaves the browser. Why: the data handling is already local-first but nothing tells the student that.
 - 💭 Persist the Google Classroom session so students are not re-prompted on every visit — built strictly around the existing escape hatches, never over them. Why: repeated sign-in is friction; see LOOP-GUARDRAILS.md §7 for the lockout bug this must not reintroduce.
-- 💭 Hide the "Scrape my Classroom" onboarding card when a bundle already exists. Why: it currently offers a redundant build action over content that is already loaded.
-- 💭 Add sort and filter controls over the KB's real dimensions — kind, year, course, course family — plus an explicit sort order. Why: the facets already exist in the data and in /api/kb-browse but are not exposed.
-- 💭 Level the AI tutor up from single-shot answers into a real in-app chat with history. Why: follow-up questions currently lose all context.
-- 💭 Route the planner's "ask about this assignment" AI through the same tutor pipeline as the KB. Why: two AI implementations for one job will drift apart.
