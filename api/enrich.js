@@ -225,8 +225,15 @@ export default async function handler(req) {
     return { id: a.id, ...parsed };
   }));
 
-  const enrichments = results.filter((r) => r && !r.error);
-  return new Response(JSON.stringify({ enrichments }), {
+  // Failed entries travel too. Dropping them here is what made every
+  // enrichment failure silent: the reason was assembled per assignment and
+  // then discarded one line before the response, so the client saw an empty
+  // array and could only report that nothing came back. The client skips
+  // caching anything carrying `error` and reports it, so passing them through
+  // is what lets a cause reach the user at all.
+  const enrichments = results.filter(Boolean);
+  const failures = enrichments.filter((r) => r.error).length;
+  return new Response(JSON.stringify({ enrichments, failures }), {
     headers: { "Content-Type": "application/json" },
   });
 }
