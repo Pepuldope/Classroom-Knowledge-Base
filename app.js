@@ -1974,10 +1974,27 @@ async function enrichBatch(batch) {
         })),
       }),
     }, ENRICH_TIMEOUT_MS);
-    if (!r.ok) return [];
+    if (!r.ok) {
+      // The whole request failed, so there are no per-assignment details to
+      // report — this is the case that left nothing to look at anywhere.
+      const body = await r.text().catch(() => "");
+      lastEnrichFailure = `/api/enrich HTTP ${r.status} ${body.slice(0, 300)}`;
+      console.error("[enrich] request failed:", r.status, body.slice(0, 500));
+      return [];
+    }
     const data = await r.json();
-    return data.enrichments || [];
-  } catch { return []; }
+    const list = data.enrichments || [];
+    for (const e of list) {
+      if (e?.error) console.error("[enrich] assignment", e.id, e.error, e.detail || "(no detail)");
+    }
+    return list;
+  } catch (e) {
+    lastEnrichFailure = isTimeoutError(e)
+      ? `/api/enrich timed out after ${ENRICH_TIMEOUT_MS / 1000}s`
+      : `/api/enrich ${e.name || "failed"}: ${e.message || ""}`;
+    console.error("[enrich] request threw:", e);
+    return [];
+  }
 }
 
 function enrichFailureMessage(failed) {
