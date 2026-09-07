@@ -1939,11 +1939,19 @@ async function loadReport(epoch) {
       else setStatus("");
     };
     fetchEnrichments(need, onProgress).then((failed) => {
-      if (epoch !== sessionEpoch || !failed) return;
+      if (epoch !== sessionEpoch) return;
+      maybeLazyEnrichRest({ auto: true });
+      if (!failed) return;
       // Say so rather than leaving the assignments silently unanalyzed. This
       // is what a removed or unreachable upstream model looks like from here.
       setStatus(enrichFailureMessage(failed), true);
     });
+  } else {
+    // Nothing in scope means the branch above never runs — and with it, the
+    // only trigger for the out-of-scope pass. An assignment with no due date
+    // (or one due beyond the window) would otherwise never be analyzed at
+    // all, while still rendering as though it were being worked on.
+    maybeLazyEnrichRest({ auto: true });
   }
 }
 
@@ -1965,6 +1973,11 @@ const BATCH_SIZE = 5;
 // load), which leaves the card looking permanently in-flight. Session-only —
 // a reload should try again.
 const enrichFailedIds = new Set();
+// Assignments with a request queued or in flight. The spinning dot means
+// "being analyzed", and it was previously drawn for anything without an
+// enrichment — including assignments nothing had ever asked about, which spin
+// for the life of the page. Only these get the spinner.
+const enrichPendingIds = new Set();
 // The upstream reason for the most recent failure, shown to the user so a
 // rate limit is distinguishable from a dead model.
 let lastEnrichFailure = "";
@@ -2024,6 +2037,7 @@ function enrichFailureMessage(failed) {
 async function fetchEnrichments(need, onProgress) {
   if (need.length === 0) return 0;
   let failed = 0;
+  for (const a of need) enrichPendingIds.add(a.id);
   for (let i = 0; i < need.length; i += BATCH_SIZE) {
     const batch = need.slice(i, i + BATCH_SIZE);
     const enrichments = await enrichBatch(batch);
@@ -2035,6 +2049,7 @@ async function fetchEnrichments(need, onProgress) {
       // analyze — a dead upstream model reads exactly like this. Storing that
       // object counted as a result, so the assignment was never retried and
       // sat permanently blank. Only a real enrichment is worth keeping.
+      enrichPendingIds.delete(a.id);
       if (e && !e.error) {
         a.enrichment = e;
         enrichFailedIds.delete(a.id);
@@ -2211,12 +2226,14 @@ function assignmentCard(a) {
   const dot = document.createElement("div");
   if (isPassive) {
     dot.className = "priority-dot material-dot";
-  } else if (!e && enrichFailedIds.has(a.id)) {
-    // Asked and failed — not still loading. Say so instead of spinning.
-    dot.className = "priority-dot kind-unknown";
-    dot.title = "AI analysis unavailable";
-  } else if (!e) {
+  } else if (!e && enrichPendingIds.has(a.id)) {
     dot.className = "priority-dot loading";
+  } else if (!e) {
+    // Either the attempt failed or nothing has asked about this assignment
+    // yet. Neither is "loading", and spinning at the user implies work that
+    // is not happening.
+    dot.className = "priority-dot kind-unknown";
+    dot.title = enrichFailedIds.has(a.id) ? "AI analysis unavailable" : "Not analyzed yet";
   } else {
     // Dot color follows the label family so it matches the verb tag and is
     // deterministic across devices (same label → same dot, every time).
@@ -2504,13 +2521,21 @@ function renderPinned(visible) {
   wrap.hidden = false;
 }
 
-function maybeLazyEnrichRest() {
+// Cap the automatic pass. Out-of-scope work can be a whole year of
+// assignments, and each one is a request against a shared free quota.
+const LAZY_ENRICH_MAX = 40;
+
+function maybeLazyEnrichRest({ auto = false } = {}) {
   if (lazyEnrichTriggered) return;
-  if (!$("restWrap").open) return;
+  // Opening the section is one trigger; the automatic pass after load is the
+  // other. Without the second, an assignment outside the -3..+7 day window is
+  // never analyzed at all unless the user happens to expand that section.
+  if (!auto && !$("restWrap").open) return;
   lazyEnrichTriggered = true;
   const candidates = allAssignments
     .filter((a) => a.kind === "assignment" && isPending(a) && !isStale(a) && !dismissedIds.has(a.id))
-    .filter((a) => !a.enrichment && !isInScope(a));
+    .filter((a) => !a.enrichment && !isInScope(a))
+    .slice(0, LAZY_ENRICH_MAX);
   if (candidates.length === 0) return;
   let remaining = candidates.length;
   setStatus(`Analyzing ${remaining} more…`);
