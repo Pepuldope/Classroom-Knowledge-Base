@@ -43,6 +43,11 @@ node --test tests/enrich-parse.test.js
 ENRICH_PARSE_OK=$?
 if [ "$ENRICH_PARSE_OK" -ne 0 ]; then echo "enrichment parsing tests FAILED"; exit 1; fi
 
+echo "==> Corpus merge tests"
+node --test tests/kb-merge.test.js
+KB_MERGE_OK=$?
+if [ "$KB_MERGE_OK" -ne 0 ]; then echo "corpus merge tests FAILED"; exit 1; fi
+
 echo "==> Task kind vocabulary tests"
 node --test tests/task-kinds.test.js
 TASK_KINDS_OK=$?

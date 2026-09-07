@@ -7,6 +7,7 @@
 import { idbGet, idbPut, idbDelete } from "./archive.js";
 import { makeSortFn } from "./kb-client-search.js";
 import { kbBuildCheckpointModel } from "./kb-local-status.js";
+import { mergeBundles } from "./kb-merge.js";
 
 const BUNDLE_ID = "kb-bundle";
 const META_ID = "kb-meta";
@@ -34,6 +35,18 @@ export async function saveKbBundle(bundle) {
     savedAt: new Date().toISOString(),
   });
   return valid;
+}
+
+/**
+ * Fold a freshly ingested bundle into whatever is already stored.
+ *
+ * Every ingestion path used saveKbBundle directly, which REPLACES — so
+ * rebuilding from Classroom discarded an imported archive of past years, and
+ * importing an archive discarded the build. One corpus means accumulating.
+ */
+export async function saveMergedKbBundle(incoming) {
+  const existing = await loadKbBundle().catch(() => null);
+  return saveKbBundle(mergeBundles(existing, incoming));
 }
 
 /** Return the distinct years represented by one course, newest first. */

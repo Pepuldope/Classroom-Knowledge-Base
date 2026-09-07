@@ -16,7 +16,7 @@
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
-import { loadKbBundle, saveKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
+import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
@@ -1245,8 +1245,10 @@ async function doScrape(token) {
         if (progress && total) progress.style.width = `${Math.round((done / total) * 90) + 5}%`;
       },
     });
-    const bundle = kbBundleFromClassroomArchive(archive);
-    localKbBundle = await saveKbBundle(bundle);
+    // Merge, never replace: a rebuild must not discard past years that were
+    // imported from a School Backup export.
+    const bundle = await saveMergedKbBundle(kbBundleFromClassroomArchive(archive));
+    localKbBundle = bundle;
     await removeKbBuildCheckpoint();
     if (progress) progress.style.width = "100%";
     if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
@@ -1279,8 +1281,10 @@ async function handleKbFile(e) {
   try {
     const text = await file.text();
     let parsed; try { parsed = JSON.parse(text); } catch { setKbBuildError("That file isn't valid JSON."); return; }
-    const bundle = kbBundleFromClassroomArchive(parsed);
-    localKbBundle = await saveKbBundle(bundle);
+    // Same rule in the other direction: importing past years must not discard
+    // the current Classroom build.
+    const bundle = await saveMergedKbBundle(kbBundleFromClassroomArchive(parsed));
+    localKbBundle = bundle;
     if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
     setTimeout(() => refreshKb(), 600);
   } catch (err) { setKbBuildError(err.message); }
