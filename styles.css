@@ -1947,7 +1947,12 @@ summary::-webkit-details-marker { color: var(--muted); }
 #archiveBuildCancelBtn { width: 100%; }
 
 /* Search & Browse | Curriculum tabs. */
-.archive-tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); }
+/* Study page tabs — Search / Browse / Curriculum / Manage. The selectors are
+   shared with the older .archive-* names so one rule styles both; the Archive
+   view is gone but the class names remain in the note-modal markup. */
+.study-tabs,
+.archive-tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.study-tab-btn,
 .archive-tab-btn {
   background: none;
   border: none;
@@ -1958,8 +1963,36 @@ summary::-webkit-details-marker { color: var(--muted); }
   color: var(--muted);
   cursor: pointer;
 }
+".study-tab-btn:hover,
 .archive-tab-btn:hover { color: var(--fg); }
+.study-tab-btn.active,
 .archive-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.study-tab-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The switcher owns a full row on phones, so the targets can be comfortable. */
+@media (max-width: 640px) {
+  .study-tabs { gap: 0; }
+  .study-tab-btn { min-height: 44px; margin-right: 0.75rem; flex: 0 0 auto; }
+}
+
+.study-panel { min-width: 0; }
+.study-manage-block {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--card);
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.9rem;
+}
+.study-manage-title { margin: 0 0 0.25rem; font-size: 0.95rem; font-weight: 600; }
+.study-manage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.6rem 0 0.4rem;
+}
+@media (max-width: 640px) {
+  .study-manage-actions button { min-height: 44px; }
+}
 
 /* Curriculum map — per-subject-across-years grid. */
 .curriculum-grid { overflow-x: auto; }

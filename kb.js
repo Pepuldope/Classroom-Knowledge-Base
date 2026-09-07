@@ -16,6 +16,8 @@
 
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
+import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
+import { renderCurriculum } from "./kb-curriculum.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -667,6 +669,47 @@ export async function maybeAutoBuildKb() {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Study tabs — Search · Browse · Curriculum · Manage.
+//
+// Archive and the Knowledge Base each had their own way to find a note; the
+// merged page has one place for each job instead. The panels are mutually
+// exclusive, so nothing on this page answers the same question twice.
+// ---------------------------------------------------------------------------
+
+let activeStudyTab = "search";
+
+export function setStudyTab(requested) {
+  const model = studyTabModel(requested);
+  activeStudyTab = model.active;
+  for (const { tab, hidden } of model.panels) {
+    const panel = $(`studyPanel-${tab}`);
+    if (panel) panel.hidden = hidden;
+  }
+  document.querySelectorAll(".study-tab-btn").forEach((btn) => {
+    const on = btn.dataset.tab === model.active;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  // Each panel loads its own content on entry — the corpus can be large and
+  // rendering all four up front is wasted work on a phone.
+  if (model.active === "browse") showBrowsePanel();
+  else hideBrowsePanel();
+  if (model.active === "curriculum") renderStudyCurriculum();
+  return model.active;
+}
+
+function renderStudyCurriculum() {
+  renderCurriculum($("kbCurriculumGrid"), localKbBundle, {
+    onOpenCourse: (course, year) => {
+      // A chip is a way into the corpus, not a dead end: land on Browse with
+      // that course already open.
+      setStudyTab(studyTabForAction("open-course", activeStudyTab));
+      openCourse(course, year || "");
+    },
+  });
+}
+
 export function showKbView() {
   wireKbEvents(); // ensure search/tutor listeners are attached (idempotent)
   markStudyActivity();
@@ -764,10 +807,12 @@ export async function refreshKb() {
   if (hasDb) {
     renderKbMeta(meta);
     void checkForClassroomChanges(localKbBundle);
-    // Fresh load (no active query yet) → surface the discovery panel so the
-    // KB isn't blank below the search box. A real query hides it via runKbSearch.
+    // Browse is its own tab now, so this no longer force-shows it under the
+    // search box — that was the page answering "find me a note" twice at once.
+    // Restore whichever tab is active; each loads its own content.
+    setStudyTab(activeStudyTab);
     const search = $("kbSearchInput");
-    if (!search || !search.value.trim()) showBrowsePanel();
+    if (!search || !search.value.trim()) renderExamples();
   }
 }
 
@@ -1051,6 +1096,16 @@ export function wireKbEvents() {
   fileLink?.addEventListener("click", () => fileInput?.click());
   fileInput?.addEventListener("change", (e) => handleKbFile(e));
 
+  document.querySelectorAll(".study-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setStudyTab(btn.dataset.tab));
+  });
+  // Manage reuses the onboarding controls rather than duplicating their logic:
+  // the two are never on screen together (onboarding shows only in the empty
+  // state), so this is one build path and one import path with two entry points.
+  $("kbRebuildBtn")?.addEventListener("click", () => startScrape());
+  $("kbManageLoadFileLink")?.addEventListener("click", () => fileInput?.click());
+  $("kbBuildCancelBtn")?.addEventListener("click", () => cancelKbBuild());
+
   tutorOpen?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = false; });
   tutorClose?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = true; });
   tutorClearChat?.addEventListener("click", clearTutorUi);
@@ -1164,10 +1219,26 @@ function currentAccessToken() {
 }
 
 let kbBuildInFlight = false;
+let kbBuildAbort = null; // AbortController for the running build, so it can be cancelled
+
+/**
+ * Stop an in-flight build.
+ *
+ * The Archive view had a cancel button and no resume; the KB had resume and no
+ * cancel. The merged page keeps both — the checkpoint is written per completed
+ * course, so cancelling mid-build leaves a resumable one behind rather than
+ * throwing the work away.
+ */
+export function cancelKbBuild() {
+  kbBuildAbort?.abort();
+}
 
 export async function startScrape() {
   if (kbBuildInFlight) return;
   kbBuildInFlight = true;
+  kbBuildAbort = new AbortController();
+  const cancelBtn = $("kbBuildCancelBtn");
+  if (cancelBtn) cancelBtn.hidden = false;
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
   const showStatus = (msg, isError) => {
@@ -1234,6 +1305,7 @@ async function doScrape(token) {
   };
   try {
     const archive = await buildArchiveFromClassroom(gFetch, {
+      signal: kbBuildAbort?.signal,
       checkpoint: checkpoint.showBuildCard ? null : checkpoint,
       saveCheckpoint: (next) => saveKbBuildCheckpoint(kbBuildCheckpointModel(next)),
       onProgress: ({ message, done, total }) => {
@@ -1260,9 +1332,19 @@ async function doScrape(token) {
       }));
       return;
     }
+    if (e?.name === "AbortError") {
+      // Not a failure. The per-course checkpoint survives, so say what the
+      // Resume button will do rather than showing an error.
+      if (statusEl) { statusEl.classList.remove("error"); statusEl.textContent = "Cancelled — resume any time to pick up where it stopped."; }
+      await refreshKb();
+      return;
+    }
     setKbBuildError(e.message);
   } finally {
     kbBuildInFlight = false;
+    kbBuildAbort = null;
+    const cancelBtn = $("kbBuildCancelBtn");
+    if (cancelBtn) cancelBtn.hidden = true;
   }
 }
 
@@ -1320,11 +1402,14 @@ async function runKbSearch(query) {
     if (count) { count.hidden = true; count.innerHTML = ""; }
     const chips = $("kbFilterChips");
     if (chips) chips.hidden = true;
-    // No query → reveal the "discover by course" browse panel + example searches.
-    showBrowsePanel({ restore: false });
+    // No query → offer the example searches. Discovering by course lives on
+    // the Browse tab, not stacked underneath this one.
+    renderExamples();
     return;
   }
-  hideBrowsePanel();
+  // Typing while on Browse or Curriculum would otherwise search a panel the
+  // user cannot see.
+  if (activeStudyTab !== "search") setStudyTab(studyTabForAction("search", activeStudyTab));
   // Intentional IN-FLIGHT state: show a spinner so the brief fetch round-trip
   // (the KB reassembles 13 KV shards) never looks like a frozen/blank panel.
   showKbLoading();

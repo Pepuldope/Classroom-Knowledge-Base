@@ -2,26 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { privateViewDecision, classroomAuthRecoveryModel } from "../auth-view.js";
 
-test("private views require an authenticated session", () => {
+test("the Study route requires an authenticated session", () => {
   assert.deepEqual(privateViewDecision("kb", null), {
     allowed: false,
     fallback: "planner",
-    message: "Sign in with Google to open your private Knowledge Base.",
-  });
-  assert.deepEqual(privateViewDecision("archive", null), {
-    allowed: false,
-    fallback: "planner",
-    message: "Sign in with Google to open your private Knowledge Base.",
+    message: "Sign in with Google to open your private study notes.",
   });
 });
 
-test("authenticated users may open the private Knowledge Base", () => {
+test("authenticated users may open Study", () => {
   assert.deepEqual(privateViewDecision("kb", "token"), {
     allowed: true,
     fallback: null,
     message: "",
   });
-  assert.deepEqual(privateViewDecision("archive", "token"), {
+});
+
+test("the retired archive route is no longer a private view", () => {
+  // Archive was merged into Study. Its route id must not keep gating anything,
+  // or a stale link would be bounced to the Planner with a sign-in message.
+  assert.deepEqual(privateViewDecision("archive", null), {
     allowed: true,
     fallback: null,
     message: "",

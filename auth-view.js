@@ -1,4 +1,6 @@
-const PRIVATE_VIEWS = new Set(["kb", "archive"]);
+// Only the Study route exposes the student's own Classroom data. "archive"
+// was the second entry here until the Archive view was merged into Study.
+const PRIVATE_VIEWS = new Set(["kb"]);
 
 /** Decide whether a Classroom response means the cached account is unusable. */
 export function classroomAuthRecoveryModel(status) {
@@ -16,6 +18,6 @@ export function privateViewDecision(view, accessToken) {
   return {
     allowed: false,
     fallback: "planner",
-    message: "Sign in with Google to open your private Knowledge Base.",
+    message: "Sign in with Google to open your private study notes.",
   };
 }

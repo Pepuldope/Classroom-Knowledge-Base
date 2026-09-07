@@ -19,8 +19,7 @@
   <h1>Classroom Analyzer</h1>
   <div id="viewToggle" class="view-toggle" hidden>
     <button class="view-toggle-btn active" data-view="planner" type="button">Planner</button>
-    <button class="view-toggle-btn" data-view="archive" type="button">Archive</button>
-    <button class="view-toggle-btn" data-view="kb" type="button">Knowledge Base</button>
+    <button class="view-toggle-btn" data-view="kb" type="button">Study</button>
   </div>
   <div id="routeTransitionFocusStatus" class="route-transition-status" role="status" aria-live="polite" aria-atomic="true"></div>
   <div id="auth">
@@ -98,54 +97,16 @@
   </section>
   </div>
 
-  <section id="archiveView" hidden>
-    <div id="archiveOnboarding" class="archive-onboarding" hidden>
-      <div class="archive-onboarding-card">
-        <h2 class="welcome-title">Build a searchable database of everything you've learned</h2>
-        <p class="archive-onboarding-sub">All your courses, past years included — search, browse by topic, and let the AI reference what you've already studied. Takes a minute or two, and stays on this device.</p>
-        <button id="archiveBuildBtn" class="primary big-login" type="button">Build my archive</button>
-        <button id="archiveLoadFileLink" class="link-btn" type="button">or load an archive.json file</button>
-        <input id="archiveOnboardingFileInput" type="file" accept="application/json,.json" hidden />
-      </div>
-    </div>
-
-    <div id="archiveBuildPanel" class="archive-build-panel" hidden>
-      <div id="archiveBuildStatus" class="archive-build-status">Starting…</div>
-      <div class="archive-build-progress"><div id="archiveBuildProgressBar" class="archive-build-progress-bar"></div></div>
-      <div id="archiveBuildLog" class="archive-build-log"></div>
-      <button id="archiveBuildCancelBtn" type="button">Cancel</button>
-    </div>
-
-    <div id="archiveMain" hidden>
-      <div id="archiveTabs" class="archive-tabs">
-        <button class="archive-tab-btn active" data-subview="browse" type="button">Search &amp; Browse</button>
-        <button class="archive-tab-btn" data-subview="curriculum" type="button">Curriculum</button>
-      </div>
-
-      <div id="archiveBrowseSubview">
-        <div class="archive-search-bar">
-          <input id="archiveSearchInput" type="text" placeholder="Search your archive…" autocomplete="off" />
-        </div>
-        <div id="archiveResults" class="list compact" hidden></div>
-        <div id="archiveBrowse"></div>
-      </div>
-
-      <div id="archiveCurriculumSubview" hidden>
-        <div id="archiveCurriculumGrid" class="curriculum-grid"></div>
-      </div>
-    </div>
-  </section>
-
   <section id="kbView" hidden>
     <div id="kbOnboarding" class="welcome-card">
-      <h2 class="welcome-title">Your Classroom Knowledge Base 📚</h2>
-      <p class="archive-onboarding-sub">This is <strong>your</strong> knowledge base — your courses, topics and assignments, scraped from Google Classroom and stored privately in this browser. Search it and ask the AI tutor, which answers <em>only</em> from your notes.</p>
+      <h2 class="welcome-title">Everything you've been taught, in one place 📚</h2>
+      <p class="archive-onboarding-sub">Your courses, topics and assignments — this year and every past year — searchable, browsable, and answerable by an AI tutor that reads <em>only</em> your own notes. Stored privately in this browser.</p>
       <div class="kb-build-row">
-        <button id="kbBuildBtn" class="primary big-login" type="button">⚡ Build my knowledge base from Google Classroom</button>
+        <button id="kbBuildBtn" class="primary big-login" type="button">⚡ Build from Google Classroom</button>
         <button id="kbLoadFileLink" class="link-btn" type="button">or upload an archive.json</button>
         <input id="kbFileInput" type="file" accept="application/json,.json" hidden />
       </div>
-      <p class="settings-hint" id="kbBuildHint">Your notes stay on this device — nothing is uploaded to a shared server. Sign in to build or rebuild your knowledge base.</p>
+      <p class="settings-hint" id="kbBuildHint">Your notes stay on this device — nothing is uploaded to a shared server. Sign in to build or rebuild.</p>
     </div>
 
     <div id="kbBuildPanel" class="archive-build-panel" hidden>
@@ -153,6 +114,7 @@
       <button id="kbResumeBuildBtn" class="primary" type="button" hidden>Resume private Classroom build</button>
       <div class="archive-build-progress"><div id="kbBuildProgressBar" class="archive-build-progress-bar"></div></div>
       <div id="kbBuildLog" class="archive-build-log"></div>
+      <button id="kbBuildCancelBtn" type="button" hidden>Cancel</button>
     </div>
 
     <div id="kbMain" hidden>
@@ -161,47 +123,80 @@
       <div id="kbStudyProgress" class="kb-study-progress" role="status" aria-live="polite"></div>
       <section id="kbReviewDigest" class="kb-review-digest" aria-labelledby="kbReviewDigestTitle" hidden></section>
       <div id="kbChangesBanner" class="kb-update-banner" role="status" hidden></div>
-      <div class="kb-export-bar">
-        <span class="kb-export-label">Export:</span>
-        <button id="kbExportJson" class="ghost-btn" type="button" title="Download the whole knowledge base as JSON">JSON</button>
-        <button id="kbExportMd" class="ghost-btn" type="button" title="Download as a Markdown notebook grouped by course">Markdown</button>
-        <button id="kbExportCsv" class="ghost-btn" type="button" title="Download notes as a CSV spreadsheet">CSV</button>
-        <span id="kbExportStatus" class="kb-export-status" hidden></span>
+
+      <div id="studyTabs" class="study-tabs" role="tablist" aria-label="Study views">
+        <button class="study-tab-btn active" data-tab="search" type="button" role="tab" aria-selected="true" aria-controls="studyPanel-search">Search</button>
+        <button class="study-tab-btn" data-tab="browse" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-browse">Browse</button>
+        <button class="study-tab-btn" data-tab="curriculum" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-curriculum">Curriculum</button>
+        <button class="study-tab-btn" data-tab="manage" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-manage">Manage</button>
       </div>
-      <div class="kb-search-bar">
-        <input id="kbSearchInput" type="text" placeholder="Search the knowledge base… (e.g. STAR method, cover letter, soft skills)" autocomplete="off" />
-      </div>
-      <div id="kbExamples" class="kb-examples" hidden>
-        <span class="kb-examples-label">Try:</span>
-      </div>
-      <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
-      <div class="kb-sort-row">
-        <label class="kb-sort-label" for="kbSort">Sort:</label>
-        <select id="kbSort" class="kb-sort-select">
-          <option value="relevance">Relevance</option>
-          <option value="recency">Newest first</option>
-          <option value="course">By course</option>
-          <option value="title">By title</option>
-        </select>
-      </div>
-      <div id="kbResultCount" class="kb-result-count" hidden></div>
-      <div id="kbFilterStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
-      <div id="kbBrowse" class="kb-browse" hidden>
-        <div class="kb-browse-head">
-          <h3>Browse by course</h3>
-          <label id="kbBrowseYearLabel" class="kb-browse-year-label" for="kbBrowseYear">Year</label>
-          <select id="kbBrowseYear" class="settings-select" aria-label="Filter browsed course notes by year" hidden>
-            <option value="">All years</option>
-          </select>
-          <label id="kbBrowseRecentLabel" class="kb-browse-recent-label" for="kbBrowseRecent" hidden>
-            <input id="kbBrowseRecent" type="checkbox" /> Studied in last 7 days
-          </label>
-          <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+
+      <div id="studyPanel-search" class="study-panel" role="tabpanel" tabindex="-1">
+        <div class="kb-search-bar">
+          <input id="kbSearchInput" type="text" placeholder="Search everything you've studied…" autocomplete="off" />
         </div>
-        <div id="kbBrowseCourses" class="kb-browse-courses"></div>
-        <div id="kbBrowseNotes" class="list compact" hidden></div>
+        <div id="kbExamples" class="kb-examples" hidden>
+          <span class="kb-examples-label">Try:</span>
+        </div>
+        <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
+        <div class="kb-sort-row">
+          <label class="kb-sort-label" for="kbSort">Sort:</label>
+          <select id="kbSort" class="kb-sort-select">
+            <option value="relevance">Relevance</option>
+            <option value="recency">Newest first</option>
+            <option value="course">By course</option>
+            <option value="title">By title</option>
+          </select>
+        </div>
+        <div id="kbResultCount" class="kb-result-count" hidden></div>
+        <div id="kbFilterStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+        <div id="kbResults" class="list compact" hidden></div>
       </div>
-      <div id="kbResults" class="list compact" hidden></div>
+
+      <div id="studyPanel-browse" class="study-panel" role="tabpanel" tabindex="-1" hidden>
+        <div id="kbBrowse" class="kb-browse" hidden>
+          <div class="kb-browse-head">
+            <h3>Browse by course</h3>
+            <label id="kbBrowseYearLabel" class="kb-browse-year-label" for="kbBrowseYear">Year</label>
+            <select id="kbBrowseYear" class="settings-select" aria-label="Filter browsed course notes by year" hidden>
+              <option value="">All years</option>
+            </select>
+            <label id="kbBrowseRecentLabel" class="kb-browse-recent-label" for="kbBrowseRecent" hidden>
+              <input id="kbBrowseRecent" type="checkbox" /> Studied in last 7 days
+            </label>
+            <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+          </div>
+          <div id="kbBrowseCourses" class="kb-browse-courses"></div>
+          <div id="kbBrowseNotes" class="list compact" hidden></div>
+        </div>
+      </div>
+
+      <div id="studyPanel-curriculum" class="study-panel" role="tabpanel" tabindex="-1" hidden>
+        <p class="settings-hint">Every subject you've taken, across every year. Click a course to browse its notes.</p>
+        <div id="kbCurriculumGrid" class="curriculum-grid"></div>
+      </div>
+
+      <div id="studyPanel-manage" class="study-panel" role="tabpanel" tabindex="-1" hidden>
+        <div class="study-manage-block">
+          <h3 class="study-manage-title">Your database</h3>
+          <p class="settings-hint">Rebuilding adds anything new from Classroom. Nothing you already have is lost — past years you imported stay put.</p>
+          <div class="study-manage-actions">
+            <button id="kbRebuildBtn" class="primary" type="button">⚡ Generate / update database</button>
+            <button id="kbManageLoadFileLink" class="ghost-btn" type="button">Import archive.json</button>
+          </div>
+        </div>
+        <div class="study-manage-block">
+          <h3 class="study-manage-title">Export</h3>
+          <p class="settings-hint">Download your whole knowledge base to keep or move elsewhere.</p>
+          <div class="study-manage-actions">
+            <button id="kbExportJson" class="ghost-btn" type="button" title="Download the whole knowledge base as JSON">JSON</button>
+            <button id="kbExportMd" class="ghost-btn" type="button" title="Download as a Markdown notebook grouped by course">Markdown</button>
+            <button id="kbExportCsv" class="ghost-btn" type="button" title="Download notes as a CSV spreadsheet">CSV</button>
+            <span id="kbExportStatus" class="kb-export-status" hidden></span>
+          </div>
+          <p class="settings-hint">Clearing the local database lives in Settings → Knowledge Base.</p>
+        </div>
+      </div>
 
       <div class="kb-tutor-wrap">
         <button id="kbTutorOpen" class="primary" type="button">💬 Ask the AI tutor</button>
@@ -258,20 +253,6 @@
   </div>
 </div>
 
-<div id="archiveNoteModal" class="modal" hidden>
-  <div class="modal-card modal-card-tall">
-    <header>
-      <h3 id="archiveNoteTitle">Note</h3>
-      <button id="archiveNoteClose" aria-label="Close">×</button>
-    </header>
-    <div id="archiveNoteBody" class="archive-note-body"></div>
-    <footer>
-      <a id="archiveNoteObsidianLink" class="classroom-link" target="_blank" rel="noopener">Open in Obsidian</a>
-      <button id="archiveNoteCloseBtn" class="primary">Close</button>
-    </footer>
-  </div>
-</div>
-
 <aside id="ai" hidden>
   <header>
     <h3 id="aiTitle">AI Assistant</h3>
@@ -309,8 +290,7 @@
       <button id="settingsTab-classes" role="tab" aria-controls="settingsPane-classes" aria-selected="true" class="settings-tab active" data-tab="classes">Classes</button>
       <button id="settingsTab-ai" role="tab" aria-controls="settingsPane-ai" aria-selected="false" class="settings-tab" data-tab="ai">AI</button>
       <button id="settingsTab-display" role="tab" aria-controls="settingsPane-display" aria-selected="false" class="settings-tab" data-tab="display">Display</button>
-      <button id="settingsTab-archive" role="tab" aria-controls="settingsPane-archive" aria-selected="false" class="settings-tab" data-tab="archive">Archive</button>
-      <button id="settingsTab-knowledge-base" role="tab" aria-controls="settingsPane-knowledge-base" aria-selected="false" class="settings-tab" data-tab="knowledge-base">Knowledge Base</button>
+      <button id="settingsTab-knowledge-base" role="tab" aria-controls="settingsPane-knowledge-base" aria-selected="false" class="settings-tab" data-tab="knowledge-base">Study</button>
       <button id="settingsTab-about" role="tab" aria-controls="settingsPane-about" aria-selected="false" class="settings-tab" data-tab="about">About</button>
     </nav>
     <div class="settings-body">
@@ -358,20 +338,8 @@
           </select>
         </label>
       </section>
-      <section id="settingsPane-archive" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-archive" data-pane="archive" hidden>
-        <p class="modal-sub">Load a personal archive.json bundle — a past-years export of your Obsidian vault built by a separate pipeline — to search old notes and let the AI reference what you've already learned. Nothing here is ever uploaded; it stays in this browser.</p>
-        <div id="archiveStatus" class="archive-status">No archive loaded.</div>
-        <label class="settings-row">
-          <span>Load archive.json</span>
-          <input id="archiveFileInput" type="file" accept="application/json,.json" />
-        </label>
-        <div class="settings-row">
-          <button id="archiveRebuildBtn" type="button" hidden>Rebuild from Classroom</button>
-          <button id="archiveRemoveBtn" type="button" hidden>Remove archive</button>
-        </div>
-      </section>
       <section id="settingsPane-knowledge-base" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-knowledge-base" data-pane="knowledge-base" hidden>
-        <p class="modal-sub">Your knowledge base is stored only in this browser. Tutor requests send only the notes needed for the current question.</p>
+        <p class="modal-sub">Your notes — every year, Classroom-built or imported — are stored only in this browser. Tutor requests send only the notes needed for the current question.</p>
         <div class="settings-account" role="status">
           <strong id="kbAccountStatus">Not signed in</strong>
           <span class="settings-account-actions">

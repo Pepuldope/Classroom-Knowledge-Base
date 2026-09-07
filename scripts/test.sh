@@ -48,6 +48,11 @@ node --test tests/kb-merge.test.js
 KB_MERGE_OK=$?
 if [ "$KB_MERGE_OK" -ne 0 ]; then echo "corpus merge tests FAILED"; exit 1; fi
 
+echo "==> Study page model tests (tabs + curriculum)"
+node --test tests/study-page.test.js
+STUDY_PAGE_OK=$?
+if [ "$STUDY_PAGE_OK" -ne 0 ]; then echo "study page model tests FAILED"; exit 1; fi
+
 echo "==> Task kind vocabulary tests"
 node --test tests/task-kinds.test.js
 TASK_KINDS_OK=$?
@@ -206,6 +211,16 @@ BASE_URL="http://localhost:$PORT" node scripts/kb_result_card_mobile_test.mjs
 RESULT_CARD_MOBILE_OK=$?
 if [ "$RESULT_CARD_MOBILE_OK" -ne 0 ]; then echo "KB result-card mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Archive migration e2e"
+BASE_URL="http://localhost:$PORT" node scripts/study_migration_test.mjs
+STUDY_MIGRATION_OK=$?
+if [ "$STUDY_MIGRATION_OK" -ne 0 ]; then echo "archive migration e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Study page e2e (tabs, curriculum, manage)"
+BASE_URL="http://localhost:$PORT" node scripts/study_tabs_test.mjs
+STUDY_TABS_OK=$?
+if [ "$STUDY_TABS_OK" -ne 0 ]; then echo "study page e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Mobile layout audit (390/360/320px, light + dark)"
 BASE_URL="http://localhost:$PORT" node scripts/mobile_audit_test.mjs
 MOBILE_AUDIT_OK=$?
@@ -289,11 +304,6 @@ echo "==> Route-transition focus hint mobile theme e2e"
 BASE_URL="http://localhost:$PORT" node scripts/route_transition_hint_mobile_test.mjs
 ROUTE_HINT_MOBILE_OK=$?
 if [ "$ROUTE_HINT_MOBILE_OK" -ne 0 ]; then echo "route-transition hint mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
-
-echo "==> Archive modal narrow-screen focus/overflow e2e"
-BASE_URL="http://localhost:$PORT" node scripts/archive_modal_mobile_test.mjs
-ARCHIVE_MODAL_MOBILE_OK=$?
-if [ "$ARCHIVE_MODAL_MOBILE_OK" -ne 0 ]; then echo "Archive modal mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
 echo "==> Resumed Classroom checkpoint privacy and surface e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_checkpoint_browser_test.mjs
