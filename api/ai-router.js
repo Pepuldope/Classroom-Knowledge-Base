@@ -191,7 +191,8 @@ async function loadDrillDown() {
   const now = Date.now();
   if (now - _drillCache.at < 10_000) return _drillCache.set;
   const next = new Set();
-  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+        tok = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (url && tok) {
     try {
       const r = await fetch(`${url}/get/${encodeURIComponent("router:forcedDown")}`, {
@@ -212,7 +213,8 @@ async function loadDrillDown() {
   return next;
 }
 export async function setDrillDown(provider, down) {
-  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+        tok = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   if (!url || !tok) return { ok: false, error: "KV not configured" };
   const cur = await loadDrillDown();
   if (down) cur.add(provider); else cur.delete(provider);
@@ -236,7 +238,8 @@ export async function setDrillDown(provider, down) {
 }
 export async function getDrillState() {
   const set = await loadDrillDown();
-  const url = process.env.KV_REST_API_URL, tok = process.env.KV_REST_API_TOKEN;
+  const url = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL,
+        tok = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
   let log = [];
   if (url && tok) {
     try {

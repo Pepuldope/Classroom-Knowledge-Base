@@ -1,7 +1,12 @@
 export const config = { runtime: "edge" };
 
-const KV_URL = process.env.KV_REST_API_URL;
-const KV_TOKEN = process.env.KV_REST_API_TOKEN;
+// Accept both credential namings. Vercel's Upstash integration injects
+// UPSTASH_REDIS_REST_URL / _TOKEN; a Vercel KV binding uses KV_REST_API_URL /
+// _TOKEN. kb-store.js already accepted both, so a project provisioned through
+// the Upstash integration had a working knowledge-base store while this file
+// concluded there was no storage at all.
+const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
+const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
 async function verifyUser(req) {
   const auth = req.headers.get("authorization") || "";
