@@ -21,6 +21,7 @@ import { kbLocalStatusModel } from "./kb-local-status.js";
 import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel, routeTransitionFocusPrivacyModel } from "./kb.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
+import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -2231,8 +2232,7 @@ function assignmentCard(a) {
   const verbCls = isPassive ? "material" : labelVerbClass(verb);
   const isInPerson = e?.actionType === "in_person";
 
-  const submissionState = a.submission?.state;
-  const isSubmitted = !isPassive && (submissionState === "TURNED_IN" || submissionState === "RETURNED");
+  const isSubmitted = !isPassive && isSubmittedState(a.submission?.state);
 
   const el = document.createElement("div");
   let stateCls = "";
@@ -2558,9 +2558,20 @@ function maybeLazyEnrichRest({ auto = false } = {}) {
   // never analyzed at all unless the user happens to expand that section.
   if (!auto && !$("restWrap").open) return;
   lazyEnrichTriggered = true;
+  // Not gated on isPending: submitted work was excluded here AND by
+  // isInScope (which honours the showSubmitted display preference, off by
+  // default), so once an assignment was handed in nothing could ever analyze
+  // it and it showed no type at all. Whether completed work is listed is a
+  // display choice; it should not decide whether it gets a type.
   const candidates = allAssignments
-    .filter((a) => a.kind === "assignment" && isPending(a) && !isStale(a) && !dismissedIds.has(a.id))
-    .filter((a) => !a.enrichment && !isInScope(a))
+    .filter((a) => isEnrichCandidate({
+      kind: a.kind,
+      submissionState: a.submission?.state,
+      stale: isStale(a),
+      dismissed: dismissedIds.has(a.id),
+      hasEnrichment: !!a.enrichment,
+    }))
+    .filter((a) => !isInScope(a))
     .slice(0, LAZY_ENRICH_MAX);
   if (candidates.length === 0) return;
   let remaining = candidates.length;

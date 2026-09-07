@@ -33,6 +33,11 @@ node --test tests/token-cookie.test.js
 TOKEN_COOKIE_OK=$?
 if [ "$TOKEN_COOKIE_OK" -ne 0 ]; then echo "token cookie tests FAILED"; exit 1; fi
 
+echo "==> Enrichment candidate scope tests"
+node --test tests/enrich-scope.test.js
+ENRICH_SCOPE_OK=$?
+if [ "$ENRICH_SCOPE_OK" -ne 0 ]; then echo "enrichment scope tests FAILED"; exit 1; fi
+
 echo "==> Enrichment JSON parsing tests"
 node --test tests/enrich-parse.test.js
 ENRICH_PARSE_OK=$?
