@@ -139,7 +139,12 @@ header {
   background: var(--card);
 }
 header h1 {
-  justify-self: center;
+  /* Top left, hard against the header's padding. It sat centred inside the
+     first 1fr column, which read as neither centred in the header nor aligned
+     to anything. */
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
   margin: 0;
   font-size: 1.15rem;
   font-weight: 600;
@@ -1221,20 +1226,35 @@ summary::-webkit-details-marker { color: var(--muted); }
 
 @media (max-width: 640px) {
   header {
+    /* This block was written for a flex header — flex-wrap, flex, max-width:32%
+       — but `header` is a grid, so none of it applied. The title shared one row
+       with the view switcher and the menu, and its 1fr column collapsed to
+       whatever they left: 13px at 390px wide, 0px at 320px, for text needing
+       151px. Two rows instead: title + menu, switcher beneath. */
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 0.5rem;
     padding: 0.65rem 0.9rem;
     padding-top: max(0.65rem, env(safe-area-inset-top));
-    flex-wrap: nowrap;
     gap: 0.5rem;
+    row-gap: 0.5rem;
   }
   header h1 {
-    flex: 0 1 auto;
+    grid-column: 1;
+    grid-row: 1;
     min-width: 0;
-    max-width: 32%;
+    max-width: none;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: 1rem;
   }
+  #auth { grid-column: 2; grid-row: 1; }
+  #viewToggle { grid-column: 1 / -1; grid-row: 2; }
+  .route-transition-status { grid-column: 1 / -1; grid-row: 3; }
+  /* Comfortable touch targets now that the switcher owns a full row. 32px
+     tall was below every platform's minimum. */
+  .view-toggle-btn { min-height: 44px; }
+  .menu-btn { width: 44px; height: 44px; }
   /* Keep the shared view switcher inside the phone viewport. Long result
      labels can make the navigation wider than the available header space;
      the switcher is the intentional horizontal scroll region, not the page. */

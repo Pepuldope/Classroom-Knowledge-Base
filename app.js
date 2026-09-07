@@ -2201,7 +2201,10 @@ function labelVerbClass(label) {
 function deriveLabel(a) {
   const e = a.enrichment;
   if (e?.taskKind) return e.taskKind;
-  if (a.workType === "SHORT_ANSWER_QUESTION" || a.workType === "MULTIPLE_CHOICE_QUESTION") return "Question";
+  // "Question" names the format, not the work, and is not one of the kinds
+  // api/enrich.js will produce. Deriving it here reintroduced client-side the
+  // label that was just removed from the model's vocabulary.
+  if (a.workType === "SHORT_ANSWER_QUESTION" || a.workType === "MULTIPLE_CHOICE_QUESTION") return "Problem set";
   const at = e?.actionType;
   if (at === "in_person") return "Test";
   if (at === "read_only") return "Reading";

@@ -15,7 +15,12 @@ try {
     toggle.hidden = false;
     toggle.setAttribute("aria-label", "Study views");
     const first = toggle.querySelector('[data-view="kb"]');
-    if (first) first.textContent = "Knowledge Base — Long Result";
+    // Long enough to overflow a switcher that now spans the header's full
+    // width on phones. The old fixture ("Knowledge Base — Long Result") only
+    // overflowed while the switcher was squeezed into a middle column beside
+    // the title and the menu; once it got its own row the label fitted, and
+    // this stopped exercising the scroll region it exists to protect.
+    if (first) first.textContent = "Knowledge Base — Long Result That Keeps Going And Going Well Past The Viewport";
     const rect = toggle.getBoundingClientRect();
     return {
       viewport: document.documentElement.clientWidth,
