@@ -88,7 +88,12 @@ export default async function handler(req) {
   });
 
   let upstream = await callModel(PRIMARY_MODEL);
-  if (!upstream.ok || !upstream.body) upstream = await callModel(BACKUP_MODEL);
+  // A 429 is account-wide on OpenRouter's :free tier — the backup shares the
+  // same quota, so retrying it only burns another request. Any other failure
+  // is model-specific and worth failing over.
+  if (upstream.status !== 429 && (!upstream.ok || !upstream.body)) {
+    upstream = await callModel(BACKUP_MODEL);
+  }
   if (!upstream.ok || !upstream.body) {
     const text = await upstream.text().catch(() => "");
     return jsonResponse({ error: "AI request failed", details: text }, 502);

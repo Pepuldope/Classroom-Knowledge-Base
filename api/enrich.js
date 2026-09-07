@@ -81,6 +81,7 @@ export default async function handler(req) {
 
   const results = await Promise.all(body.assignments.slice(0, 5).map(async (a) => {
     let lastFailure = "";
+    let quotaExhausted = false;
     const hash = a.contentHash || "";
     const PROMPT_VERSION = "v5";
     const cacheKey = `enrich:${PROMPT_VERSION}:${a.id}:${hash}`;
@@ -121,6 +122,7 @@ export default async function handler(req) {
           // Keep why. Throwing this away is what made a dead model, an empty
           // quota and a malformed key all look like the same silent nothing.
           lastFailure = `${model}: HTTP ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`;
+          if (r.status === 429) quotaExhausted = true;
           return null;
         }
         const data = await r.json().catch(() => null);
@@ -134,7 +136,11 @@ export default async function handler(req) {
     };
 
     let raw = await callModel(PRIMARY_MODEL);
-    if (!raw) raw = await callModel(BACKUP_MODEL);
+    // OpenRouter's :free tier is metered per ACCOUNT, not per model, so a 429
+    // on the primary means the backup is rate limited too. Calling it anyway
+    // just spends another request against an already-empty quota and doubles
+    // how fast the daily cap is reached.
+    if (!raw && !quotaExhausted) raw = await callModel(BACKUP_MODEL);
     if (!raw) return { id: a.id, error: "ai_failed", detail: lastFailure };
 
     let parsed = null;
