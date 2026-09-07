@@ -523,8 +523,14 @@ async function initGis() {
 // --- Redirect sign-in (no popup) -------------------------------------------
 
 function authRedirectUri() {
-  // Must match an Authorized redirect URI on the OAuth client exactly.
-  return `${location.origin}/`;
+  // Must match an Authorized redirect URI on the OAuth client exactly —
+  // Google compares the whole string, and a trailing slash is part of it.
+  // The origin with no slash is what the client has registered for
+  // classroom-knowledge.vercel.app; sending the slashed form against it is
+  // an Error 400: redirect_uri_mismatch, not a scope or consent problem.
+  // Both the authorization request and the token exchange read this, so the
+  // two always agree.
+  return location.origin;
 }
 
 async function startRedirectSignIn(prompt = "select_account") {
