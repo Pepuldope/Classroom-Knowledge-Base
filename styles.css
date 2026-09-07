@@ -18,6 +18,26 @@
   --p3: #d97706;
   --p4: #ea580c;
   --p5: #dc2626;
+  /* Card states and callouts. These were hardcoded light hexes at their use
+     sites, which meant --fg (near-white in dark mode) landed on a near-white
+     card — a submitted assignment was white on white. Every one of them needs
+     a value in all three theme blocks below. */
+  --card-pinned-bg: #fffbeb;
+  --card-pinned-border: #fcd34d;
+  --card-overdue-bg: #fef2f2;
+  --card-overdue-border: #fecaca;
+  --card-submitted-bg: #f0fdf4;
+  --card-submitted-border: #bbf7d0;
+  --btn-hover-bg: #f3f4f6;
+  --danger-bg: #fee2e2;
+  --desc-bg: #ffffff;
+  --desc-border: #1e3a8a;
+  --callout-warn-bg: #fff7ed;
+  --callout-warn-fg: #b45309;
+  --callout-danger-bg: #fef2f2;
+  --callout-danger-fg: #b91c1c;
+  --callout-ok-bg: #f0fdf4;
+  --callout-ok-fg: #15803d;
 }
 :root[data-theme="dark"] {
   --bg: #111827;
@@ -34,6 +54,22 @@
   --surface-assistant: #374151;
   --surface: #1f2937;
   --context-fg: #dbeafe;
+  --card-pinned-bg: #2a2413;
+  --card-pinned-border: #854d0e;
+  --card-overdue-bg: #2a1416;
+  --card-overdue-border: #991b1b;
+  --card-submitted-bg: #132a1e;
+  --card-submitted-border: #166534;
+  --btn-hover-bg: #374151;
+  --danger-bg: #3f1d1d;
+  --desc-bg: #111827;
+  --desc-border: #3b82f6;
+  --callout-warn-bg: #2a1e10;
+  --callout-warn-fg: #fbbf24;
+  --callout-danger-bg: #2a1416;
+  --callout-danger-fg: #f87171;
+  --callout-ok-bg: #132a1e;
+  --callout-ok-fg: #4ade80;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -51,6 +87,22 @@
     --surface-assistant: #374151;
     --surface: #1f2937;
     --context-fg: #dbeafe;
+    --card-pinned-bg: #2a2413;
+    --card-pinned-border: #854d0e;
+    --card-overdue-bg: #2a1416;
+    --card-overdue-border: #991b1b;
+    --card-submitted-bg: #132a1e;
+    --card-submitted-border: #166534;
+    --btn-hover-bg: #374151;
+    --danger-bg: #3f1d1d;
+    --desc-bg: #111827;
+    --desc-border: #3b82f6;
+    --callout-warn-bg: #2a1e10;
+    --callout-warn-fg: #fbbf24;
+    --callout-danger-bg: #2a1416;
+    --callout-danger-fg: #f87171;
+    --callout-ok-bg: #132a1e;
+    --callout-ok-fg: #4ade80;
   }
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: rgba(37, 99, 235, 0.1); }
@@ -191,7 +243,7 @@ button {
   border-radius: 6px;
   cursor: pointer;
 }
-button:hover { background: #f3f4f6; }
+button:hover { background: var(--btn-hover-bg); }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* Keep route-transition focus visible after a modal closes, even when the
    transition began with a pointer click rather than keyboard input. */
@@ -348,18 +400,18 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .assignment:hover { border-color: var(--accent); }
 .assignment.pinned {
-  background: #fffbeb;
-  border-color: #fcd34d;
+  background: var(--card-pinned-bg);
+  border-color: var(--card-pinned-border);
 }
 .assignment.pinned:hover { border-color: var(--p3); }
 .assignment.state-overdue {
-  background: #fef2f2;
-  border-color: #fecaca;
+  background: var(--card-overdue-bg);
+  border-color: var(--card-overdue-border);
 }
 .assignment.state-overdue:hover { border-color: var(--danger); }
 .assignment.state-submitted {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
+  background: var(--card-submitted-bg);
+  border-color: var(--card-submitted-border);
 }
 .assignment.state-submitted:hover { border-color: var(--ok); }
 .priority-dot {
@@ -521,7 +573,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .ai-msg.user { background: var(--accent-bg); align-self: flex-end; max-width: 85%; }
 .ai-msg.assistant { background: var(--surface-assistant); align-self: flex-start; max-width: 95%; white-space: normal; }
-.ai-msg.error { background: #fee2e2; color: var(--danger); }
+.ai-msg.error { background: var(--danger-bg); color: var(--danger); }
 .ai-msg { position: relative; }
 .msg-actions {
   display: flex;
@@ -1100,8 +1152,8 @@ summary::-webkit-details-marker { color: var(--muted); }
 
 .original-desc {
   margin-top: 0.85rem;
-  background: #ffffff;
-  border: 2px solid #1e3a8a;
+  background: var(--desc-bg);
+  border: 2px solid var(--desc-border);
   border-radius: 8px;
   padding: 0.75rem 0.9rem;
   box-shadow: 0 1px 0 rgba(30,58,138,0.06);
@@ -1630,17 +1682,17 @@ summary::-webkit-details-marker { color: var(--muted); }
 #kbNoteBody .callout-body > *:last-child { margin-bottom: 0; }
 /* A few common callout "flavors" get their own accent color. */
 .archive-note-content .callout-warning,
-#kbNoteBody .callout-warning { border-left-color: #d97706; background: #fff7ed; }
+#kbNoteBody .callout-warning { border-left-color: var(--warn); background: var(--callout-warn-bg); }
 .archive-note-content .callout-warning .callout-title,
-#kbNoteBody .callout-warning .callout-title { color: #b45309; }
+#kbNoteBody .callout-warning .callout-title { color: var(--callout-warn-fg); }
 .archive-note-content .callout-danger,
-#kbNoteBody .callout-danger { border-left-color: #dc2626; background: #fef2f2; }
+#kbNoteBody .callout-danger { border-left-color: var(--danger); background: var(--callout-danger-bg); }
 .archive-note-content .callout-danger .callout-title,
-#kbNoteBody .callout-danger .callout-title { color: #b91c1c; }
+#kbNoteBody .callout-danger .callout-title { color: var(--callout-danger-fg); }
 .archive-note-content .callout-success,
-#kbNoteBody .callout-success { border-left-color: #16a34a; background: #f0fdf4; }
+#kbNoteBody .callout-success { border-left-color: var(--ok); background: var(--callout-ok-bg); }
 .archive-note-content .callout-success .callout-title,
-#kbNoteBody .callout-success .callout-title { color: #15803d; }
+#kbNoteBody .callout-success .callout-title { color: var(--callout-ok-fg); }
 
 .archive-related { margin-top: 1.1rem; padding-top: 0.85rem; border-top: 1px solid var(--border); }
 .archive-related-label { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
@@ -1663,7 +1715,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 
 .archive-strip {
   padding: 0.65rem 1rem;
-  background: #f9fafb;
+  background: var(--surface-subtle);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -1768,7 +1820,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .archive-build-log {
   height: 140px;
   overflow-y: auto;
-  background: #f9fafb;
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.5rem 0.65rem;
