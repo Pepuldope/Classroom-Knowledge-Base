@@ -8,11 +8,8 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
 const errors = [];
 page.on("pageerror", (error) => errors.push(String(error)));
-page.route("**/api/kb-search**", (route) => route.fulfill({
-status: 200,
-contentType: "application/json",
-body: JSON.stringify({ results: [], filters: { courses: [], years: [], kinds: [], families: [] }, meta: { noteCount: 0 }, empty: true }),
-}));
+// /api/kb-search was deleted; the KB searches its own local bundle, so there
+// is no request left to intercept here.
 
 try {
   await page.goto(`${BASE}/index.html`, { waitUntil: "networkidle", timeout: 30000 });

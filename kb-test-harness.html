@@ -33,40 +33,63 @@
         </div>
         <div id="kbStudyProgress" class="kb-study-progress" role="status" aria-live="polite"></div>
         <section id="kbReviewDigest" class="kb-review-digest" aria-labelledby="kbReviewDigestTitle" hidden></section>
-        <div class="kb-export-bar">
-          <span class="kb-export-label">Export:</span>
-          <button id="kbExportJson" class="ghost-btn" type="button">JSON</button>
-          <button id="kbExportMd" class="ghost-btn" type="button">Markdown</button>
-          <button id="kbExportCsv" class="ghost-btn" type="button">CSV</button>
-          <span id="kbExportStatus" class="kb-export-status" hidden></span>
+        <!-- Mirrors index.html's Study tabs. This harness is a hand-kept copy of
+             the KB markup; without the tab strip the panels never switch and
+             Browse is unreachable, so the tests here stop matching the app. -->
+        <div id="studyTabs" class="study-tabs" role="tablist" aria-label="Study views">
+          <button class="study-tab-btn active" data-tab="search" type="button" role="tab" aria-selected="true" aria-controls="studyPanel-search">Search</button>
+          <button class="study-tab-btn" data-tab="browse" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-browse">Browse</button>
+          <button class="study-tab-btn" data-tab="curriculum" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-curriculum">Curriculum</button>
+          <button class="study-tab-btn" data-tab="manage" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-manage">Manage</button>
         </div>
-        <div class="kb-search-bar">
-          <input id="kbSearchInput" type="text" placeholder="Search the knowledge base…" autocomplete="off" />
-        </div>
-        <div id="kbExamples" class="kb-examples" hidden>
-          <span class="kb-examples-label">Try:</span>
-        </div>
-        <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
-        <div class="kb-sort-row">
-          <label class="kb-sort-label" for="kbSort">Sort:</label>
-          <select id="kbSort" class="kb-sort-select">
-            <option value="relevance">Relevance</option>
-            <option value="recency">Newest first</option>
-            <option value="course">By course</option>
-            <option value="title">By title</option>
-          </select>
-        </div>
-        <div id="kbResultCount" class="kb-result-count" hidden></div>
-        <div id="kbFilterStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
-        <div id="kbBrowse" class="kb-browse" hidden>
-          <div class="kb-browse-head">
-            <h3>Browse by course</h3>
-            <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+
+        <div id="studyPanel-search" class="study-panel" role="tabpanel" tabindex="-1">
+          <div class="kb-search-bar">
+            <input id="kbSearchInput" type="text" placeholder="Search everything you've studied…" autocomplete="off" />
           </div>
-          <div id="kbBrowseCourses" class="kb-browse-courses"></div>
-          <div id="kbBrowseNotes" class="list compact" hidden></div>
+          <div id="kbExamples" class="kb-examples" hidden>
+            <span class="kb-examples-label">Try:</span>
+          </div>
+          <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
+          <div class="kb-sort-row">
+            <label class="kb-sort-label" for="kbSort">Sort:</label>
+            <select id="kbSort" class="kb-sort-select">
+              <option value="relevance">Relevance</option>
+              <option value="recency">Newest first</option>
+              <option value="course">By course</option>
+              <option value="title">By title</option>
+            </select>
+          </div>
+          <div id="kbResultCount" class="kb-result-count" hidden></div>
+          <div id="kbFilterStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+          <div id="kbResults" class="list compact" hidden></div>
         </div>
-        <div id="kbResults" class="list compact" hidden></div>
+
+        <div id="studyPanel-browse" class="study-panel" role="tabpanel" tabindex="-1" hidden>
+          <div id="kbBrowse" class="kb-browse" hidden>
+            <div class="kb-browse-head">
+              <h3>Browse by course</h3>
+              <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+            </div>
+            <div id="kbBrowseCourses" class="kb-browse-courses"></div>
+            <div id="kbBrowseNotes" class="list compact" hidden></div>
+          </div>
+        </div>
+
+        <div id="studyPanel-curriculum" class="study-panel" role="tabpanel" tabindex="-1" hidden>
+          <div id="kbCurriculumGrid" class="curriculum-grid"></div>
+        </div>
+
+        <div id="studyPanel-manage" class="study-panel" role="tabpanel" tabindex="-1" hidden>
+          <div class="study-manage-actions">
+            <button id="kbRebuildBtn" class="primary" type="button">⚡ Generate / update database</button>
+            <button id="kbManageLoadFileLink" class="ghost-btn" type="button">Import archive.json</button>
+            <button id="kbExportJson" class="ghost-btn" type="button">JSON</button>
+            <button id="kbExportMd" class="ghost-btn" type="button">Markdown</button>
+            <button id="kbExportCsv" class="ghost-btn" type="button">CSV</button>
+            <span id="kbExportStatus" class="kb-export-status" hidden></span>
+          </div>
+        </div>
         <div class="kb-tutor-wrap">
           <button id="kbTutorOpen" class="primary" type="button">💬 Ask the AI tutor</button>
         </div>
@@ -114,6 +137,7 @@
 
   <script type="module">
     import { showKbView } from "/kb.js";
+    import { loadKbBundle, saveKbBundle } from "/kb-local.js";
     import { resetRelatedTokenCache, relatedTokenCacheStats, formatRelatedTokenCacheStats, relatedPreviewTimingStats, relatedPreviewTimingSamples, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "/kb-client-search.js";
     const resetButton = document.getElementById("kbRelatedCacheReset");
     const statsLabel = document.getElementById("kbRelatedCacheStats");
@@ -121,7 +145,6 @@
     const percentileLabel = document.getElementById("kbRelatedTimingPercentiles");
     const resetStatus = document.getElementById("kbRelatedCacheResetStatus");
     const localHarness = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-    window.__cwaLegacyCompatibility = localHarness && !new URLSearchParams(location.search).has("noLegacy");
     const updateStats = () => {
       if (statsLabel) statsLabel.textContent = formatRelatedTokenCacheStats(relatedTokenCacheStats());
       if (timingLabel) timingLabel.textContent = formatRelatedPreviewTimingStats(relatedPreviewTimingStats());
@@ -142,7 +165,29 @@
       updateStats();
       setInterval(updateStats, 250);
     }
+    // Hydrate the browser-local corpus from the dev server's seeded store.
+    //
+    // The harness used to reach the KB surface through /api/kb-search: the app
+    // probed that route, found a populated store and revealed #kbMain. Those
+    // routes are gone — the app searches its own IndexedDB bundle and never
+    // asks a server — so the harness has to put the seed data where the app
+    // actually looks. /api/kb-store?action=export is the dev server's copy of
+    // whatever scripts/seed-dev.mjs loaded, so the fixtures stay unchanged.
+    async function hydrateLocalCorpus() {
+      try {
+        const existing = await loadKbBundle();
+        if (existing?.notes?.length) return;
+      } catch {}
+      try {
+        const r = await fetch("/api/kb-store?action=export");
+        if (!r.ok) return;
+        const { bundle } = await r.json();
+        if (bundle?.notes?.length) await saveKbBundle(bundle);
+      } catch {}
+    }
+
     // Wire events + reveal the KB surface (equivalent to setView('kb') in app.js).
+    await hydrateLocalCorpus();
     showKbView();
   </script>
 </body>

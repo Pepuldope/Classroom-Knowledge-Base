@@ -93,23 +93,15 @@ await runLiveChecks(async () => {
       assert.match(await page.locator("#status").textContent(), /Sign in with Google/);
     });
 
-    await check("live: compatibility search API returns results", async () => {
-      // Data-independent: don't assume a specific note exists. Pull a real term
-      // from the live DB's own facets/meta so we verify the SEARCH PIPELINE
-      // works against whatever is currently deployed (the populated vault, a demo
-      // note, etc.) instead of hardcoding brittle content.
-      const meta = await (await liveFetch(page, LIVE + "/api/kb-search?q=the")).json().catch(() => null);
-      const courses = meta?.meta?.courseList || meta?.filters?.courses || [];
-      // courseList entries are objects {name,y,family,noteCount}; filters.courses
-      // are plain strings. Normalize to a course-name string either way.
-      const first = courses[0];
-      const firstName = typeof first === "string" ? first : (first && first.name) || "";
-      // Prefer a course name token; else fall back to a generic probe.
-      const term = firstName ? firstName.split(/\s+/)[0] : "the";
-      const api = await (await liveFetch(page, `${LIVE}/api/kb-search?q=${encodeURIComponent(term)}&limit=8`)).json().catch(() => null);
-      const hasHits = Array.isArray(api?.results) && api.results.length > 0;
-      assert.ok(hasHits, `expected populated compatibility search for ${term}`);
-      assert.ok(Number(api?.meta?.noteCount) > 100, "expected a realistic populated note count");
+    await check("live: the shared ingestion store is populated", async () => {
+      // /api/kb-search is gone — the browser searches its own local bundle, so
+      // there is no hosted search pipeline left to probe. What still matters
+      // for the automation is that the shared store the vault ingestion writes
+      // to is populated, which /api/kb-store?action=export reports.
+      const store = await (await liveFetch(page, LIVE + "/api/kb-store?action=export")).json().catch(() => null);
+      const notes = store?.bundle?.notes;
+      assert.ok(Array.isArray(notes), "kb-store export should return a bundle with a notes array");
+      assert.ok(notes.length > 100, `expected a realistic populated note count, got ${notes.length}`);
     });
 
     await check("live: no uncaught page errors", async () => {

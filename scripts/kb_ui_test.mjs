@@ -62,11 +62,22 @@ try {
       req.onerror = () => reject(req.error);
       req.onsuccess = () => {
         const tx = req.result.transaction("archive", "readwrite");
+        // A corpus, not three notes. This fixture used to be tiny because the
+        // harness fell back to /api/kb-search against the seeded dev store
+        // whenever the local bundle came up short — so a query like "cover
+        // letter" still returned several hits. Search is local-only now, so the
+        // fixture has to carry enough matches for keyboard navigation, facet
+        // chips and result counts to have anything to work with.
         const notes = [
-          { t: "Local review note", course: "Math", y: "2025-26", topic: "Algebra", s: "Review", x: "Review" },
+          { t: "Local review note", course: "Math", y: "2025-26", topic: "Algebra", kind: "note", s: "Review", x: "Review" },
           { t: "STAR method", course: "Careers", y: "2025-26", topic: "Interview", s: "Situation task action result", x: "Use the STAR method in an interview." },
           { t: "Cover letter", course: "Careers", y: "2024-25", topic: "Applications", s: "Cover letter structure", x: "Write a clear cover letter." },
-        ];
+          { t: "Cover letter openings", course: "Careers", y: "2024-25", topic: "Applications", s: "How to open a cover letter", x: "A cover letter opening should name the role." },
+          { t: "Cover letter closing lines", course: "Careers", y: "2025-26", topic: "Applications", s: "How to close a cover letter", x: "End a cover letter with a clear call to action." },
+          { t: "Cover letter mistakes", course: "Careers", y: "2025-26", topic: "Applications", s: "Common cover letter errors", x: "Avoid repeating your CV in a cover letter." },
+          { t: "Quadratic equations", course: "Math", y: "2024-25", topic: "Algebra", s: "Solving quadratics", x: "Factor or use the quadratic formula." },
+          { t: "Trigonometry basics", course: "Math", y: "2025-26", topic: "Trigonometry", s: "Sine cosine tangent", x: "Right-angled triangle ratios." },
+        ].map((n, i) => ({ p: `fixture/${i}`, kind: "note", ...n }));
         tx.objectStore("archive").put({ id: "kb-bundle", data: { version: 1, notes, years: ["2024-25", "2025-26"], courses: ["Careers", "Math"] } });
         tx.oncomplete = () => { req.result.close(); resolve(); };
         tx.onerror = () => reject(tx.error);
@@ -91,11 +102,18 @@ try {
   // --- "Browse by course" discovery panel (ROADMAP: rich empty state + entry point) ---
   // With a seeded DB and an empty search box, the browse panel + example chips
   // must be visible on load, listing the distinct courses as clickable cards.
-  await check("browse-by-course panel shows course cards on load", async () => {
+  await check("browse-by-course panel shows course cards on its tab", async () => {
+    // Browse is its own Study tab now. It used to be stacked under the search
+    // box and revealed by an empty query, which meant the page offered two ways
+    // to find a note at once.
+    await page.click('.study-tab-btn[data-tab="browse"]');
     await page.waitForSelector("#kbBrowse:not([hidden])", { timeout: 10000 });
     await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 10000 });
     const cards = await page.locator("#kbBrowseCourses .kb-course-card").count();
     assert.ok(cards > 0, "expected at least one course card");
+    // Leave the page on Search: the panels are mutually exclusive, so anything
+    // that follows would otherwise be looking at a hidden search box.
+    await page.click('.study-tab-btn[data-tab="search"]');
   });
 
   await check("weekly review digest shows local study recommendations", async () => {
@@ -118,11 +136,14 @@ try {
   });
 
   await check("clicking a course card lists that course's notes", async () => {
-    // Return to the empty-query state to surface the browse panel again.
+    // Go back to Browse. Clearing the query used to bring the browse panel
+    // back because it lived under the search box; it is a separate tab now, so
+    // an empty query offers the example searches instead.
     await page.evaluate(() => {
       const input = document.getElementById("kbSearchInput");
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
     });
+    await page.click('.study-tab-btn[data-tab="browse"]');
     await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 10000 });
     // Open the first course.
     await page.locator("#kbBrowseCourses .kb-course-card").first().click();
@@ -139,6 +160,8 @@ try {
     await page.waitForFunction(() => /Opened note:/.test(document.getElementById("kbNoteModalStatus")?.textContent || ""));
     await page.click("#kbNoteClose");
     await page.waitForFunction(() => document.getElementById("kbNoteModalStatus")?.textContent === "Note closed.");
+    await page.locator("#kbNoteCloseBtn").click().catch(() => {});
+    await page.click('.study-tab-btn[data-tab="search"]');
   });
 
   await check("opening a note updates the local study progress card", async () => {
@@ -180,62 +203,19 @@ try {
     assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("cwa_kb_pinned_notes") || "[]")), []);
   });
 
-  await check("related preview error exposes scoped retry without losing the parent card", async () => {
-    await page.evaluate(() => new Promise((resolve, reject) => {
-      const req = indexedDB.open("cwa-archive", 1);
-      req.onsuccess = () => {
-        const tx = req.result.transaction("archive", "readwrite");
-        tx.objectStore("archive").delete("kb-bundle");
-        tx.oncomplete = () => { req.result.close(); resolve(); };
-        tx.onerror = () => reject(tx.error);
-      };
-      req.onerror = () => reject(req.error);
-    }));
-    await page.reload({ waitUntil: "networkidle" });
-    await page.waitForSelector("#kbView:not([hidden])", { timeout: 10000 });
-    const failuresByNote = new Map();
-    await page.route("**/api/kb-related**", async (route) => {
-      const id = new URL(route.request().url()).searchParams.get("id") || "unknown";
-      const failures = failuresByNote.get(id) || 0;
-      if (failures < 2) {
-        failuresByNote.set(id, failures + 1);
-        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary" }) });
-      } else {
-        await route.continue();
-      }
-    });
-    try {
-      await page.fill("#kbSearchInput", "cover letter");
-      await page.keyboard.press("Enter");
-      await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
-      await page.waitForSelector(".kb-related-preview-retry", { timeout: 10000 });
-      const parentCount = await page.locator("#kbResults .kb-result-card").count();
-      assert.ok(parentCount > 0, "parent result card must remain visible after preview failure");
-      const retry = page.locator(".kb-related-preview-retry").first();
-      assert.equal(await retry.getAttribute("aria-label"), "Retry loading related notes");
-      const targetPreview = retry.locator("..");
-      await retry.focus();
-      await retry.press("Enter");
-      for (let attempt = 0; attempt < 20; attempt += 1) {
-        const text = await targetPreview.textContent();
-        if (text?.includes("after 2 attempts")) break;
-        await page.waitForTimeout(100);
-      }
-      assert.match(await targetPreview.textContent(), /still unavailable after 2 attempts/i, "a repeated failure should announce its attempt count");
-      const retryAgain = targetPreview.locator(".kb-related-preview-retry");
-      await retryAgain.focus();
-      await retryAgain.press("Enter");
-      await page.waitForFunction((preview) => preview.hidden || !preview.querySelector(".kb-related-preview-retry"), await targetPreview.elementHandle(), { timeout: 10000 });
-      assert.equal(await page.locator("#kbResults .kb-result-card").count(), parentCount, "retry must not rerender away the parent card");
-      assert.equal(await page.evaluate(() => document.activeElement?.closest(".kb-result-card")?.classList.contains("kb-result-card") || false), true, "retry should restore focus to the parent result card");
-    } finally {
-      await page.unroute("**/api/kb-related**");
-    }
-  });
+  // Removed: "related preview error exposes scoped retry without losing the
+  // parent card". It deleted the local bundle and drove the error state by
+  // intercepting /api/kb-related while the legacy server path still served the
+  // results. Related notes are computed in the browser now, so neither half of
+  // that setup exists — there is no request to fail and no server search to
+  // fall back on. The retry/announcement styling it also covered is gated by
+  // scripts/cross_view_reduced_motion_error_test.mjs, which builds the state
+  // directly instead of through a route.
 
   await check("copy search context copies only visible titles and snippets", async () => {
     await page.fill("#kbSearchInput", "cover letter");
-    await page.waitForResponse((response) => response.url().includes("/api/kb-search") && response.ok(), { timeout: 10000 });
+    // Search is local now — there is no response to wait for.
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
     await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading"), null, { timeout: 10000 });
     await page.evaluate(() => {
       navigator.clipboard.writeText = async (value) => { window.__copiedSearchContext = value; };
@@ -290,7 +270,8 @@ try {
 
   await check("wide copy actions show a compact keyboard shortcut hint", async () => {
     await page.fill("#kbSearchInput", "cover letter");
-    await page.waitForResponse((response) => response.url().includes("/api/kb-search") && response.ok(), { timeout: 10000 });
+    // Search is local now — there is no response to wait for.
+    await page.waitForSelector("#kbResults .kb-result-card", { timeout: 10000 });
     await page.waitForFunction(() => !document.querySelector("#kbResults .kb-loading") && document.querySelector("#kbCopyShortcutHint"), null, { timeout: 10000 });
     const hint = page.locator("#kbCopyShortcutHint");
     try {
@@ -445,18 +426,18 @@ try {
   // surface a "Did you mean" suggestion; clicking it retries the corrected
   // query and shows real results.
   await check("empty results render the did-you-mean control", async () => {
-    await page.route("**/api/kb-search?q=typo-regression**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ meta: { noteCount: 3 }, results: [], filteredCount: 3, filters: { courses: [], years: [], kinds: [], families: [] }, didYouMean: "algebra" }),
-      });
-    });
-    await page.fill("#kbSearchInput", "typo-regression");
+    // suggestCorrection() runs in the browser now, so this drives the real
+    // thing instead of stubbing a /api/kb-search response that contained the
+    // very answer it then asserted on.
+    //
+    // The typo has to MISS completely: the scorer stems to a six-character
+    // prefix, so "quadratc" still finds "Quadratic equations" and no
+    // suggestion is offered. "qadratic" breaks the prefix and returns nothing,
+    // which is the state the did-you-mean control exists for.
+    await page.fill("#kbSearchInput", "qadratic");
     await page.keyboard.press("Enter");
-    await page.waitForSelector("#kbResults .kb-didyoumean", { timeout: 5000 });
-    assert.equal(await page.locator("#kbResults .kb-didyoumean-btn").textContent(), "algebra");
-    await page.unroute("**/api/kb-search?q=typo-regression**");
+    await page.waitForSelector("#kbResults .kb-didyoumean", { timeout: 8000 });
+    assert.match(await page.locator("#kbResults .kb-didyoumean-btn").textContent(), /quadratic/i);
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 5000 });
@@ -762,8 +743,11 @@ try {
       const input = document.getElementById("kbSearchInput");
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
     });
-    await page.waitForSelector("#kbExamples .kb-example-chip", { timeout: 8000 });
-    await page.locator("#kbExamples .kb-example-chip").first().click();
+    // The example chips are fixed phrases that used to hit the seeded vault
+    // through /api/kb-search. Search is local now, so use a term the fixture
+    // bundle actually contains.
+    await page.fill("#kbSearchInput", "cover letter");
+    await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 8000 });
     await page.waitForSelector("#kbResultCount:not([hidden])", { timeout: 5000 });
     const txt = (await page.locator("#kbResultCount").allTextContents())[0]?.trim();
@@ -779,8 +763,8 @@ try {
       const input = document.getElementById("kbSearchInput");
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
     });
-    await page.waitForSelector("#kbExamples .kb-example-chip", { timeout: 8000 });
-    await page.locator("#kbExamples .kb-example-chip").first().click();
+    await page.fill("#kbSearchInput", "cover letter");
+    await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 8000 });
     // Pick an inactive chip so clicking turns the filter ON.
     const inactive = page.locator("#kbFilterChips .kb-chip:not(.active)").first();
@@ -826,16 +810,20 @@ try {
       req.onerror = () => reject(req.error);
     }));
     await page.reload({ waitUntil: "networkidle" });
-    await page.evaluate(() => {
-      const input = document.getElementById("kbSearchInput");
-      if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
-      const results = document.getElementById("kbResults");
-      if (results) { results.hidden = true; results.innerHTML = ""; }
-      const browse = document.getElementById("kbBrowse");
-      if (browse) browse.hidden = false;
-      const notes = document.getElementById("kbBrowseNotes");
-      if (notes) notes.hidden = false;
-    });
+    // Wait for the corpus to be discovered and #kbMain revealed before
+    // reaching for a tab that lives inside it.
+    await page.waitForSelector("#kbMain:not([hidden])", { timeout: 10000 });
+    // Switch to the Browse tab rather than hand-unhiding #kbBrowse: the panel
+    // wrapper around it is hidden too, and the course cards are only rendered
+    // when showBrowsePanel() runs on tab entry.
+    await page.click('.study-tab-btn[data-tab="browse"]');
+    // Browse restores the last course you were reading (kept in localStorage),
+    // so after an earlier test opened one this lands on that course's notes
+    // rather than the course grid. Step back up to the grid this test is about.
+    const back = page.locator("#kbBrowseBack");
+    if (await back.count() && await back.isVisible()) {
+      await back.click();
+    }
     await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 8000 });
     await page.locator("#kbBrowseCourses .kb-course-card").first().click();
     // The accordion groups render into #kbBrowseNotes; assert on the element
@@ -861,11 +849,13 @@ try {
   });
 
   await check("search results are horizontally centered (onboarding not lopsided)", async () => {
-    // Empty query -> browse panel should be centered in the viewport.
+    // Browse is its own tab now; an empty query offers the example searches
+    // rather than revealing the browse panel underneath the search box.
     await page.evaluate(() => {
       const input = document.getElementById("kbSearchInput");
       if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
     });
+    await page.click('.study-tab-btn[data-tab="browse"]');
     await page.waitForSelector("#kbBrowse:not([hidden])", { timeout: 8000 });
     const box = await page.locator("#kbBrowse").boundingBox();
     assert.ok(box, "browse panel should be visible");
