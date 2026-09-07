@@ -372,7 +372,24 @@ function silentRefresh() {
 }
 
 function loadEnrichCache() {
-  try { return JSON.parse(localStorage.getItem(ENRICH_KEY) || "{}"); } catch { return {}; }
+  let cache;
+  try { cache = JSON.parse(localStorage.getItem(ENRICH_KEY) || "{}"); } catch { return {}; }
+  if (!cache || typeof cache !== "object") return {};
+  // Earlier builds stored the server's per-assignment {id, error} object as
+  // though it were a result. A stored failure is indistinguishable from a
+  // real enrichment to applyCachedEnrichments, so the assignment was never
+  // re-requested: no estimate, no retry, nothing logged, permanently. Writing
+  // them stopped, but the ones already on disk have to be dropped or they
+  // pin those assignments forever.
+  let dropped = 0;
+  for (const [k, v] of Object.entries(cache)) {
+    if (!v || typeof v !== "object" || v.error) { delete cache[k]; dropped += 1; }
+  }
+  if (dropped) {
+    try { localStorage.setItem(ENRICH_KEY, JSON.stringify(cache)); } catch {}
+    console.info(`[enrich] dropped ${dropped} cached failure(s); they will be retried`);
+  }
+  return cache;
 }
 function saveEnrichCache(cache) {
   localStorage.setItem(ENRICH_KEY, JSON.stringify(cache));
