@@ -19,7 +19,31 @@
 // Vercel's build fails on it ("referencing unsupported modules: node:fs").
 
 import { jsonResponse } from "./_helpers.js";
-import { deriveFamily } from "./kb-family.js";
+// Folded in from the former api/kb-family.js: this is now its only consumer,
+// since the search/browse routes that also used it are gone. The identical rule
+// list also lives in kb-client-search.js for the browser — the two are
+// deliberate copies, because the client must not import server code.
+//
+// Order matters: first match wins, coarser subjects first. Returns "" when no
+// rule matches, and the caller decides whether to store or skip.
+const FAMILY_RULES = [
+  [/beng|b\.?eng|engineering/i, "Engineering"],
+  [/digi|datab[aá]zy|informat|computer|program/i, "Digital/IT"],
+  [/ela|english|jazyk|kuj|sloven|language/i, "Language"],
+  [/fyzika|physics|chem|biol|math|matemat|maturita/i, "Science/Math"],
+  [/glo|geograf|hist|dejepis|spolo|humanit/i, "Humanities"],
+  [/business|ekonom|strateg/i, "Business"],
+  [/bud[uú]cnos?[ťt]|future|career|kari[eé]r/i, "Careers"],
+  [/v[šs]?pv|u[cč]itel|pedagog/i, "Teaching"],
+  [/šport|sport|telocvik|\bpe\b/i, "PE"],
+  [/v[ýy]tvar|hudob|hudba|art|music|drama/i, "Arts"],
+];
+
+export function deriveFamily(course = "") {
+  const c = String(course || "");
+  for (const [re, fam] of FAMILY_RULES) if (re.test(c)) return fam;
+  return "";
+}
 
 // Vercel's Upstash KV integration injects UPSTASH_REDIS_REST_URL / _TOKEN by
 // default, but some setups (or manual KV bindings) use KV_REST_API_URL / _TOKEN.

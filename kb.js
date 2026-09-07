@@ -780,15 +780,6 @@ export async function refreshKb() {
     checkpoint = null;
     console.warn("[KB] local state discovery failed", error?.name || "unknown");
   }
-  if (!localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
-    try {
-      const r = await fetch("/api/kb-search?q=__ping__");
-      if (r.ok) {
-        const d = await r.json();
-        if (d.meta?.noteCount > 0 || !meta) meta = d.meta;
-      }
-    } catch {}
-  }
   const hasDb = !!(meta && meta.noteCount > 0);
   const hasCheckpoint = !hasDb && checkpoint && checkpoint.completedCourseIds.length > 0;
   const surface = kbBuildSurfaceModel({ state: hasDb || hasCheckpoint ? "populated" : "empty" });
@@ -1423,16 +1414,6 @@ async function runKbSearch(query) {
       sort: effectiveSort,
       limit: 8,
     });
-    if (!localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
-      const params = new URLSearchParams({ q: query, limit: "8" });
-      if (kbActiveCourse) params.set("course", kbActiveCourse);
-      if (kbActiveYear) params.set("year", kbActiveYear);
-      if (kbActiveKind) params.set("kind", kbActiveKind);
-      if (kbActiveFamily) params.set("family", kbActiveFamily);
-      if (effectiveSort && effectiveSort !== "relevance") params.set("sort", effectiveSort);
-      const r = await fetch("/api/kb-search?" + params.toString());
-      d = await r.json();
-    }
     results.hidden = false;
     results.innerHTML = "";
     renderFilterChips(d.filters);
@@ -1917,11 +1898,6 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
     let related;
     const limit = relatedNotesLimit(loadKbSettings());
     related = localRelatedFromBundle(localKbBundle, noteIndex, { limit });
-    if (!related.length && !localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
-      const r = await fetch(`/api/kb-related?id=${encodeURIComponent(noteIndex)}&limit=${limit}`);
-      if (!r.ok) { renderRelatedPreviewError(container, noteIndex); restoreParentFocus(); return; }
-      related = (await r.json()).related || [];
-    }
     if (!related.length) {
       const state = relatedPreviewSurfaceModel({ state: "empty" });
       container.hidden = !state.visible;
@@ -2742,10 +2718,6 @@ async function openKbNote(index) {
   try {
     let note;
     note = localNoteFromBundle(localKbBundle, index);
-    if (!note && window.__cwaLegacyCompatibility === true) {
-      const r = await fetch("/api/kb-note?id=" + encodeURIComponent(index));
-      if (r.ok) note = await r.json();
-    }
     if (!note) throw new Error("note not found in local knowledge base");
     if (titleEl) titleEl.textContent = note.t || "(untitled)";
     announceNoteModal("open", note.t || "(untitled)");
@@ -2813,11 +2785,6 @@ async function renderRelatedNotes(index) {
     let related;
     const limit = relatedNotesLimit(loadKbSettings());
     related = localRelatedFromBundle(localKbBundle, index, { limit });
-    if (!related.length && !localKbBundle?.notes?.length && window.__cwaLegacyCompatibility === true) {
-      const r = await fetch("/api/kb-related?id=" + encodeURIComponent(index) + "&limit=" + limit);
-      if (!r.ok) return;
-      related = (await r.json()).related || [];
-    }
     // owner #6: cap the rendered panel to 3 items so it stays compact.
     related = related.slice(0, 3);
     if (!related.length) return;

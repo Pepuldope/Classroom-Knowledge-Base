@@ -20,17 +20,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { searchNotes, relatedNotes, suggestCorrection, relatedNotesPreview, makeSortFn } from "../api/kb-retrieval.js";
-import kbSearch from "../api/kb-search.js";
-import kbNote from "../api/kb-note.js";
-import kbRelated from "../api/kb-related.js";
-import kbBrowse from "../api/kb-browse.js";
+// kb-retrieval.js was a server-side mirror of this module and went with the
+// routes that used it. These are the same functions, now with one home.
+import { searchNotes, relatedNotes, suggestCorrection, relatedNotesPreview, makeSortFn } from "../kb-client-search.js";
 import enrich from "../api/enrich.js";
 import routerHealth from "../api/router-health.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
-import { relatedResponseCacheState, RELATED_RESPONSE_CACHE_TTL_MS } from "../api/kb-related-cache.js";
 import { bundleFromVault } from "../archive-builder.js";
-import { deriveFamily } from "../api/kb-family.js";
+import { deriveFamily } from "../kb-client-search.js";
 import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "../kb-client-search.js";
@@ -491,64 +488,10 @@ test("searchNotes builds a snippet centered on the matched term", () => {
   assert.ok(/star/i.test(sn._snippet), "snippet should include the matched term region");
 });
 
-test("/api/kb-search rejects a missing q with 400", async () => {
-  const r = await kbSearch(makeReq("/api/kb-search?q="));
-  assert.equal(r.status, 400, "missing q must 400");
-});
 
-test("/api/kb-search returns results + facet chips", async () => {
-  await seed(sampleBundle());
-  const r = await kbSearch(makeReq("/api/kb-search?q=cover%20letter&limit=8"));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  assert.ok(Array.isArray(d.results) && d.results.length > 0, "should return results");
-  assert.equal(d.results[0].t, "Cover Letter Guide", "top result is the title match");
-  // Facets should list the distinct courses and years present in the bundle.
-  assert.ok(d.filters && Array.isArray(d.filters.courses), "filters.courses should be an array");
-  assert.ok(d.filters.courses.includes("ELA 1 Gama"), "course facet should include ELA 1 Gama");
-  assert.ok(d.filters.courses.includes("BEng Y1"), "course facet should include BEng Y1");
-  assert.ok(d.filters.years.includes("2023-24"), "year facet should include 2023-24");
-});
 
-test("/api/kb-search course filter narrows results", async () => {
-  await seed(sampleBundle());
-  const r = await kbSearch(makeReq("/api/kb-search?q=cover%20letter&course=BEng%20Y1&limit=8"));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  assert.ok(d.results.length >= 1, "BEng Y1 has a body-only cover-letter note");
-  assert.ok(
-    d.results.every((n) => n.course === "BEng Y1"),
-    "every result must be the filtered course"
-  );
-  // The title match in ELA 1 Gama must be excluded by the course filter.
-  assert.ok(!d.results.some((n) => n.course === "ELA 1 Gama"), "other courses excluded");
-});
 
-test("/api/kb-search year filter narrows results", async () => {
-  await seed(sampleBundle());
-  const r = await kbSearch(makeReq("/api/kb-search?q=STAR&year=2022-23&limit=8"));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  // Only the 2022-23 STAR note should remain.
-  assert.ok(d.results.every((n) => n.y === "2022-23"), "every result must be the filtered year");
-  assert.ok(d.results.some((n) => n.t === "STAR Method"), "the 2022-23 STAR note is present");
-});
 
-test("/api/kb-search preserves original note index through facet filtering", async () => {
-  await seed({
-    version: 1,
-    notes: [
-      { t: "History algebra decoy", s: "Algebra", course: "History", y: "2024-25", x: "decoy" },
-      { t: "Math algebra target", s: "Algebra", course: "Math", y: "2024-25", x: "target body" },
-    ],
-  });
-  const r = await kbSearch(makeReq("/api/kb-search?q=algebra&course=Math&limit=8"));
-  const d = await r.json();
-  assert.equal(d.results.length, 1);
-  assert.equal(d.results[0].noteIndex, 1, "filtered result must retain its bundle index");
-  const nr = await kbNote(makeReq("/api/kb-note?id=" + d.results[0].noteIndex));
-  assert.equal((await nr.json()).t, "Math algebra target", "opening result must resolve the target note");
-});
 
 test("searchNotes sorts all matches before applying the result limit", () => {
   const notes = [
@@ -560,16 +503,6 @@ test("searchNotes sorts all matches before applying the result limit", () => {
   assert.deepEqual(results.map((note) => note.t), ["Alpha", "Beta"]);
 });
 
-test("empty knowledge base returns empty results with empty:true", async () => {
-  // Save an empty bundle, then query.
-  await saveBundle({ version: 1, notes: [], years: [], courses: [] });
-  const r = await kbSearch(makeReq("/api/kb-search?q=anything&limit=8"));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  assert.equal(d.results.length, 0, "no results when DB empty");
-  assert.equal(d.empty, true, "empty flag set");
-  assert.ok(d.filters && d.filters.courses.length === 0, "no course facets when empty");
-});
 
 test("highlightSnippet wraps matched query tokens in <mark> and escapes HTML", () => {
   const out = highlightSnippet("Use the STAR method in your cover letter.", "STAR cover");
@@ -639,31 +572,8 @@ test("searchNotes attaches a stable noteIndex to each result", () => {
   }
 });
 
-test("/api/kb-note returns the full note by index", async () => {
-  await seed(sampleBundle());
-  const r = await kbSearch(makeReq("/api/kb-search?q=cover%20letter&limit=8"));
-  const d = await r.json();
-  const idx = d.results[0].noteIndex;
-  assert.equal(typeof idx, "number", "search result carries noteIndex");
 
-  const nr = await kbNote(makeReq("/api/kb-note?id=" + idx));
-  assert.equal(nr.status, 200, "note detail should be 200");
-  const note = await nr.json();
-  assert.equal(note.t, d.results[0].t, "note detail title matches the search result");
-  // The full body (x) must be present in the detail, not just a snippet.
-  assert.ok(note.x && note.x.length > 0, "full note body returned");
-});
 
-test("/api/kb-note rejects out-of-range id with 404", async () => {
-  await seed(sampleBundle());
-  const nr = await kbNote(makeReq("/api/kb-note?id=9999"));
-  assert.equal(nr.status, 404, "missing note must 404");
-});
-
-test("/api/kb-note with no id returns 400", async () => {
-  const nr = await kbNote(makeReq("/api/kb-note"));
-  assert.equal(nr.status, 400, "missing id must 400");
-});
 
 // ---------------------------------------------------------------------------
 // Feature A: "Related notes" — cross-link notes by shared topic/course.
@@ -696,54 +606,9 @@ test("relatedNotes limits the number of results", () => {
   assert.ok(related.length <= 1, "related count must not exceed limit");
 });
 
-test("/api/kb-related returns related notes for an index", async () => {
-  await seed(sampleBundle());
-  const sr = await kbSearch(makeReq("/api/kb-search?q=STAR&limit=8"));
-  const sd = await sr.json();
-  const idx = sd.results[0].noteIndex;
-  const rr = await kbRelated(makeReq("/api/kb-related?id=" + idx + "&limit=5"));
-  assert.equal(rr.status, 200, "related route should be 200");
-  const rd = await rr.json();
-  assert.ok(Array.isArray(rd.related), "related array present");
-  // The STAR-method note shares its course (BEng Y1) with another note, so we
-  // expect at least one cross-link to be surfaced.
-  assert.ok(rd.related.length >= 1, "related notes should be found for a cross-linked note");
-  // The returned related notes must not include the queried note itself.
-  assert.ok(!rd.related.some((n) => n.noteIndex === idx), "self excluded");
-});
 
-test("/api/kb-related invalidates cached responses after incremental ingestion", async () => {
-  await saveBundle({
-    version: 1,
-    source: "vault",
-    notes: [
-      { t: "Cache target", course: "Cache Course", topic: "Topic", y: "2025", x: "target", p: "cache/target" },
-      { t: "Old related", course: "Cache Course", topic: "Topic", y: "2025", x: "old", p: "cache/old" },
-    ],
-  });
-  const first = await kbRelated(makeReq("/api/kb-related?id=0&limit=5"));
-  assert.equal(first.status, 200);
-  const second = await kbRelated(makeReq("/api/kb-related?id=0&limit=5"));
-  assert.match(second.headers.get("Server-Timing") || "", /desc=cache/, "repeat lookup should use the bounded response cache");
 
-  const { appendBundle } = await import("../api/kb-store.js");
-  await appendBundle({ notes: [{ t: "New related", course: "Cache Course", topic: "Topic", y: "2026", x: "new", p: "cache/new" }] });
-  const afterWrite = await kbRelated(makeReq("/api/kb-related?id=0&limit=5"));
-  const data = await afterWrite.json();
-  assert.doesNotMatch(afterWrite.headers.get("Server-Timing") || "", /desc=cache/, "an ingestion write must force a fresh related lookup");
-  assert.ok(data.related.some((note) => note.t === "New related"), "fresh related response includes the incrementally ingested note");
-});
 
-test("/api/kb-related rejects out-of-range id with 404", async () => {
-  await seed(sampleBundle());
-  const rr = await kbRelated(makeReq("/api/kb-related?id=9999"));
-  assert.equal(rr.status, 404, "out-of-range id must 404");
-});
-
-test("/api/kb-related with no id returns 400", async () => {
-  const rr = await kbRelated(makeReq("/api/kb-related"));
-  assert.equal(rr.status, 400, "missing id must 400");
-});
 
 // Regression guard: relatedNotes must stay FAST and produce SANE scores.
 // A 2026-07-12 incident made /api/kb-related take ~6s on a 400-note corpus
@@ -986,20 +851,6 @@ test("suggestCorrection returns null for gibberish with no near-miss", () => {
   assert.equal(s, null, "no suggestion for pure gibberish");
 });
 
-test("/api/kb-search surfaces a didYouMean suggestion when a typo returns nothing", async () => {
-  await seed(sampleBundle());
-  const r = await kbSearch(makeReq("/api/kb-search?q=" + encodeURIComponent("mitchondria") + "&limit=8"));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  assert.ok(Array.isArray(d.results), "results array present");
-  // Either the typo matches nothing (results empty) AND a suggestion exists,
-  // or the loose fuzzy matcher already caught it (valid). The key contract:
-  // when results are empty there must be a non-empty didYouMean hint.
-  if (d.results.length === 0) {
-    assert.ok(d.didYouMean && typeof d.didYouMean === "string" && d.didYouMean.length > 0,
-      "empty result set must carry a didYouMean hint");
-  }
-});
 
 // ---------------------------------------------------------------------------
 // Feature: related-notes preview chip on each search result card.
@@ -1081,21 +932,6 @@ test("resetRelatedTokenCache clears cached tokens and diagnostics", () => {
   assert.ok(cold.misses > 0 && cold.misses >= warm.misses, "reset preview should tokenize again");
 });
 
-test("related response cache rejects an entry after the ingestion bundle object changes", () => {
-  const oldBundle = { notes: [{ t: "Old" }] };
-  const newBundle = { notes: [{ t: "New" }] };
-  const response = { related: [{ t: "Old" }] };
-  const entry = { key: "0:5", bundle: oldBundle, response, cachedAt: 100 };
-  assert.deepEqual(
-    relatedResponseCacheState(entry, "0:5", oldBundle, 100 + RELATED_RESPONSE_CACHE_TTL_MS - 1),
-    response,
-  );
-  assert.equal(
-    relatedResponseCacheState(entry, "0:5", newBundle, 100 + RELATED_RESPONSE_CACHE_TTL_MS - 1),
-    null,
-    "a post-ingestion bundle must never reuse the old related response",
-  );
-});
 
 test("related cache summary formats bounded content-free diagnostics", async () => {
   const { formatRelatedTokenCacheStats } = await import("../kb-client-search.js");
@@ -1139,70 +975,10 @@ test("development harness exposes a bounded related-cache reset control", async 
 // given, the notes in that course. Mirrors the facet shape / result shape the
 // rest of the KB uses so the UI can reuse its rendering.
 // ---------------------------------------------------------------------------
-test("/api/kb-browse with no course lists distinct courses with note counts", async () => {
-  await seed(sampleBundle());
-  const r = await kbBrowse(makeReq("/api/kb-browse"));
-  assert.equal(r.status, 200, "browse should be 200");
-  const d = await r.json();
-  assert.ok(Array.isArray(d.courses), "courses must be an array");
-  // Two distinct courses in the sample bundle.
-  assert.equal(d.courses.length, 2, "should list both courses");
-  // Each course carries its note count + year facets.
-  const ela = d.courses.find((c) => c.course === "ELA 1 Gama");
-  assert.ok(ela, "ELA 1 Gama present");
-  assert.equal(ela.count, 1, "ELA 1 Gama has 1 note");
-  assert.deepEqual(ela.years, ["2023-24"], "ELA 1 Gama year facet");
-  assert.equal(d.notes, undefined, "no notes list when no course selected");
-});
 
-test("/api/kb-browse?course=<name> returns that course's notes sorted by recency", async () => {
-  await seed(sampleBundle());
-  const r = await kbBrowse(makeReq("/api/kb-browse?course=" + encodeURIComponent("BEng Y1")));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  // BEng Y1 has two notes (Random Biology Note, STAR Method).
-  assert.ok(Array.isArray(d.notes) && d.notes.length === 2, "both BEng Y1 notes returned");
-  assert.ok(d.notes.every((n) => n.course === "BEng Y1"), "every note is the requested course");
-  // Result shape must match searchNotes so the UI reuses card rendering.
-  assert.ok("noteIndex" in d.notes[0] && "t" in d.notes[0], "result shape matches search");
-  // Recency: 2023-24 note should rank above the 2022-23 note.
-  const order = d.notes.map((n) => n.y);
-  assert.ok(order.indexOf("2023-24") < order.indexOf("2022-23"), "newer notes first");
-});
 
-test("/api/kb-browse applies kind, family, and explicit sort filters", async () => {
-  await seed({
-    ...sampleBundle(),
-    notes: [
-      { ...sampleBundle().notes[0], kind: "assignment", family: "language" },
-      { ...sampleBundle().notes[1], kind: "note", family: "engineering" },
-      { ...sampleBundle().notes[2], kind: "assignment", family: "engineering" },
-    ],
-  });
-  const params = new URLSearchParams({ course: "BEng Y1", kind: "assignment", family: "engineering", sort: "title" });
-  const r = await kbBrowse(makeReq("/api/kb-browse?" + params));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  assert.deepEqual(d.notes.map((note) => ({ t: note.t, kind: note.kind, family: note.family })), [
-    { t: "STAR Method", kind: "assignment", family: "engineering" },
-  ]);
-});
 
-test("/api/kb-browse?course=<unknown> returns an empty notes list", async () => {
-  await seed(sampleBundle());
-  const r = await kbBrowse(makeReq("/api/kb-browse?course=" + encodeURIComponent("Nonexistent")));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  assert.ok(Array.isArray(d.notes) && d.notes.length === 0, "unknown course -> no notes");
-});
 
-test("/api/kb-browse on a missing DB returns an empty courses list", async () => {
-  await saveBundle({ version: 1, notes: [], years: [], courses: [] });
-  const r = await kbBrowse(makeReq("/api/kb-browse"));
-  assert.equal(r.status, 200);
-  const d = await r.json();
-  assert.ok(Array.isArray(d.courses) && d.courses.length === 0, "no courses when DB empty");
-});
 
 // ---------------------------------------------------------------------------
 // Vault ingestion (source:'vault') — makes the KB functional without a live
@@ -1669,84 +1445,12 @@ test("kbFilterModel returns kinds + families + default sort and round-trips acti
 });
 
 // /api/kb-search must surface kind + family facets and narrow by `kind`.
-test("/api/kb-search filters by kind and returns the kind facet", async () => {
-  await saveBundle({
-    version: 1,
-    source: "bundle",
-    notes: [
-      { t: "Shared note", kind: "note", course: "C1", y: "2025-26", s: "", x: "shared body" },
-      { t: "Shared announcement", kind: "announcements", course: "C1", y: "2025-26", s: "", x: "shared body" },
-    ],
-  });
-  const r = await kbSearch(makeReq("/api/kb-search?q=shared&kind=announcements"));
-  const d = await r.json();
-  assert.strictEqual(d.results.length, 1, "only the matching kind is returned");
-  assert.strictEqual(d.results[0].t, "Shared announcement", "the announcement note is returned");
-  assert.ok(d.filters.kinds.includes("announcements"), "announcements kind facet surfaced");
-  assert.ok(d.filters.kinds.includes("note"), "note kind facet surfaced");
-});
 
 // /api/kb-search must narrow by `family` when notes carry a family.
-test("/api/kb-search filters by family and returns the family facet", async () => {
-  await saveBundle({
-    version: 1,
-    source: "bundle",
-    notes: [
-      { t: "Lang note", kind: "note", course: "ELA 1", family: "Language", y: "2025-26", s: "", x: "common term" },
-      { t: "Eng note", kind: "note", course: "BEng Y1", family: "Engineering", y: "2025-26", s: "", x: "common term" },
-    ],
-  });
-  const r = await kbSearch(makeReq("/api/kb-search?q=common&family=Engineering"));
-  const d = await r.json();
-  assert.strictEqual(d.results.length, 1, "only the matching family is returned");
-  assert.strictEqual(d.results[0].t, "Eng note", "the engineering note is returned");
-  assert.ok(d.filters.families.includes("Engineering"), "Engineering family facet surfaced");
-  assert.ok(d.filters.families.includes("Language"), "Language family facet surfaced");
-});
 
 // /api/kb-search must honour an explicit sort order on the matched set.
-test("/api/kb-search honour sort=recency (newest year first)", async () => {
-  await saveBundle({
-    version: 1,
-    source: "bundle",
-    notes: [
-      { t: "Old note", kind: "note", course: "C", y: "2022-23", s: "", x: "alpha beta keyword" },
-      { t: "New note", kind: "note", course: "C", y: "2025-26", s: "", x: "alpha beta keyword" },
-    ],
-  });
-  const r = await kbSearch(makeReq("/api/kb-search?q=keyword&sort=recency"));
-  const d = await r.json();
-  assert.strictEqual(d.results.length, 2, "both matched notes returned");
-  assert.strictEqual(d.results[0].t, "New note", "recency sort puts the newest year first");
-});
 
-test("/api/kb-search honour sort=title (alphabetical)", async () => {
-  await saveBundle({
-    version: 1,
-    source: "bundle",
-    notes: [
-      { t: "Zebra note", kind: "note", course: "C", y: "2025-26", s: "", x: "cat dog keyword" },
-      { t: "Apple note", kind: "note", course: "C", y: "2025-26", s: "", x: "cat dog keyword" },
-    ],
-  });
-  const r = await kbSearch(makeReq("/api/kb-search?q=keyword&sort=title"));
-  const d = await r.json();
-  assert.strictEqual(d.results[0].t, "Apple note", "title sort is alphabetical");
-});
 
-test("/api/kb-search honour sort=course (grouped by class)", async () => {
-  await saveBundle({
-    version: 1,
-    source: "bundle",
-    notes: [
-      { t: "Zeta note", kind: "note", course: "Zeta", y: "2025-26", s: "", x: "fish keyword" },
-      { t: "Alpha note", kind: "note", course: "Alpha", y: "2025-26", s: "", x: "fish keyword" },
-    ],
-  });
-  const r = await kbSearch(makeReq("/api/kb-search?q=keyword&sort=course"));
-  const d = await r.json();
-  assert.strictEqual(d.results[0].course, "Alpha", "course sort groups by class name");
-});
 
 // appendBundle must derive a `family` for each note from its course name so the
 // family facet is populated on the live corpus (notes arrive without family).

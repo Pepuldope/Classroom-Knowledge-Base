@@ -3,10 +3,12 @@
 // styles.css) and mounts the api/ handlers as in-process Edge-style functions.
 //
 // Only the endpoints the frontend actually needs for the KB flow are wired:
-//   GET  /api/kb-search
-//   POST /api/kb-scrape
+//   POST /api/kb-scrape   (vault/bundle ingestion — the seed scripts use it)
+//   GET  /api/kb-store
 //   GET  /api/oauth-config
 //   POST /api/tutor
+// The search/browse/note/related routes were deleted: the browser does all of
+// that locally against its own bundle, and nothing called them.
 // Others return 501 so we know they're not part of the test scope.
 //
 // Usage: node dev-server.mjs [port]   (default 4321)
@@ -29,11 +31,7 @@ try {
 } catch {}
 
 // Import the handlers.
-const kbSearch = (await import("../api/kb-search.js")).default;
 const kbScrape = (await import("../api/kb-scrape.js")).default;
-const kbNote = (await import("../api/kb-note.js")).default;
-const kbRelated = (await import("../api/kb-related.js")).default;
-const kbBrowse = (await import("../api/kb-browse.js")).default;
 const kbStore = (await import("../api/kb-store.js")).default;
 const oauthConfig = (await import("../api/oauth-config.js")).default;
 const tutor = (await import("../api/tutor.js")).default;
@@ -47,8 +45,6 @@ const STATIC = {
   "/archive.js": "archive.js",
   "/archive-builder.js": "archive-builder.js",
   "/kb-highlight.js": "kb-highlight.js",
-  "/kb-retrieval.js": "kb-retrieval.js",
-  "/kb-family.js": "kb-family.js",
   "/_helpers.js": "_helpers.js",
   "/ai-router.js": "ai-router.js",
   "/styles.css": "styles.css",
@@ -60,11 +56,7 @@ const server = http.createServer(async (req, res) => {
   const p = url.pathname;
 
   // --- API routes ---
-  if (p === "/api/kb-search") return await runHandler(kbSearch, req, res, url);
   if (p === "/api/kb-scrape") return await runHandler(kbScrape, req, res, url);
-  if (p === "/api/kb-note") return await runHandler(kbNote, req, res, url);
-  if (p === "/api/kb-related") return await runHandler(kbRelated, req, res, url);
-  if (p === "/api/kb-browse") return await runHandler(kbBrowse, req, res, url);
   if (p === "/api/kb-store") return await runHandler(kbStore, req, res, url);
   if (p === "/api/oauth-config") return await runHandler(oauthConfig, req, res, url);
   if (p === "/api/tutor") return await runHandler(tutor, req, res, url);
