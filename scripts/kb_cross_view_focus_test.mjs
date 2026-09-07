@@ -1,4 +1,4 @@
-// Verify KB modal transitions restore a visibly marked focus target in Planner and Archive.
+// Verify Study modal transitions restore a visibly marked focus target in the nav.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
@@ -40,7 +40,9 @@ try {
   await page.waitForFunction(() => !document.getElementById("kbView")?.hidden);
   const storageBeforeTransition = await page.evaluate(() => Object.entries(localStorage));
 
-  for (const target of ["planner", "archive"]) {
+  // One route to leave to, since Archive was merged into Study. The loop is
+  // kept so a third page, if one ever returns, is covered by adding a name.
+  for (const target of ["planner"]) {
     await page.evaluate(() => {
       document.getElementById("kbNoteModal").hidden = false;
       document.getElementById("kbTutorModal").hidden = false;
@@ -65,7 +67,7 @@ try {
     }
   }
   assert.deepEqual(errors, [], `page errors: ${errors.join(" | ")}`);
-  console.log(`✓ KB modal transitions visibly restore Planner and Archive focus (${BASE})`);
+  console.log(`✓ Study modal transitions visibly restore navigation focus (${BASE})`);
 } finally {
   await browser.close();
 }

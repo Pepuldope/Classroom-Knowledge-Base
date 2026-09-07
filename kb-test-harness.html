@@ -137,7 +137,8 @@
 
   <script type="module">
     import { showKbView } from "/kb.js";
-    import { loadKbBundle, saveKbBundle } from "/kb-local.js";
+    import { saveKbBundle } from "/kb-local.js";
+    import { idbGet } from "/archive.js";
     import { resetRelatedTokenCache, relatedTokenCacheStats, formatRelatedTokenCacheStats, relatedPreviewTimingStats, relatedPreviewTimingSamples, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "/kb-client-search.js";
     const resetButton = document.getElementById("kbRelatedCacheReset");
     const statsLabel = document.getElementById("kbRelatedCacheStats");
@@ -175,8 +176,13 @@
     // whatever scripts/seed-dev.mjs loaded, so the fixtures stay unchanged.
     async function hydrateLocalCorpus() {
       try {
-        const existing = await loadKbBundle();
-        if (existing?.notes?.length) return;
+        // Read the record directly rather than through loadKbBundle(): that
+        // path honours __cwaTestLoadDelayMs, the artificial delay the
+        // loading-state test injects to inspect the discovery surface. Waiting
+        // on it here would hold back showKbView() and make the surface appear
+        // after the assertions rather than during them.
+        const existing = await idbGet("kb-bundle");
+        if (existing?.data?.notes?.length) return;
       } catch {}
       try {
         const r = await fetch("/api/kb-store?action=export");
