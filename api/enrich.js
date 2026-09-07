@@ -32,6 +32,47 @@ const MODEL_CHAIN = [
  * OpenRouter words the second case as "temporarily rate-limited upstream" /
  * "Provider returned error".
  */
+/**
+ * Pull a JSON object out of a completion.
+ *
+ * A model told to answer with JSON may still wrap it in a ```json fence or
+ * front it with a "Here's a thinking process:" preamble. The previous greedy
+ * /\{[\s\S]*\}/ match spanned from the first brace in that prose to the last
+ * one anywhere in the text, which is usually not a valid object. Scan for
+ * balanced objects instead and take the last one that parses — the answer
+ * comes after the reasoning, not before it.
+ */
+export function parseModelJson(raw) {
+  if (typeof raw !== "string") return null;
+  const text = raw.replace(/```(?:json)?/gi, "");
+  try { return JSON.parse(text.trim()); } catch {}
+  const candidates = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { inStr = true; continue; }
+    if (ch === "{") { if (depth === 0) start = i; depth += 1; }
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0 && start !== -1) { candidates.push(text.slice(start, i + 1)); start = -1; }
+      if (depth < 0) { depth = 0; start = -1; }
+    }
+  }
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    try {
+      const v = JSON.parse(candidates[i]);
+      if (v && typeof v === "object" && !Array.isArray(v)) return v;
+    } catch {}
+  }
+  return null;
+}
+
 function isAccountRateLimited(status, body) {
   if (status !== 429) return false;
   return !/upstream|provider returned error/i.test(body || "");
@@ -128,8 +169,8 @@ export default async function handler(req) {
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://classroom-web-analyzer.vercel.app",
-            "X-Title": "Classroom Web Analyzer",
+            "HTTP-Referer": "https://classroom-knowledge.vercel.app",
+            "X-Title": "Classroom Knowledge Base",
           },
           body: JSON.stringify({
             model,
@@ -138,7 +179,17 @@ export default async function handler(req) {
               { role: "user", content: userMsg },
             ],
             response_format: { type: "json_object" },
-            max_tokens: 400,
+            // Only route to providers that actually implement the parameters
+            // above. Without this OpenRouter is free to pick a provider that
+            // ignores response_format, and the model answers with prose.
+            provider: { require_parameters: true },
+            // Reasoning models spend the budget thinking before they emit
+            // anything. Turn it off where supported, and leave enough room
+            // that a model which thinks anyway still reaches the JSON —
+            // 400 tokens was consumed entirely by a thinking preamble, so
+            // the response was cut off before any object was produced.
+            reasoning: { exclude: true },
+            max_tokens: 1200,
             temperature: 0.2,
           }),
         });
@@ -161,26 +212,26 @@ export default async function handler(req) {
     };
 
     let raw = null;
+    let usedModel = "";
     for (const model of MODEL_CHAIN) {
       raw = await callModel(model);
-      if (raw) break;
+      if (raw) { usedModel = model; break; }
       // Only an account-level limit closes every door; a busy provider for
       // one model says nothing about the next one in the chain.
       if (quotaExhausted) break;
     }
     if (!raw) return { id: a.id, error: "ai_failed", detail: lastFailure };
 
-    let parsed = null;
-    try { parsed = JSON.parse(raw); }
-    catch {
-      const m = raw.match(/\{[\s\S]*\}/);
-      if (m) { try { parsed = JSON.parse(m[0]); } catch {} }
-    }
+    const parsed = parseModelJson(raw);
     if (!parsed || typeof parsed !== "object") {
-      // Carry what came back. Without it this branch reports only that
-      // something went wrong, which is indistinguishable from every other
-      // failure at the point the user reads it.
-      return { id: a.id, error: "parse_failed", detail: `not JSON: ${String(raw).slice(0, 200)}` };
+      // Carry what came back, and which model said it — otherwise this branch
+      // reports only that something went wrong, and there is no way to tell
+      // which entry in the chain needs replacing.
+      return {
+        id: a.id,
+        error: "parse_failed",
+        detail: `${usedModel} did not return JSON: ${String(raw).slice(0, 200)}`,
+      };
     }
 
     const minutes = Number(parsed.estimatedMinutes);

@@ -33,6 +33,11 @@ node --test tests/token-cookie.test.js
 TOKEN_COOKIE_OK=$?
 if [ "$TOKEN_COOKIE_OK" -ne 0 ]; then echo "token cookie tests FAILED"; exit 1; fi
 
+echo "==> Enrichment JSON parsing tests"
+node --test tests/enrich-parse.test.js
+ENRICH_PARSE_OK=$?
+if [ "$ENRICH_PARSE_OK" -ne 0 ]; then echo "enrichment parsing tests FAILED"; exit 1; fi
+
 echo "==> Redirect sign-in model tests"
 node --test tests/auth-redirect.test.js
 AUTH_REDIRECT_OK=$?
