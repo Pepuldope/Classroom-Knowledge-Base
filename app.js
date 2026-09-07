@@ -22,6 +22,7 @@ import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementMode
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession } from "./auth-session.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
+import { normalizeTaskKind } from "./task-kinds.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -391,10 +392,21 @@ function loadEnrichCache() {
   for (const [k, v] of Object.entries(cache)) {
     if (!v || typeof v !== "object" || v.error) { delete cache[k]; dropped += 1; }
   }
-  if (dropped) {
-    try { localStorage.setItem(ENRICH_KEY, JSON.stringify(cache)); } catch {}
-    console.info(`[enrich] dropped ${dropped} cached failure(s); they will be retried`);
+  // Entries written when the vocabulary was larger still carry retired kinds
+  // ("Question", "Problem set", "Exam"). Map them on read instead of bumping
+  // ENRICH_KEY again — a bump discards good results and re-requests every
+  // assignment, which is exactly what the shared quota cannot afford.
+  let relabelled = 0;
+  for (const v of Object.values(cache)) {
+    if (!v.taskKind) continue;
+    const canonical = normalizeTaskKind(v.taskKind);
+    if (canonical !== v.taskKind) { v.taskKind = canonical; relabelled += 1; }
   }
+  if (dropped || relabelled) {
+    try { localStorage.setItem(ENRICH_KEY, JSON.stringify(cache)); } catch {}
+  }
+  if (dropped) console.info(`[enrich] dropped ${dropped} cached failure(s); they will be retried`);
+  if (relabelled) console.info(`[enrich] relabelled ${relabelled} cached kind(s) onto the current list`);
   return cache;
 }
 function saveEnrichCache(cache) {
@@ -2184,19 +2196,22 @@ function priorityClass(weight) {
 
 // Fixed mapping from label text → color family. Deterministic across devices.
 // Each label belongs to exactly one family so the same word never gets two colors.
+// Dot and tag colour per kind. The canonical twelve come first in each list;
+// the trailing entries are retired kinds, kept so an enrichment cached before
+// the vocabulary shrank still gets a colour rather than falling back to grey.
 const LABEL_FAMILIES = {
   // Red — high-stakes assessment
-  assess: ["test", "exam", "quiz", "midterm", "final"],
+  assess: ["test", "quiz", "exam", "midterm", "final"],
   // Green — content to consume
   consume: ["reading", "video", "listening", "review"],
-  // Amber — written deliverable to submit (projects, essays)
-  write: ["essay", "report", "analysis", "research", "project", "translation"],
+  // Amber — written deliverable to submit
+  write: ["essay", "project", "translation", "report", "analysis", "research"],
   // Blue — practice / homework
-  practice: ["worksheet", "practice", "problem set", "problems", "exercises", "vocabulary", "notes", "drawing"],
+  practice: ["worksheet", "practice", "notes", "problem set", "problems", "exercises", "vocabulary", "drawing"],
   // Purple — live performance in front of class
   perform: ["presentation", "interview", "oral", "viva", "recording"],
   // Teal — collaborative / open-ended
-  discuss: ["discussion", "question", "lab"],
+  discuss: ["lab", "discussion", "question"],
 };
 
 function labelVerbClass(label) {
@@ -2211,10 +2226,12 @@ function labelVerbClass(label) {
 function deriveLabel(a) {
   const e = a.enrichment;
   if (e?.taskKind) return e.taskKind;
-  // "Question" names the format, not the work, and is not one of the kinds
-  // api/enrich.js will produce. Deriving it here reintroduced client-side the
-  // label that was just removed from the model's vocabulary.
-  if (a.workType === "SHORT_ANSWER_QUESTION" || a.workType === "MULTIPLE_CHOICE_QUESTION") return "Problem set";
+  // Route every client-side guess through the shared vocabulary, so this
+  // fallback cannot reintroduce a label the server would never produce — which
+  // is how "Question" survived being removed from the prompt.
+  if (a.workType === "SHORT_ANSWER_QUESTION" || a.workType === "MULTIPLE_CHOICE_QUESTION") {
+    return normalizeTaskKind("question");
+  }
   const at = e?.actionType;
   if (at === "in_person") return "Test";
   if (at === "read_only") return "Reading";

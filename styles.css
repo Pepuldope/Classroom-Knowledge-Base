@@ -1224,6 +1224,56 @@ summary::-webkit-details-marker { color: var(--muted); }
   #ai { width: 100%; }
 }
 
+/* Phones: the assignment/material panel is a bottom sheet rather than a
+   full-bleed slab. It covers most of the screen but stops short of the top, so
+   the list stays visible behind it and the panel reads as something laid over
+   the page that can be dismissed — not a navigation away from it. */
+@media (max-width: 640px) {
+  #ai {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 92vh;
+    /* dvh accounts for the mobile browser's collapsing address bar; the vh
+       above stays as the fallback for engines without it. */
+    height: 92dvh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.28);
+    overflow: hidden;
+    /* Runs on every open: the panel is toggled with the hidden attribute, and
+       display:none -> flex restarts a CSS animation. */
+    animation: ai-sheet-up 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+  }
+  /* Grab-handle affordance, so the rounded top reads as a sheet. */
+  #ai::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+    pointer-events: none;
+  }
+  #ai header {
+    /* Clear the handle. No safe-area inset here — the sheet does not reach the
+       top of the screen, so the notch is not its problem. */
+    padding-top: 1.15rem;
+    border-radius: 18px 18px 0 0;
+  }
+}
+
+@keyframes ai-sheet-up {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
 @media (max-width: 640px) {
   header {
     /* This block was written for a flex header — flex-wrap, flex, max-width:32%
@@ -1555,6 +1605,9 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-related-preview-retry:focus-visible { transform: translateY(-1px); outline: 2px solid var(--accent, #2563eb); outline-offset: 2px; }
 @keyframes kb-related-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
+  /* Appear in place. The sheet still needs its final transform, so the
+     animation is kept and collapsed to a single frame rather than removed. */
+  #ai { animation-duration: 1ms; }
   .kb-related-preview.is-loading::before {
     animation: none;
     border-top-color: currentColor;

@@ -43,6 +43,11 @@ node --test tests/enrich-parse.test.js
 ENRICH_PARSE_OK=$?
 if [ "$ENRICH_PARSE_OK" -ne 0 ]; then echo "enrichment parsing tests FAILED"; exit 1; fi
 
+echo "==> Task kind vocabulary tests"
+node --test tests/task-kinds.test.js
+TASK_KINDS_OK=$?
+if [ "$TASK_KINDS_OK" -ne 0 ]; then echo "task kind vocabulary tests FAILED"; exit 1; fi
+
 echo "==> Redirect sign-in model tests"
 node --test tests/auth-redirect.test.js
 AUTH_REDIRECT_OK=$?
@@ -195,6 +200,16 @@ echo "==> KB result-card mobile e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_result_card_mobile_test.mjs
 RESULT_CARD_MOBILE_OK=$?
 if [ "$RESULT_CARD_MOBILE_OK" -ne 0 ]; then echo "KB result-card mobile e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Mobile layout audit (390/360/320px, light + dark)"
+BASE_URL="http://localhost:$PORT" node scripts/mobile_audit_test.mjs
+MOBILE_AUDIT_OK=$?
+if [ "$MOBILE_AUDIT_OK" -ne 0 ]; then echo "mobile layout audit FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Assignment bottom-sheet e2e"
+BASE_URL="http://localhost:$PORT" node scripts/ai_sheet_test.mjs
+AI_SHEET_OK=$?
+if [ "$AI_SHEET_OK" -ne 0 ]; then echo "assignment sheet e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
 echo "==> Mobile navigation overflow e2e"
 BASE_URL="http://localhost:$PORT" node scripts/mobile_navigation_overflow_test.mjs

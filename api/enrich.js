@@ -1,4 +1,7 @@
 import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
+// Shared with the client so the two cannot drift — the prompt, the server
+// validation and the client fallback previously each carried their own list.
+import { TASK_KINDS, normalizeTaskKind } from "../task-kinds.js";
 
 export const config = { runtime: "edge" };
 
@@ -32,97 +35,6 @@ const MODEL_CHAIN = [
  * OpenRouter words the second case as "temporarily rate-limited upstream" /
  * "Provider returned error".
  */
-// The only task kinds the UI will ever show. The prompt asks for one of
-// these, but a prompt is a request, not a constraint — "Question" came back
-// from a live run and told the student nothing, so the list is enforced here
-// as well as described there. Anything outside it is mapped or replaced.
-export const TASK_KINDS = [
-  "Quiz", "Test", "Exam", "Worksheet", "Essay", "Project", "Reading", "Lab",
-  "Presentation", "Video", "Research", "Practice", "Discussion", "Interview",
-  "Translation", "Drawing", "Recording", "Notes", "Report", "Analysis",
-  "Problem set", "Vocabulary", "Listening", "Review",
-];
-
-// What models actually return instead of the canonical name. The left side is
-// lowercased; "question" and the generic words are the ones that prompted
-// this — they name the format, not the work.
-const TASK_KIND_SYNONYMS = {
-  question: "Problem set",
-  questions: "Problem set",
-  problems: "Problem set",
-  problemset: "Problem set",
-  exercise: "Practice",
-  exercises: "Practice",
-  homework: "Worksheet",
-  assignment: "Worksheet",
-  task: "Worksheet",
-  work: "Worksheet",
-  handout: "Worksheet",
-  writing: "Essay",
-  paper: "Essay",
-  composition: "Essay",
-  summary: "Report",
-  review: "Review",
-  revision: "Review",
-  reading: "Reading",
-  watch: "Video",
-  film: "Video",
-  movie: "Video",
-  speech: "Presentation",
-  oral: "Interview",
-  test: "Test",
-  quiz: "Quiz",
-  exam: "Exam",
-  translate: "Translation",
-  vocab: "Vocabulary",
-  wordlist: "Vocabulary",
-  experiment: "Lab",
-  practical: "Lab",
-  audio: "Listening",
-  podcast: "Listening",
-  sketch: "Drawing",
-  diagram: "Drawing",
-  drawing: "Drawing",
-  notes: "Notes",
-  note: "Notes",
-};
-
-/**
- * Force a model's taskKind onto the canonical list.
- *
- * Falls back to a kind inferred from the assignment text, and finally to
- * "Worksheet" — never to "Assignment" or "Task", which is what the whole
- * field exists to avoid.
- */
-export function normalizeTaskKind(raw, haystack = "") {
-  const s = String(raw || "").trim();
-  const exact = TASK_KINDS.find((k) => k.toLowerCase() === s.toLowerCase());
-  if (exact) return exact;
-
-  const key = s.toLowerCase().replace(/[^a-z]/g, "");
-  const mapped = TASK_KIND_SYNONYMS[key];
-  if (mapped) {
-    const canonical = TASK_KINDS.find((k) => k.toLowerCase() === mapped.toLowerCase());
-    if (canonical) return canonical;
-  }
-
-  const text = String(haystack).toLowerCase();
-  const inferred = [
-    [/(písomk|pisomk|previerk|\btest\b)/, "Test"],
-    [/(kvíz|kviz|\bquiz\b)/, "Quiz"],
-    [/(exam|maturit|skúšk|skusk)/, "Exam"],
-    [/(prezent|present)/, "Presentation"],
-    [/(essay|esej|sloh|úvah|uvah)/, "Essay"],
-    [/(projekt|project)/, "Project"],
-    [/(čítan|citan|read|prečítaj|precitaj)/, "Reading"],
-    [/(lab|pokus|experiment)/, "Lab"],
-    [/(preklad|translat)/, "Translation"],
-    [/(slovíčk|slovick|vocab)/, "Vocabulary"],
-    [/(video|film|pozri)/, "Video"],
-  ].find(([re]) => re.test(text));
-  return inferred ? inferred[1] : "Worksheet";
-}
-
 const ACTION_TYPES = ["submit_online", "in_person", "study_only", "read_only"];
 
 /**
@@ -395,11 +307,13 @@ export default async function handler(req) {
     const shouldForceInPerson = inTitle || (inDesc && !hasSubmitSignal);
     if (shouldForceInPerson) {
       parsed.actionType = "in_person";
-      if (parsed.taskKind && !/^(Test|Quiz|Exam|Presentation|Interview)$/i.test(parsed.taskKind)) {
-        if (/(písomk|pisomk|previerk|\btest\b|kvíz|kviz|\bquiz\b)/.test(haystack)) parsed.taskKind = "Test";
-        else if (/(exam|midterm|final|skúšk|skusk|maturit)/.test(haystack)) parsed.taskKind = "Exam";
-        else if (/(prezent|present)/.test(haystack)) parsed.taskKind = "Presentation";
-        else if (/(ústn|ustn|oral|viva)/.test(haystack)) parsed.taskKind = "Interview";
+      // Only override a kind that does not already describe an in-class
+      // assessment. "Exam" and "Interview" were produced here and are no
+      // longer canonical kinds — Test and Presentation cover them.
+      if (parsed.taskKind && !/^(Test|Quiz|Presentation)$/i.test(parsed.taskKind)) {
+        if (/(prezent|present|ústn|ustn|oral|viva)/.test(haystack)) parsed.taskKind = "Presentation";
+        else if (/(kvíz|kviz|\bquiz\b)/.test(haystack)) parsed.taskKind = "Quiz";
+        else parsed.taskKind = "Test";
       }
     }
 
