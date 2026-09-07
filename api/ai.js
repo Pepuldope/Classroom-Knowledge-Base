@@ -2,13 +2,26 @@ import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
 
 export const config = { runtime: "edge" };
 
-// Models are OpenRouter ids and they DO get retired — the previous pair
-// (nvidia/nemotron-3-nano-30b-a3b:free, nvidia/nemotron-nano-9b-v2:free) was
-// removed from the catalogue, after which every call 400'd and assignments
-// simply never got analyzed. Check https://openrouter.ai/api/v1/models before
-// assuming the code is at fault.
-const PRIMARY_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
-const BACKUP_MODEL = "google/gemma-4-31b-it:free";
+// Models are OpenRouter ids and they DO get retired — check
+// https://openrouter.ai/api/v1/models before assuming the code is at fault.
+//
+// A chain rather than a pair: :free models answer 429 "temporarily
+// rate-limited upstream" when their shared capacity is busy, which one backup
+// does not survive. Mixed vendors so the failures are uncorrelated.
+const MODEL_CHAIN = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
+  "google/gemma-4-31b-it:free",
+  "minimax/minimax-m2.7:free",
+  "nvidia/nemotron-3.5-lightning:free",
+];
+
+// A 429 from the account/key closes every :free model; a 429 from one model's
+// upstream provider does not. OpenRouter words the latter as "temporarily
+// rate-limited upstream" / "Provider returned error".
+function isAccountRateLimited(status, body) {
+  if (status !== 429) return false;
+  return !/upstream|provider returned error/i.test(body || "");
+}
 
 // Archive notes (from the client's personal, locally-stored past-years bundle)
 // are optional and untrusted input — validate hard, slice every field, and
@@ -87,16 +100,18 @@ export default async function handler(req) {
     }),
   });
 
-  let upstream = await callModel(PRIMARY_MODEL);
-  // A 429 is account-wide on OpenRouter's :free tier — the backup shares the
-  // same quota, so retrying it only burns another request. Any other failure
-  // is model-specific and worth failing over.
-  if (upstream.status !== 429 && (!upstream.ok || !upstream.body)) {
-    upstream = await callModel(BACKUP_MODEL);
+  let upstream = null;
+  let lastDetail = "";
+  for (const model of MODEL_CHAIN) {
+    upstream = await callModel(model);
+    if (upstream.ok && upstream.body) break;
+    const text = await upstream.clone().text().catch(() => "");
+    lastDetail = `${model}: HTTP ${upstream.status} ${text.slice(0, 200)}`;
+    if (isAccountRateLimited(upstream.status, text)) break;
+    upstream = null;
   }
-  if (!upstream.ok || !upstream.body) {
-    const text = await upstream.text().catch(() => "");
-    return jsonResponse({ error: "AI request failed", details: text }, 502);
+  if (!upstream || !upstream.ok || !upstream.body) {
+    return jsonResponse({ error: "AI request failed", details: lastDetail }, 502);
   }
 
   return new Response(upstream.body, {

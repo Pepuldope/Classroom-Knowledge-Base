@@ -2,22 +2,41 @@ import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
 
 export const config = { runtime: "edge" };
 
-// Models are OpenRouter ids and they DO get retired — the previous pair
+// Models are OpenRouter ids and they DO get retired — an earlier pair
 // (nvidia/nemotron-3-nano-30b-a3b:free, nvidia/nemotron-nano-9b-v2:free) was
-// removed from the catalogue, after which every call 400'd and assignments
-// simply never got analyzed. Check https://openrouter.ai/api/v1/models before
-// assuming the code is at fault.
-// Gemma 4 leads: oneLineSummary must come back in the assignment's own
-// language (usually Slovak) using only real words, which is a multilingual
-// job before it is a reasoning one.
-const PRIMARY_MODEL = "google/gemma-4-31b-it:free";
-const BACKUP_MODEL = "nvidia/nemotron-3.5-lightning:free";
+// removed from the catalogue, after which every call 400'd. Check
+// https://openrouter.ai/api/v1/models before assuming the code is at fault.
+//
+// A CHAIN, not a pair. OpenRouter's :free models are served by shared
+// capacity, and the popular ones answer 429 "temporarily rate-limited
+// upstream" for minutes at a time — one backup is not enough, because the
+// second most popular model is congested for the same reason as the first.
+// Ordered cheapest-to-reach first, and deliberately mixing vendors so a chain
+// of 429s is unlikely to be correlated. The less-trafficked entries at the
+// end are the ones that tend to answer when the well-known ones will not.
+const MODEL_CHAIN = [
+  "google/gemma-4-31b-it:free",
+  "nvidia/nemotron-3.5-lightning:free",
+  "google/gemma-4-26b-a4b-it:free",
+  "minimax/minimax-m2.7:free",
+  "liquid/lfm-2.5-2.6b:free",
+];
 
-// Accept both credential namings. Vercel's Upstash integration injects
-// UPSTASH_REDIS_REST_URL / _TOKEN; a Vercel KV binding uses KV_REST_API_URL /
-// _TOKEN. kb-store.js already accepted both, so a project provisioned through
-// the Upstash integration had a working knowledge-base store while this file
-// concluded there was no storage at all.
+/**
+ * A 429 means one of two very different things, and treating them alike is
+ * why this used to give up on the first refusal:
+ *   - the account/key is over its own limit  -> every :free model is closed,
+ *     stop and report it.
+ *   - one model's upstream provider is busy  -> a DIFFERENT model will work,
+ *     so carry on down the chain.
+ * OpenRouter words the second case as "temporarily rate-limited upstream" /
+ * "Provider returned error".
+ */
+function isAccountRateLimited(status, body) {
+  if (status !== 429) return false;
+  return !/upstream|provider returned error/i.test(body || "");
+}
+
 const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
@@ -126,8 +145,9 @@ export default async function handler(req) {
         if (!r.ok) {
           // Keep why. Throwing this away is what made a dead model, an empty
           // quota and a malformed key all look like the same silent nothing.
-          lastFailure = `${model}: HTTP ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`;
-          if (r.status === 429) quotaExhausted = true;
+          const body = await r.text().catch(() => "");
+          lastFailure = `${model}: HTTP ${r.status} ${body.slice(0, 200)}`;
+          if (isAccountRateLimited(r.status, body)) quotaExhausted = true;
           return null;
         }
         const data = await r.json().catch(() => null);
@@ -140,12 +160,14 @@ export default async function handler(req) {
       }
     };
 
-    let raw = await callModel(PRIMARY_MODEL);
-    // OpenRouter's :free tier is metered per ACCOUNT, not per model, so a 429
-    // on the primary means the backup is rate limited too. Calling it anyway
-    // just spends another request against an already-empty quota and doubles
-    // how fast the daily cap is reached.
-    if (!raw && !quotaExhausted) raw = await callModel(BACKUP_MODEL);
+    let raw = null;
+    for (const model of MODEL_CHAIN) {
+      raw = await callModel(model);
+      if (raw) break;
+      // Only an account-level limit closes every door; a busy provider for
+      // one model says nothing about the next one in the chain.
+      if (quotaExhausted) break;
+    }
     if (!raw) return { id: a.id, error: "ai_failed", detail: lastFailure };
 
     let parsed = null;
