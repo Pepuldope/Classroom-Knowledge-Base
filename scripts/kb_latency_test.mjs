@@ -56,7 +56,7 @@ async function timedSearch(base, query) {
 }
 
 async function main() {
-  const base = (process.env.KB_LIVE_URL || "https://classroom-knowledge-google.vercel.app").replace(/\/$/, "");
+  const base = (process.env.KB_LIVE_URL || "https://classroom-knowledge.vercel.app").replace(/\/$/, "");
   const localBase = process.env.KB_LOCAL_URL?.replace(/\/$/, "");
   const query = process.env.KB_LATENCY_QUERY || "cover letter";
   const budgetMs = Number(process.env.KB_LATENCY_BUDGET_MS || 1000);

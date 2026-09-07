@@ -16,7 +16,7 @@
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
-const LIVE = (process.env.KB_LIVE_URL || "https://classroom-knowledge-google.vercel.app").replace(/\/$/, "");
+const LIVE = (process.env.KB_LIVE_URL || "https://classroom-knowledge.vercel.app").replace(/\/$/, "");
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
 const pageErrors = [];

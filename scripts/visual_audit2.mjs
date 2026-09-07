@@ -9,7 +9,7 @@
 // is to EMIT findings, not to be a brittle click-through.
 import { chromium } from "playwright";
 
-const URL = process.env.KB_LIVE_URL || "https://classroom-knowledge-google.vercel.app";
+const URL = process.env.KB_LIVE_URL || "https://classroom-knowledge.vercel.app";
 const sleeps = (ms) => new Promise((r) => setTimeout(r, ms));
 const findings = [];
 const rec = (sev, state, msg, extra) => findings.push({ sev, state, msg, ...(extra || {}) });

@@ -1,6 +1,6 @@
 // diag2.mjs — debug what happens after a KB search on the live site.
 import { chromium } from "playwright";
-const URL = "https://classroom-knowledge-google.vercel.app";
+const URL = "https://classroom-knowledge.vercel.app";
 const b = await chromium.launch();
 const p = await b.newPage();
 const errs = [];

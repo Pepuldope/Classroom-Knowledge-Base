@@ -6,7 +6,7 @@
 // vision, which is rate-limited) — this catches concrete breakage.
 import { chromium } from "playwright";
 
-const URL = process.env.KB_LIVE_URL || "https://classroom-knowledge-google.vercel.app";
+const URL = process.env.KB_LIVE_URL || "https://classroom-knowledge.vercel.app";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const defects = [];
 const note = (view, state, sev, msg, extra) =>

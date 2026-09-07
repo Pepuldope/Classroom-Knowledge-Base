@@ -125,7 +125,7 @@ These layers together answer **“is the feature working?”** — not just “d
   3. Widen `isEdgeMitigation()` to swallow plain 403s with no mitigation evidence — the
      app's own JSON 403s must keep failing loudly. `tests/live-http.test.js` guards this.
 - **Before escalating a live failure, confirm it independently** from outside the runner:
-  `curl -sI https://classroom-knowledge-google.vercel.app/ | head -1`. If that is 200,
+  `curl -sI https://classroom-knowledge.vercel.app/ | head -1`. If that is 200,
   the site is up and there is no blocker — say so plainly and continue with the backlog.
 - **Why this is here:** on 2026-08-01 a cron run reported a hard blocker — "Vercel edge
   HTTP 403 on /index.html and /api/kb-search, 1/4 live checks passing" — and stopped

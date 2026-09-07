@@ -6,7 +6,7 @@
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
-const BASE = process.env.BASE_URL || "https://classroom-knowledge-google.vercel.app";
+const BASE = process.env.BASE_URL || "https://classroom-knowledge.vercel.app";
 const PATH = process.env.KB_PATH || "/kb-test-harness.html";
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });

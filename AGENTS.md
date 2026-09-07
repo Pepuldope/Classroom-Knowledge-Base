@@ -54,7 +54,7 @@ nontrivial architecture decisions. Then: check → plan → implement → test.
 
 ## PER-RUN WORK ORDER (functional-first)
 0. **PROVE IT IS POPULATED.** After ANY ingestion change, hit the live
-   `https://classroom-knowledge-google.vercel.app/api/kb-search?q=<real term>`
+   `https://classroom-knowledge.vercel.app/api/kb-search?q=<real term>`
    and assert `results.length > 0` AND `meta.noteCount` is realistic (hundreds+).
    If it is still ~1, the run is NOT done — keep working.
 1. **INGESTION (top priority — unblocks everything).** The loop cannot use a live
@@ -141,7 +141,7 @@ believed**, not a description of the system right now. Treat them accordingly.
 - `/api/kb-search` `filters.courses` / `filters.years` list MANY courses/years.
 - `/api/kb-related?id=<n>` returns related notes in <1s.
 - Live site redeployed and the live e2e passes. `scripts/kb_live_test.mjs` and
-  `scripts/test.sh` default to `https://classroom-knowledge-google.vercel.app`
+  `scripts/test.sh` default to `https://classroom-knowledge.vercel.app`
   when `KB_LIVE_URL` is unset (override for previews; skip only with
   `KB_SKIP_LIVE=1`). Never report "works on live" after a skipped live e2e.
 - **WHERE WORK COMES FROM (hard — owner 2026-08-07).** Exactly two sources, in

@@ -4,7 +4,7 @@
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
 
-const URL = process.env.KB_LIVE_URL || "https://classroom-knowledge-google.vercel.app";
+const URL = process.env.KB_LIVE_URL || "https://classroom-knowledge.vercel.app";
 const OUT = process.argv[2] || "/tmp/kb_visual";
 mkdirSync(OUT, { recursive: true });
 

@@ -1,6 +1,6 @@
 // diag.mjs — inspect why #viewToggle stays hidden on the live site.
 import { chromium } from "playwright";
-const URL = "https://classroom-knowledge-google.vercel.app";
+const URL = "https://classroom-knowledge.vercel.app";
 const b = await chromium.launch();
 const p = await b.newPage();
 const errs = [];

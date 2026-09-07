@@ -24,7 +24,7 @@ import {
   EdgeMitigationError,
 } from "./live-http.mjs";
 
-const DEFAULT_LIVE = "https://classroom-knowledge-google.vercel.app";
+const DEFAULT_LIVE = "https://classroom-knowledge.vercel.app";
 const skipLive =
   process.env.KB_SKIP_LIVE === "1" ||
   process.env.KB_SKIP_LIVE === "true" ||

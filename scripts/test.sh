@@ -307,7 +307,7 @@ if [ "${KB_SKIP_LIVE:-}" = "1" ] || [ "${KB_SKIP_LIVE:-}" = "true" ] || [ "${KB_
   LIVE_OK=0
 else
   # Default matches kb_live_test.mjs / seed-vault so cron never silently skips.
-  export KB_LIVE_URL="${KB_LIVE_URL:-https://classroom-knowledge-google.vercel.app}"
+  export KB_LIVE_URL="${KB_LIVE_URL:-https://classroom-knowledge.vercel.app}"
   echo "[live] KB_LIVE_URL=$KB_LIVE_URL"
   node scripts/kb_live_test.mjs
   LIVE_OK=$?

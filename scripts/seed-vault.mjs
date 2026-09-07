@@ -7,7 +7,7 @@
 //
 // Usage:
 //   node scripts/seed-vault.mjs [target] [limit]
-//     target = "live"   -> POST to $KB_LIVE_URL (default https://classroom-knowledge-google.vercel.app)
+//     target = "live"   -> POST to $KB_LIVE_URL (default https://classroom-knowledge.vercel.app)
 //     target = a port   -> POST to http://localhost:<port>  (local dev server)
 //     limit  = max notes to seed (default 3000)
 //
@@ -18,7 +18,7 @@ const VAULT = process.env.VAULT_DIR || "/opt/data/school-backup";
 const TARGET = process.argv[2] || "live";
 const LIMIT = Number(process.argv[3] || 3000);
 
-const LIVE = process.env.KB_LIVE_URL || "https://classroom-knowledge-google.vercel.app";
+const LIVE = process.env.KB_LIVE_URL || "https://classroom-knowledge.vercel.app";
 const BASE = TARGET === "live" ? LIVE : `http://localhost:${TARGET}`;
 
 function parseObsidian(content, rel) {
