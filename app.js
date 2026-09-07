@@ -541,6 +541,12 @@ async function startRedirectSignIn(prompt = "select_account") {
   // token. Falls back to implicit when unconfigured, so sign-in still works.
   const cfg = await getOauthConfig().catch(() => ({ hasRefreshTokens: false }));
   const responseType = cfg.hasRefreshTokens ? "code" : "token";
+  // Only ask Google to re-run consent when this browser has no refresh token
+  // yet. Consent is the one screen that mints one — and, while the OAuth
+  // client is unverified, the one screen that carries the "Google hasn't
+  // verified this app" warning. Asking on every sign-in showed that warning
+  // every time while re-minting a token we already had.
+  const forceConsent = !hasServerSession();
   // Google rejects the request with redirect_uri_mismatch unless this exact
   // string — trailing slash included — is listed under Authorized redirect
   // URIs (NOT Authorized JavaScript origins) on the OAuth client. Every
@@ -555,6 +561,7 @@ async function startRedirectSignIn(prompt = "select_account") {
     state,
     responseType,
     prompt,
+    forceConsent,
     // Only hint on a plain re-auth; never when the user asked to switch.
     loginHint: prompt === "select_account" ? "" : loadUserHint(),
   }));
@@ -565,6 +572,11 @@ async function startRedirectSignIn(prompt = "select_account") {
  * by the time the stored-session logic there looks for one.
  */
 async function consumeAuthRedirect() {
+  // Captured before the exchange overwrites either one: together they say
+  // whether a refresh token that came back empty is fine (same account, the
+  // stored one still applies) or stale (a different account signed in).
+  const hadServerSession = hasServerSession();
+  const priorHint = loadUserHint();
   let expected = null;
   try { expected = sessionStorage.getItem(AUTH_STATE_KEY); } catch {}
   const result = parseAuthRedirectResponse(location.search, location.hash, expected);
@@ -610,7 +622,13 @@ async function consumeAuthRedirect() {
     accessToken = data.access_token;
     storeToken(accessToken, Number(data.expires_in) || 3600);
     if (data.email) storeUserHint(data.email);
-    setServerSessionFlag(!!data.has_refresh);
+    // A sign-in that skipped consent gets no refresh token back, because the
+    // server had no new one to store — the cookie from the earlier consent is
+    // still the live credential. That only holds for the same account though:
+    // signing in as someone else leaves the stored token pointing at the old
+    // one, so drop the flag and let the next sign-in ask for consent again.
+    const sameAccount = !!data.email && data.email === priorHint;
+    setServerSessionFlag(!!data.has_refresh || (hadServerSession && sameAccount));
     onSignedIn();
     return true;
   } catch (e) {

@@ -33,6 +33,7 @@ export function buildAuthRedirectUrl({
   responseType = "token",
   prompt = "select_account",
   loginHint = "",
+  forceConsent = true,
 }) {
   const url = new URL(AUTH_ENDPOINT);
   url.searchParams.set("client_id", clientId);
@@ -46,8 +47,14 @@ export function buildAuthRedirectUrl({
     // without consent in the prompt it withholds one on every authorization
     // after the first — which would leave returning users silently stuck on
     // hour-long sessions.
+    //
+    // But re-consent is only worth asking for when there is no refresh token
+    // yet: the consent screen is also where Google shows its "hasn't verified
+    // this app" interstitial, so forcing it unconditionally puts that warning
+    // in front of the user on every single sign-in. Callers that already hold
+    // a refresh token pass forceConsent:false and go straight through.
     url.searchParams.set("access_type", "offline");
-    if (!prompt.includes("consent")) prompt = `${prompt} consent`.trim();
+    if (forceConsent && !prompt.includes("consent")) prompt = `${prompt} consent`.trim();
   }
   if (prompt) url.searchParams.set("prompt", prompt);
   if (loginHint) url.searchParams.set("login_hint", loginHint);

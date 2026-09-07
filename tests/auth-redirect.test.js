@@ -85,6 +85,25 @@ test("buildAuthRedirectUrl asks for offline consent in code mode", () => {
   assert.match(url.searchParams.get("prompt"), /select_account/);
 });
 
+test("buildAuthRedirectUrl skips consent in code mode when one is already held", () => {
+  // Consent is the screen that mints a refresh token — and, while the OAuth
+  // client is unverified, the screen carrying Google's "hasn't verified this
+  // app" warning. A browser that already holds a refresh token has nothing to
+  // gain from it, so it must not be forced through that warning again.
+  const url = new URL(buildAuthRedirectUrl({ ...BASE, responseType: "code", forceConsent: false }));
+  assert.equal(url.searchParams.get("response_type"), "code");
+  assert.equal(url.searchParams.get("access_type"), "offline");
+  assert.equal(url.searchParams.get("prompt"), "select_account");
+  assert.doesNotMatch(url.searchParams.get("prompt"), /consent/);
+});
+
+test("buildAuthRedirectUrl honours an explicit consent prompt even with forceConsent off", () => {
+  // forceConsent only governs the automatic addition; a caller that asked for
+  // consent outright still gets it.
+  const url = new URL(buildAuthRedirectUrl({ ...BASE, responseType: "code", prompt: "consent", forceConsent: false }));
+  assert.equal(url.searchParams.get("prompt"), "consent");
+});
+
 test("buildAuthRedirectUrl does not duplicate an explicit consent prompt", () => {
   const url = new URL(buildAuthRedirectUrl({ ...BASE, responseType: "code", prompt: "consent" }));
   assert.equal(url.searchParams.get("prompt"), "consent");
