@@ -248,7 +248,12 @@ export default async function handler(req) {
       try {
         const parsed = JSON.parse(cached);
         if (parsed && parsed.taskKind && Number.isFinite(parsed.estimatedMinutes) && parsed.estimatedMinutes > 0) {
-          return { id: a.id, ...parsed };
+          // Normalize on the way out as well as on the way in. Entries stored
+          // before the canonical list was enforced can hold kinds that are no
+          // longer valid — "Question" among them — and returning them
+          // unchecked meant the fix never reached anything already cached.
+          const cachedHaystack = `${a.title || ""} ${(a.description || "").slice(0, 400)}`.toLowerCase();
+          return { id: a.id, ...parsed, taskKind: normalizeTaskKind(parsed.taskKind, cachedHaystack) };
         }
       } catch {}
     }

@@ -87,3 +87,9 @@ test("every synonym target is itself a canonical kind", () => {
   // inference, which is how "Review" was broken when the list was first written.
   for (const kind of TASK_KINDS) assert.equal(normalizeTaskKind(kind), kind);
 });
+
+test("normalizes kinds recovered from cache, not only fresh model output", () => {
+  // Entries written before the canonical list was enforced still say
+  // "Question"; reading them back must correct them.
+  assert.equal(normalizeTaskKind("Question", "odovzdaj kópiu dokumentu"), "Problem set");
+});

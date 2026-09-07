@@ -158,7 +158,10 @@ async function revokeServerToken() {
     await fetchWithTimeout("/api/oauth-revoke", { method: "POST" });
   } catch {}
 }
-const ENRICH_KEY = "cwa_enrich_v12";
+// v13: v12 entries can carry taskKind "Question", which the prompt used to
+// offer and the canonical list no longer contains. Bumping re-fetches them;
+// the server answers from its own cache, so this costs no AI calls.
+const ENRICH_KEY = "cwa_enrich_v13";
 const DISMISSED_KEY = "cwa_dismissed";
 const PINNED_KEY = "cwa_pinned";
 
@@ -1911,7 +1914,13 @@ async function loadReport(epoch) {
   allAssignments = allWork;
   const inScope = allWork.filter(isInScope);
 
-  const need = applyCachedEnrichments(inScope);
+  // Hydrate from cache across everything, not just what is in scope. Handing
+  // only inScope to this left a submitted assignment — which drops out of
+  // scope the moment it is turned in — rendering with no type and no estimate
+  // even though its enrichment was sitting in the cache. Requests are still
+  // limited to in-scope work; this only attaches what is already known.
+  applyCachedEnrichments(allWork);
+  const need = inScope.filter((a) => !a.enrichment);
 
   const renderAll = () => {
     const visible = allWork.filter((a) => !dismissedIds.has(a.id));
@@ -2222,11 +2231,13 @@ function assignmentCard(a) {
   const verbCls = isPassive ? "material" : labelVerbClass(verb);
   const isInPerson = e?.actionType === "in_person";
 
+  const submissionState = a.submission?.state;
+  const isSubmitted = !isPassive && (submissionState === "TURNED_IN" || submissionState === "RETURNED");
+
   const el = document.createElement("div");
   let stateCls = "";
   if (!isPassive) {
-    const s = a.submission?.state;
-    if (s === "TURNED_IN" || s === "RETURNED") stateCls = " state-submitted";
+    if (isSubmitted) stateCls = " state-submitted";
     else if (due && daysUntil(due) < 0 && isPending(a)) stateCls = " state-overdue";
   }
   el.className = "assignment" + (pinnedIds.has(a.id) ? " pinned" : "") + stateCls;
@@ -2308,7 +2319,9 @@ function assignmentCard(a) {
     meta.appendChild(dueSpan);
   }
 
-  if (!isPassive && e?.estimatedMinutes) {
+  // How long it will take is only useful while it is still to be done. The
+  // kind of work it was stays useful after it is handed in.
+  if (!isPassive && !isSubmitted && e?.estimatedMinutes) {
     const eff = document.createElement("span");
     eff.className = "effort";
     eff.textContent = e.estimatedMinutes >= 60
@@ -2322,7 +2335,7 @@ function assignmentCard(a) {
     ip.textContent = "In-person";
     ip.className = "effort";
     meta.appendChild(ip);
-  } else if (!isPassive && a.submission?.state === "TURNED_IN") {
+  } else if (isSubmitted) {
     const ts = document.createElement("span");
     ts.textContent = "Submitted";
     ts.className = "submitted";
