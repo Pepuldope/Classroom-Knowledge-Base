@@ -2056,7 +2056,10 @@ async function fetchEnrichments(need, onProgress) {
         cache[enrichCacheKey(a)] = e;
       } else {
         enrichFailedIds.add(a.id);
-        if (e?.detail) lastEnrichFailure = e.detail;
+        // Fall back through detail -> error code -> "no result", so the
+        // message always names something. parse_failed used to carry no
+        // detail at all, which left the reason blank.
+        lastEnrichFailure = e?.detail || e?.error || "server returned no result for this assignment";
         failed += 1;
       }
     }

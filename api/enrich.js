@@ -154,7 +154,12 @@ export default async function handler(req) {
       const m = raw.match(/\{[\s\S]*\}/);
       if (m) { try { parsed = JSON.parse(m[0]); } catch {} }
     }
-    if (!parsed || typeof parsed !== "object") return { id: a.id, error: "parse_failed" };
+    if (!parsed || typeof parsed !== "object") {
+      // Carry what came back. Without it this branch reports only that
+      // something went wrong, which is indistinguishable from every other
+      // failure at the point the user reads it.
+      return { id: a.id, error: "parse_failed", detail: `not JSON: ${String(raw).slice(0, 200)}` };
+    }
 
     const minutes = Number(parsed.estimatedMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) parsed.estimatedMinutes = 20;
