@@ -28,6 +28,25 @@ export function tokenCookieConfigured() {
   return !!encKeyMaterial() && !!process.env.GOOGLE_CLIENT_SECRET;
 }
 
+/**
+ * Whether the configured key can actually seal and reopen a value.
+ *
+ * tokenCookieConfigured() only checks that the variables are non-empty. A
+ * TOKEN_ENC_KEY that is present but not 32 decoded bytes passes that check and
+ * then throws inside sealToken, where oauth-exchange swallows it and returns a
+ * session with no refresh token — sign-in still works, so the only visible
+ * symptom is that consent is demanded on every visit. This does the round trip
+ * so a bad key is reported rather than inferred.
+ */
+export async function tokenCookieHealthy() {
+  if (!tokenCookieConfigured()) return false;
+  try {
+    return (await openToken(await sealToken("probe"))) === "probe";
+  } catch {
+    return false;
+  }
+}
+
 function base64UrlEncode(bytes) {
   let binary = "";
   for (const b of bytes) binary += String.fromCharCode(b);
