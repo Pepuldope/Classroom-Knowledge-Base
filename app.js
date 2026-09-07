@@ -399,12 +399,25 @@ function getOauthConfig() {
       return oauthConfigPromise;
     }
   } catch {}
+  // Only a real answer is worth remembering. The fallback below is a guess
+  // made because the server could not be reached, and caching a guess is what
+  // makes a momentary blip permanent: hasRefreshTokens:false sends sign-in
+  // down the implicit flow, which issues no refresh token, so consent — and
+  // on an unverified client its warning screen — is demanded on every visit
+  // for the life of the tab. Drop the memoised promise too, so the next
+  // caller retries instead of inheriting the failure.
   oauthConfigPromise = fetchWithTimeout("/api/oauth-config")
-    .then((r) => r.ok ? r.json() : { hasRefreshTokens: false })
-    .catch(() => ({ hasRefreshTokens: false }))
+    .then((r) => {
+      if (!r.ok) throw new Error(`oauth-config ${r.status}`);
+      return r.json();
+    })
     .then((cfg) => {
       try { sessionStorage.setItem(OAUTH_CONFIG_CACHE_KEY, JSON.stringify(cfg)); } catch {}
       return cfg;
+    })
+    .catch(() => {
+      oauthConfigPromise = null;
+      return { hasRefreshTokens: false };
     });
   return oauthConfigPromise;
 }
