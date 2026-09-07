@@ -33,6 +33,29 @@ approve it. Keep items concrete and student-facing.
 - [x] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
+## 🐛 Reported by Pepuldo (2026-09-07) — fix before new features
+- [x] Merge Archive into the Knowledge Base so there are only two pages. Shipped
+  2026-09-07: the nav is **Planner | Study**. The two views shared an IndexedDB
+  database, the `buildArchiveFromClassroom` builder and a near-identical note
+  shape while maintaining two search implementations and two browse UIs. Study
+  has four tabs — Search · Browse · Curriculum · Manage — with the Curriculum
+  matrix (the one thing only Archive had) rebuilt in `kb-curriculum.js` to read
+  notes rather than `bundle.courses`. Past years and the current build are now
+  ONE searchable corpus (`kb-merge.js`): ingestion merges instead of replacing,
+  and a boot migration folds any pre-merge `bundle` record in before deleting
+  it. The Planner's "From your archive" strip became "From your notes" and uses
+  the KB's scorer, which retired the duplicate one in `archive.js`.
+- [x] Fix the task-type labels that read badly ("Problem set", "Question").
+  Shipped 2026-09-07: a fixed vocabulary of twelve plain nouns in
+  `task-kinds.js`, shared by the prompt, the server validation and the client
+  fallback — the list previously existed in three places that disagreed, which
+  is how "Question" kept coming back.
+- [x] Phone: assignment/material panel opens as a near-fullscreen bottom sheet
+  with a quick slide-up (2026-09-07).
+- [x] Phone: the header was styled for a flex layout on a grid element, so the
+  app title rendered 13px wide at 390px and 0px at 320px. Fixed 2026-09-07,
+  with `scripts/mobile_audit_test.mjs` added to catch the class of bug.
+
 ## 🐛 Reported by Pepuldo (2026-07-13) — fix before new features
 These came straight from user feedback. Prefer these over speculative polish.
 - [x] KB load: show a LOADING ANIMATION (spinner/skeleton) immediately on

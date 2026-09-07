@@ -1,4 +1,4 @@
-// auth_session_continuity_test.mjs — prove Planner, Archive, and KB use the
+// auth_session_continuity_test.mjs — prove Planner and Study use the
 // same browser-local auth session and that sign-out clears that shared record.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
@@ -67,7 +67,8 @@ try {
   await page.reload({ waitUntil: "networkidle", timeout: 30000 });
   await page.waitForFunction(() => document.getElementById("welcome")?.hidden === true, null, { timeout: 10000 });
 
-  for (const view of ["planner", "archive", "kb"]) {
+  // Two routes since Archive was merged into Study.
+  for (const view of ["planner", "kb"]) {
     await page.locator(`.view-toggle-btn[data-view="${view}"]`).click();
     await page.waitForFunction((name) => {
       const section = document.getElementById(`${name}View`);
@@ -92,7 +93,7 @@ try {
   assert.equal(afterSignOut.stored, null, "sign-out should clear the shared IndexedDB auth record");
   assert.deepEqual(await page.evaluate(() => window.__continuityPrompts || []), [], "rehydration/navigation should not prompt for an account");
   assert.deepEqual(errors, [], `page errors: ${errors.join(" | ")}`);
-  console.log(`✓ auth session converges across Planner, Archive, KB, and sign-out (${BASE})`);
+  console.log(`✓ auth session converges across Planner, Study, and sign-out (${BASE})`);
 } finally {
   await browser.close();
 }

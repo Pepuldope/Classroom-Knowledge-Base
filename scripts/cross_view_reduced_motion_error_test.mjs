@@ -1,5 +1,5 @@
 // cross_view_reduced_motion_error_test.mjs — related-preview errors stay readable
-// and announced when the shared Archive/Planner surfaces use reduced motion.
+// and announced when the shared Study/Planner surfaces use reduced motion.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
@@ -29,10 +29,11 @@ for (const theme of ["light", "dark"]) {
     await page.goto(`${BASE}/index.html`, { waitUntil: "networkidle", timeout: 30000 });
     const result = await page.evaluate((selectedTheme) => {
       document.documentElement.dataset.theme = selectedTheme;
-      const archiveView = document.getElementById("archiveView");
-      const surfaces = [document.getElementById("plannerView"), document.getElementById("archiveMain")];
-      if (!archiveView || surfaces.some((surface) => !surface)) throw new Error("Archive/Planner surfaces are missing");
-      archiveView.hidden = false;
+      // Archive was merged into Study; the surviving pair is Study/Planner.
+      const studyView = document.getElementById("kbView");
+      const surfaces = [document.getElementById("plannerView"), document.getElementById("kbMain")];
+      if (!studyView || surfaces.some((surface) => !surface)) throw new Error("Study/Planner surfaces are missing");
+      studyView.hidden = false;
       for (const surface of surfaces) {
         surface.hidden = false;
         const fixture = document.createElement("div");
@@ -82,4 +83,4 @@ for (const theme of ["light", "dark"]) {
 }
 
 await browser.close();
-console.log(`✓ reduced-motion related-preview errors remain readable in Archive and Planner (${BASE})`);
+console.log(`✓ reduced-motion related-preview errors remain readable in Study and Planner (${BASE})`);

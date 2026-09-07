@@ -15,16 +15,11 @@ try {
 
   await page.waitForSelector("#viewToggle:not([hidden])", { timeout: 10000 });
   const navViews = await page.locator(".view-toggle-btn").evaluateAll((buttons) => buttons.map((button) => button.dataset.view).sort());
-  assert.deepEqual(navViews, ["archive", "kb", "planner"], "shared navigation should expose planner, archive, and KB");
+  // Two pages since Archive was merged into Study.
+  assert.deepEqual(navViews, ["kb", "planner"], "shared navigation should expose planner and Study");
 
   await page.locator('.view-toggle-btn[data-view="kb"]').click();
-  assert.equal(await page.locator("#kbView").isHidden(), true, "signed-out users must not open the private KB");
-  assert.match(await page.locator("#status").textContent(), /Sign in with Google/);
-
-  // Archive is private too: clicking it while signed out must keep the
-  // previous public surface visible rather than exposing Classroom data.
-  await page.locator('.view-toggle-btn[data-view="archive"]').click();
-  assert.equal(await page.locator("#archiveView").isHidden(), true, "signed-out users must not open the private Archive");
+  assert.equal(await page.locator("#kbView").isHidden(), true, "signed-out users must not open private study notes");
   assert.match(await page.locator("#status").textContent(), /Sign in with Google/);
 
   await page.locator('.view-toggle-btn[data-view="planner"]').click();

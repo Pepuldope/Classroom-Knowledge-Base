@@ -14,6 +14,8 @@ HANDOFF.md
 # Playwright browsers (downloaded binaries, not source)
 scripts/screenshots/
 .pw-browsers/
+# also match a symlink pointing at a shared browser cache
+.pw-browsers
 .env*
 
 # Local scratch/debug artifacts (never committed)

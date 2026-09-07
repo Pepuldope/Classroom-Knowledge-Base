@@ -1,5 +1,5 @@
 // cross_view_retry_focus_test.mjs — mobile related-preview retry stays keyboard-visible
-// across Archive and Planner surfaces in both themes with reduced motion enabled.
+// across Study and Planner surfaces in both themes with reduced motion enabled.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
@@ -13,10 +13,11 @@ for (const theme of ["light", "dark"]) {
     await page.goto(`${BASE}/index.html`, { waitUntil: "networkidle", timeout: 30000 });
     const surfaces = await page.evaluate((selectedTheme) => {
       document.documentElement.dataset.theme = selectedTheme;
-      const archiveView = document.getElementById("archiveView");
-      const targets = [document.getElementById("archiveMain"), document.getElementById("plannerView")];
-      if (!archiveView || targets.some((target) => !target)) throw new Error("Archive/Planner surfaces are missing");
-      archiveView.hidden = false;
+      // Archive was merged into Study; the surviving pair is Study/Planner.
+      const studyView = document.getElementById("kbView");
+      const targets = [document.getElementById("kbMain"), document.getElementById("plannerView")];
+      if (!studyView || targets.some((target) => !target)) throw new Error("Study/Planner surfaces are missing");
+      studyView.hidden = false;
       for (const target of targets) {
         target.hidden = false;
         const fixture = document.createElement("div");
@@ -59,4 +60,4 @@ for (const theme of ["light", "dark"]) {
 }
 
 await browser.close();
-console.log(`✓ mobile related-preview retry focus ring is readable across Archive and Planner (${BASE})`);
+console.log(`✓ mobile related-preview retry focus ring is readable across Study and Planner (${BASE})`);
