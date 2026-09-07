@@ -46,3 +46,44 @@ test("returns null for a truncated object", () => {
   // What actually happened: the budget ran out mid-thought.
   assert.equal(parseModelJson('Here is my thinking... {"weight":3,"taskKi'), null);
 });
+
+// --- taskKind hardening -----------------------------------------------------
+import { normalizeTaskKind, TASK_KINDS } from "../api/enrich.js";
+
+test("keeps a kind that is already canonical, regardless of case", () => {
+  assert.equal(normalizeTaskKind("Worksheet"), "Worksheet");
+  assert.equal(normalizeTaskKind("QUIZ"), "Quiz");
+  assert.equal(normalizeTaskKind("problem set"), "Problem set");
+});
+
+test("maps the format-naming answers the prompt used to permit", () => {
+  // The live result that started this: "Question" tells a student nothing.
+  assert.equal(normalizeTaskKind("Question"), "Problem set");
+  assert.equal(normalizeTaskKind("Questions"), "Problem set");
+});
+
+test("maps the generic words the prompt forbids", () => {
+  for (const generic of ["Assignment", "Task", "Homework", "Work"]) {
+    const out = normalizeTaskKind(generic);
+    assert.ok(TASK_KINDS.includes(out), `${generic} -> ${out}`);
+    assert.ok(!["Assignment", "Task", "Homework", "Work"].includes(out));
+  }
+});
+
+test("infers from the assignment text when the kind is unusable", () => {
+  assert.equal(normalizeTaskKind("???", "vstupný test z matematiky"), "Test");
+  assert.equal(normalizeTaskKind("", "prečítaj si článok"), "Reading");
+  assert.equal(normalizeTaskKind(null, "preklad vety do angličtiny"), "Translation");
+});
+
+test("falls back to a real kind, never to a generic one", () => {
+  const out = normalizeTaskKind(undefined, "");
+  assert.ok(TASK_KINDS.includes(out));
+  assert.equal(out, "Worksheet");
+});
+
+test("every synonym target is itself a canonical kind", () => {
+  // A synonym pointing at a value not in TASK_KINDS silently falls through to
+  // inference, which is how "Review" was broken when the list was first written.
+  for (const kind of TASK_KINDS) assert.equal(normalizeTaskKind(kind), kind);
+});

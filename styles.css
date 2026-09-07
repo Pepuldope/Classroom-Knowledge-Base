@@ -145,6 +145,12 @@ header h1 {
   font-weight: 600;
 }
 #auth {
+  /* Pin to the third column of the first row. The header grid has three
+     columns but four children — the route-transition status was added as a
+     fourth — so without explicit placement #auth wrapped onto a second row and
+     landed at the right edge of column 1, i.e. the middle of the header. */
+  grid-column: 3;
+  grid-row: 1;
   justify-self: end;
   display: flex;
   gap: 0.5rem;
@@ -252,7 +258,12 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   outline-offset: 2px;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 24%, transparent);
 }
+.route-transition-status:empty { min-height: 0; margin: 0; }
 .route-transition-status {
+  /* Its own full-width row under the title bar, rather than occupying a
+     column the header's three real items need. */
+  grid-column: 1 / -1;
+  grid-row: 2;
   min-width: 0;
   max-width: 100%;
   min-height: 1.25rem;
@@ -441,6 +452,26 @@ summary::-webkit-details-marker { color: var(--muted); }
   margin-top: 0.4rem;
 }
 @keyframes dot-spin { to { transform: rotate(360deg); } }
+
+/* Queued for analysis but not requested yet — a hollow dashed dot, so it
+   reads as "nothing is happening here yet" rather than as work in progress.
+   The spinner is reserved for a request actually in flight. */
+.priority-dot.unanalyzed {
+  background: transparent;
+  border: 2px dashed var(--border);
+  width: 12px;
+  height: 12px;
+  margin-top: 0.4rem;
+}
+/* Asked and refused. Outlined in the danger colour so it is distinguishable
+   from "not yet" at a glance without shouting. */
+.priority-dot.failed {
+  background: transparent;
+  border: 2px solid var(--danger);
+  width: 12px;
+  height: 12px;
+  margin-top: 0.4rem;
+}
 
 .assignment-body { flex: 1; min-width: 0; }
 .assignment .verb {
@@ -673,7 +704,13 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-msg.assistant hr { border: none; border-top: 1px solid var(--border); margin: 0.6rem 0; }
 .ai-form {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  /* The input takes the free space and every button gets its own auto column,
+     however many there are. A fixed `1fr auto auto` fitted the two-button
+     assignment form but not the tutor form's three, whose last button wrapped
+     onto a second row underneath the input. */
+  grid-template-columns: 1fr;
+  grid-auto-flow: column;
+  grid-auto-columns: auto;
   gap: 0.5rem;
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border);
@@ -1247,14 +1284,18 @@ summary::-webkit-details-marker { color: var(--muted); }
   .ai-msg { font-size: 0.92rem; }
 
   .ai-form {
+    /* Back to rows on narrow screens: input across the top, buttons paired
+       beneath it. Resetting grid-auto-flow matters — the desktop rule above
+       sets it to column. */
+    grid-auto-flow: row;
     grid-template-columns: 1fr 1fr;
     padding: 0.6rem 0.85rem;
     padding-bottom: 0.6rem;
     row-gap: 0.5rem;
   }
   .ai-form input { grid-column: 1 / -1; }
-  .ai-form button[type="submit"],
-  .ai-form #aiClearBtn { width: 100%; padding: 0.7rem 0.5rem; font-size: 0.95rem; }
+  /* Every button, not a hardcoded two — the tutor form has three. */
+  .ai-form button { width: 100%; padding: 0.7rem 0.5rem; font-size: 0.95rem; }
   #aiClearBtn { font-size: 0.9rem; }
 
   .ai-quick {

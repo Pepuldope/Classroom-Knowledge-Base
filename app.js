@@ -282,7 +282,9 @@ function withAuthUser(url) {
   const email = loadUserHint();
   if (!email) return url;
   try {
-    const u = new URL(url, "https://classroom-web-analyzer.vercel.app");
+    // Base only matters for a relative href; use this deployment's own origin
+    // rather than the predecessor project's domain.
+    const u = new URL(url, location.origin);
     if (!GOOGLE_AUTHUSER_HOSTS.test(u.hostname)) return url;
     if (!u.searchParams.has("authuser")) u.searchParams.set("authuser", email);
     return u.toString();
@@ -2230,13 +2232,18 @@ function assignmentCard(a) {
   if (isPassive) {
     dot.className = "priority-dot material-dot";
   } else if (!e && enrichPendingIds.has(a.id)) {
+    // A request is genuinely in flight for this one.
     dot.className = "priority-dot loading";
+    dot.title = "Analyzing…";
+  } else if (!e && enrichFailedIds.has(a.id)) {
+    dot.className = "priority-dot failed";
+    dot.title = "AI analysis unavailable — reload to retry";
   } else if (!e) {
-    // Either the attempt failed or nothing has asked about this assignment
-    // yet. Neither is "loading", and spinning at the user implies work that
-    // is not happening.
-    dot.className = "priority-dot kind-unknown";
-    dot.title = enrichFailedIds.has(a.id) ? "AI analysis unavailable" : "Not analyzed yet";
+    // Nothing has asked about this assignment yet: past the automatic pass's
+    // cap, or outside what has been requested so far. Distinct from both
+    // "working on it" and "it failed".
+    dot.className = "priority-dot unanalyzed";
+    dot.title = "Not analyzed yet";
   } else {
     // Dot color follows the label family so it matches the verb tag and is
     // deterministic across devices (same label → same dot, every time).

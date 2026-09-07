@@ -32,6 +32,99 @@ const MODEL_CHAIN = [
  * OpenRouter words the second case as "temporarily rate-limited upstream" /
  * "Provider returned error".
  */
+// The only task kinds the UI will ever show. The prompt asks for one of
+// these, but a prompt is a request, not a constraint — "Question" came back
+// from a live run and told the student nothing, so the list is enforced here
+// as well as described there. Anything outside it is mapped or replaced.
+export const TASK_KINDS = [
+  "Quiz", "Test", "Exam", "Worksheet", "Essay", "Project", "Reading", "Lab",
+  "Presentation", "Video", "Research", "Practice", "Discussion", "Interview",
+  "Translation", "Drawing", "Recording", "Notes", "Report", "Analysis",
+  "Problem set", "Vocabulary", "Listening", "Review",
+];
+
+// What models actually return instead of the canonical name. The left side is
+// lowercased; "question" and the generic words are the ones that prompted
+// this — they name the format, not the work.
+const TASK_KIND_SYNONYMS = {
+  question: "Problem set",
+  questions: "Problem set",
+  problems: "Problem set",
+  problemset: "Problem set",
+  exercise: "Practice",
+  exercises: "Practice",
+  homework: "Worksheet",
+  assignment: "Worksheet",
+  task: "Worksheet",
+  work: "Worksheet",
+  handout: "Worksheet",
+  writing: "Essay",
+  paper: "Essay",
+  composition: "Essay",
+  summary: "Report",
+  review: "Review",
+  revision: "Review",
+  reading: "Reading",
+  watch: "Video",
+  film: "Video",
+  movie: "Video",
+  speech: "Presentation",
+  oral: "Interview",
+  test: "Test",
+  quiz: "Quiz",
+  exam: "Exam",
+  translate: "Translation",
+  vocab: "Vocabulary",
+  wordlist: "Vocabulary",
+  experiment: "Lab",
+  practical: "Lab",
+  audio: "Listening",
+  podcast: "Listening",
+  sketch: "Drawing",
+  diagram: "Drawing",
+  drawing: "Drawing",
+  notes: "Notes",
+  note: "Notes",
+};
+
+/**
+ * Force a model's taskKind onto the canonical list.
+ *
+ * Falls back to a kind inferred from the assignment text, and finally to
+ * "Worksheet" — never to "Assignment" or "Task", which is what the whole
+ * field exists to avoid.
+ */
+export function normalizeTaskKind(raw, haystack = "") {
+  const s = String(raw || "").trim();
+  const exact = TASK_KINDS.find((k) => k.toLowerCase() === s.toLowerCase());
+  if (exact) return exact;
+
+  const key = s.toLowerCase().replace(/[^a-z]/g, "");
+  const mapped = TASK_KIND_SYNONYMS[key];
+  if (mapped) {
+    const canonical = TASK_KINDS.find((k) => k.toLowerCase() === mapped.toLowerCase());
+    if (canonical) return canonical;
+  }
+
+  const text = String(haystack).toLowerCase();
+  const inferred = [
+    [/(písomk|pisomk|previerk|\btest\b)/, "Test"],
+    [/(kvíz|kviz|\bquiz\b)/, "Quiz"],
+    [/(exam|maturit|skúšk|skusk)/, "Exam"],
+    [/(prezent|present)/, "Presentation"],
+    [/(essay|esej|sloh|úvah|uvah)/, "Essay"],
+    [/(projekt|project)/, "Project"],
+    [/(čítan|citan|read|prečítaj|precitaj)/, "Reading"],
+    [/(lab|pokus|experiment)/, "Lab"],
+    [/(preklad|translat)/, "Translation"],
+    [/(slovíčk|slovick|vocab)/, "Vocabulary"],
+    [/(video|film|pozri)/, "Video"],
+  ].find(([re]) => re.test(text));
+  return inferred ? inferred[1] : "Worksheet";
+}
+
+const ACTION_TYPES = ["submit_online", "in_person", "study_only", "read_only"];
+
 /**
  * Pull a JSON object out of a completion.
  *
@@ -91,7 +184,7 @@ const SYSTEM_PROMPT = `You analyze a Google Classroom assignment and return JSON
   * "read_only" — passive reading material, announcement, FYI post. No real task expected.
 
   TIEBREAKER: if the description does NOT explicitly tell the student to UPLOAD or TURN IN something, prefer "study_only" or "in_person" over "submit_online". Don't assume submission just because Classroom shows it as an assignment.
-- taskKind: ONE specific noun describing what this assignment IS. Pick the MOST SPECIFIC from: "Quiz", "Test", "Exam", "Worksheet", "Essay", "Project", "Reading", "Lab", "Presentation", "Video", "Research", "Practice", "Question", "Discussion", "Interview", "Translation", "Drawing", "Recording", "Notes", "Review", "Report", "Analysis", "Problem set", "Vocabulary", "Listening". Always English, always one or two words. NEVER use generic words like "Assignment", "Task", "Homework", or "Work" — those tell the student nothing. If genuinely unclear, pick the closest specific kind.
+- taskKind: ONE specific noun describing what this assignment IS. Pick the MOST SPECIFIC from this list and use NOTHING else: ${TASK_KINDS.map((k) => `"${k}"`).join(", ")}. Always English, always exactly as spelled above. NEVER use generic words like "Assignment", "Task", "Homework", "Work" or "Question" — those name the format, not the work, and tell the student nothing. If genuinely unclear, pick the closest specific kind.
 - estimatedMinutes: realistic minutes a student needs. ALWAYS REQUIRED — return a positive integer, never null, never 0, never omit. Be CONSERVATIVE: homework 10-30, worksheets 15-25, essays 45-90, big projects 120-240, in-person tests 30-60 (for study time), quick readings 10-20. If genuinely unsure, default to 20.
 - oneLineSummary: under 90 chars, plain description of what to do. IN THE SAME LANGUAGE AS THE ASSIGNMENT. Never translate. Use ONLY real existing words in that language — if you're unsure how to phrase something in Slovak (or whatever the language is), use simpler vocabulary you are 100% confident is correct. NEVER invent words, NEVER mix languages within a sentence, NEVER conjugate foreign verbs with native endings. When possible, reuse phrasing from the assignment description itself rather than paraphrasing.
 
@@ -236,7 +329,13 @@ export default async function handler(req) {
 
     const minutes = Number(parsed.estimatedMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) parsed.estimatedMinutes = 20;
-    else parsed.estimatedMinutes = Math.round(minutes);
+    // A model that decides an essay takes 4000 minutes is not useful either.
+    else parsed.estimatedMinutes = Math.min(600, Math.max(5, Math.round(minutes)));
+
+    const weight = Number(parsed.weight);
+    parsed.weight = Number.isFinite(weight) ? Math.min(5, Math.max(1, Math.round(weight))) : 3;
+
+    if (!ACTION_TYPES.includes(parsed.actionType)) parsed.actionType = "study_only";
 
     const title = (a.title || "").toLowerCase();
     const desc = (a.description || "").slice(0, 400).toLowerCase();
@@ -277,6 +376,11 @@ export default async function handler(req) {
       "pošli", "posli", "pošlite", "poslite", "pošlite mi", "poslite mi",
       "send the file", "submit your", "upload your",
     ];
+
+    // Enforce the canonical list now that the assignment text is available to
+    // infer from. Done before the in-person override below, which refines a
+    // kind that is already valid.
+    parsed.taskKind = normalizeTaskKind(parsed.taskKind, haystack);
 
     const inTitle = hasWord(title, inPersonWords);
     const inDesc = hasWord(desc, inPersonWords);
