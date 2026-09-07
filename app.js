@@ -1921,7 +1921,12 @@ async function loadReport(epoch) {
       if (remaining > 0) setStatus(`Analyzing ${remaining} more…`);
       else setStatus("");
     };
-    fetchEnrichments(need, onProgress);
+    fetchEnrichments(need, onProgress).then((failed) => {
+      if (epoch !== sessionEpoch || !failed) return;
+      // Say so rather than leaving the assignments silently unanalyzed. This
+      // is what a removed or unreachable upstream model looks like from here.
+      setStatus(`AI couldn't analyze ${failed} assignment${failed === 1 ? "" : "s"}. Reload to retry.`, true);
+    });
   }
 }
 
@@ -1937,10 +1942,16 @@ function applyCachedEnrichments(items) {
 }
 
 const BATCH_SIZE = 5;
+// Enrichment is slower than an ordinary request — the server may try two
+// models for each of five assignments — so it gets a longer budget than
+// NET_TIMEOUT_MS. It still needs one: a bare fetch() against a provider that
+// accepts the connection and never answers hangs forever, and the only thing
+// the user sees is "Analyzing N more…" that never finishes.
+const ENRICH_TIMEOUT_MS = 45_000;
 
 async function enrichBatch(batch) {
   try {
-    const r = await fetch("/api/enrich", {
+    const r = await fetchWithTimeout("/api/enrich", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
       body: JSON.stringify({
@@ -1953,15 +1964,17 @@ async function enrichBatch(batch) {
           contentHash: contentHash(a),
         })),
       }),
-    });
+    }, ENRICH_TIMEOUT_MS);
     if (!r.ok) return [];
     const data = await r.json();
     return data.enrichments || [];
   } catch { return []; }
 }
 
+/** Returns the number of assignments the AI could not analyze. */
 async function fetchEnrichments(need, onProgress) {
-  if (need.length === 0) return;
+  if (need.length === 0) return 0;
+  let failed = 0;
   for (let i = 0; i < need.length; i += BATCH_SIZE) {
     const batch = need.slice(i, i + BATCH_SIZE);
     const enrichments = await enrichBatch(batch);
@@ -1969,14 +1982,21 @@ async function fetchEnrichments(need, onProgress) {
     const cache = loadEnrichCache();
     for (const a of batch) {
       const e = byId.get(a.id);
-      if (e) {
+      // The server answers 200 with {id, error} per assignment it could not
+      // analyze — a dead upstream model reads exactly like this. Storing that
+      // object counted as a result, so the assignment was never retried and
+      // sat permanently blank. Only a real enrichment is worth keeping.
+      if (e && !e.error) {
         a.enrichment = e;
         cache[enrichCacheKey(a)] = e;
+      } else {
+        failed += 1;
       }
     }
     saveEnrichCache(cache);
     if (onProgress) onProgress(batch.length);
   }
+  return failed;
 }
 
 function renderStatBar(all, inScope) {
@@ -2443,6 +2463,8 @@ function maybeLazyEnrichRest() {
     if (window.__renderAll) window.__renderAll();
     if (remaining > 0) setStatus(`Analyzing ${remaining} more…`);
     else setStatus("");
+  }).then((failed) => {
+    if (failed) setStatus(`AI couldn't analyze ${failed} assignment${failed === 1 ? "" : "s"}. Reload to retry.`, true);
   });
 }
 

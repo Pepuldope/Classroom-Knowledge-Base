@@ -2,7 +2,12 @@ import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
 
 export const config = { runtime: "edge" };
 
-const MODEL = "nvidia/nemotron-nano-9b-v2:free";
+// Models are OpenRouter ids and they DO get retired — the previous pair
+// (nvidia/nemotron-3-nano-30b-a3b:free, nvidia/nemotron-nano-9b-v2:free) was
+// removed from the catalogue, after which every call 400'd and assignments
+// simply never got analyzed. Check https://openrouter.ai/api/v1/models before
+// assuming the code is at fault.
+const MODEL = "google/gemma-4-31b-it:free";
 
 const SYSTEM_PROMPT = `You generate three short follow-up prompt buttons for a study chat. The student is talking to an AI tutor about ONE assignment. Look at the last assistant reply and propose 3 short next-message ideas the student might want to send.
 

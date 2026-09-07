@@ -2,8 +2,13 @@ import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
 
 export const config = { runtime: "edge" };
 
-const PRIMARY_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free";
-const BACKUP_MODEL = "nvidia/nemotron-nano-9b-v2:free";
+// Models are OpenRouter ids and they DO get retired — the previous pair
+// (nvidia/nemotron-3-nano-30b-a3b:free, nvidia/nemotron-nano-9b-v2:free) was
+// removed from the catalogue, after which every call 400'd and assignments
+// simply never got analyzed. Check https://openrouter.ai/api/v1/models before
+// assuming the code is at fault.
+const PRIMARY_MODEL = "nvidia/nemotron-3-super-120b-a12b:free";
+const BACKUP_MODEL = "google/gemma-4-31b-it:free";
 
 // Archive notes (from the client's personal, locally-stored past-years bundle)
 // are optional and untrusted input — validate hard, slice every field, and
@@ -70,8 +75,8 @@ export default async function handler(req) {
     headers: {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": "https://classroom-web-analyzer.vercel.app",
-      "X-Title": "Classroom Web Analyzer",
+      "HTTP-Referer": "https://classroom-knowledge.vercel.app",
+      "X-Title": "Classroom Knowledge Base",
     },
     body: JSON.stringify({
       model,

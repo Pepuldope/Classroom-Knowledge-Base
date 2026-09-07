@@ -2,8 +2,16 @@ import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
 
 export const config = { runtime: "edge" };
 
-const PRIMARY_MODEL = "nvidia/nemotron-3-nano-30b-a3b:free";
-const BACKUP_MODEL = "nvidia/nemotron-nano-9b-v2:free";
+// Models are OpenRouter ids and they DO get retired — the previous pair
+// (nvidia/nemotron-3-nano-30b-a3b:free, nvidia/nemotron-nano-9b-v2:free) was
+// removed from the catalogue, after which every call 400'd and assignments
+// simply never got analyzed. Check https://openrouter.ai/api/v1/models before
+// assuming the code is at fault.
+// Gemma 4 leads: oneLineSummary must come back in the assignment's own
+// language (usually Slovak) using only real words, which is a multilingual
+// job before it is a reasoning one.
+const PRIMARY_MODEL = "google/gemma-4-31b-it:free";
+const BACKUP_MODEL = "nvidia/nemotron-3.5-lightning:free";
 
 const KV_URL = process.env.KV_REST_API_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN;
