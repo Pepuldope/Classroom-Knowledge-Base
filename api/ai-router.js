@@ -128,6 +128,21 @@ function enabledProviders() {
   return PROVIDERS.filter((p) => p.apiKey && p.baseURL);
 }
 
+/**
+ * Which providers actually have a key in this deployment — names and models
+ * only, never key material. Without this the only way to know whether e.g.
+ * GROQ_API_KEY is set in the Vercel project is to trigger a request and infer
+ * it from the failure.
+ */
+export function listProviderAvailability() {
+  return PROVIDERS.map((p) => ({
+    name: p.name,
+    model: p.model,
+    effort: p.effort,
+    configured: !!(p.apiKey && p.baseURL),
+  }));
+}
+
 // ---------------------------------------------------------------------------
 // Circuit breaker / health (check #1) — with CONTROLLED half-open recovery
 // State machine per provider:

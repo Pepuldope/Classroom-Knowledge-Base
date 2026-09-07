@@ -80,6 +80,7 @@ export default async function handler(req) {
   }
 
   const results = await Promise.all(body.assignments.slice(0, 5).map(async (a) => {
+    let lastFailure = "";
     const hash = a.contentHash || "";
     const PROMPT_VERSION = "v5";
     const cacheKey = `enrich:${PROMPT_VERSION}:${a.id}:${hash}`;
@@ -116,15 +117,25 @@ export default async function handler(req) {
             temperature: 0.2,
           }),
         });
-        if (!r.ok) return null;
+        if (!r.ok) {
+          // Keep why. Throwing this away is what made a dead model, an empty
+          // quota and a malformed key all look like the same silent nothing.
+          lastFailure = `${model}: HTTP ${r.status} ${(await r.text().catch(() => "")).slice(0, 200)}`;
+          return null;
+        }
         const data = await r.json().catch(() => null);
-        return data?.choices?.[0]?.message?.content || null;
-      } catch { return null; }
+        const content = data?.choices?.[0]?.message?.content || null;
+        if (!content) lastFailure = `${model}: empty completion`;
+        return content;
+      } catch (e) {
+        lastFailure = `${model}: ${e.name || "fetch failed"}`;
+        return null;
+      }
     };
 
     let raw = await callModel(PRIMARY_MODEL);
     if (!raw) raw = await callModel(BACKUP_MODEL);
-    if (!raw) return { id: a.id, error: "ai_failed" };
+    if (!raw) return { id: a.id, error: "ai_failed", detail: lastFailure };
 
     let parsed = null;
     try { parsed = JSON.parse(raw); }

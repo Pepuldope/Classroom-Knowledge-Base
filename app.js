@@ -1925,7 +1925,7 @@ async function loadReport(epoch) {
       if (epoch !== sessionEpoch || !failed) return;
       // Say so rather than leaving the assignments silently unanalyzed. This
       // is what a removed or unreachable upstream model looks like from here.
-      setStatus(`AI couldn't analyze ${failed} assignment${failed === 1 ? "" : "s"}. Reload to retry.`, true);
+      setStatus(enrichFailureMessage(failed), true);
     });
   }
 }
@@ -1942,6 +1942,15 @@ function applyCachedEnrichments(items) {
 }
 
 const BATCH_SIZE = 5;
+// Assignments the AI was asked about and could not analyze. The spinning
+// priority dot means "not analyzed yet", and without this it never stops:
+// a failed enrichment is deliberately not cached (so it retries on the next
+// load), which leaves the card looking permanently in-flight. Session-only —
+// a reload should try again.
+const enrichFailedIds = new Set();
+// The upstream reason for the most recent failure, shown to the user so a
+// rate limit is distinguishable from a dead model.
+let lastEnrichFailure = "";
 // Enrichment is slower than an ordinary request — the server may try two
 // models for each of five assignments — so it gets a longer budget than
 // NET_TIMEOUT_MS. It still needs one: a bare fetch() against a provider that
@@ -1971,6 +1980,12 @@ async function enrichBatch(batch) {
   } catch { return []; }
 }
 
+function enrichFailureMessage(failed) {
+  const n = `${failed} assignment${failed === 1 ? "" : "s"}`;
+  const why = lastEnrichFailure ? ` — ${lastEnrichFailure}` : "";
+  return `AI couldn't analyze ${n}${why}. Reload to retry.`;
+}
+
 /** Returns the number of assignments the AI could not analyze. */
 async function fetchEnrichments(need, onProgress) {
   if (need.length === 0) return 0;
@@ -1988,8 +2003,11 @@ async function fetchEnrichments(need, onProgress) {
       // sat permanently blank. Only a real enrichment is worth keeping.
       if (e && !e.error) {
         a.enrichment = e;
+        enrichFailedIds.delete(a.id);
         cache[enrichCacheKey(a)] = e;
       } else {
+        enrichFailedIds.add(a.id);
+        if (e?.detail) lastEnrichFailure = e.detail;
         failed += 1;
       }
     }
@@ -2159,6 +2177,10 @@ function assignmentCard(a) {
   const dot = document.createElement("div");
   if (isPassive) {
     dot.className = "priority-dot material-dot";
+  } else if (!e && enrichFailedIds.has(a.id)) {
+    // Asked and failed — not still loading. Say so instead of spinning.
+    dot.className = "priority-dot kind-unknown";
+    dot.title = "AI analysis unavailable";
   } else if (!e) {
     dot.className = "priority-dot loading";
   } else {
@@ -2464,7 +2486,7 @@ function maybeLazyEnrichRest() {
     if (remaining > 0) setStatus(`Analyzing ${remaining} more…`);
     else setStatus("");
   }).then((failed) => {
-    if (failed) setStatus(`AI couldn't analyze ${failed} assignment${failed === 1 ? "" : "s"}. Reload to retry.`, true);
+    if (failed) setStatus(enrichFailureMessage(failed), true);
   });
 }
 

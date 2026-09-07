@@ -8,7 +8,7 @@
 //                              alert, unhealthy[] }
 // GET /api/router-health?reset=1 -> clears counters after reading (drill/debug)
 import { jsonResponse } from "./_helpers.js";
-import { getRouterMetrics, resetRouterMetrics } from "./ai-router.js";
+import { getRouterMetrics, resetRouterMetrics, listProviderAvailability } from "./ai-router.js";
 
 export const config = { runtime: "edge" };
 
@@ -18,5 +18,5 @@ export default async function handler(req) {
   const reset = url.searchParams.get("reset") === "1";
   const m = getRouterMetrics();
   if (reset) resetRouterMetrics();
-  return jsonResponse(m);
+  return jsonResponse({ ...m, providers: listProviderAvailability() });
 }
