@@ -1474,10 +1474,14 @@ summary::-webkit-details-marker { color: var(--muted); }
      now, as one cluster, which also gives them 36px targets that are not
      pressed against a link. The body reserves exactly as much room as the
      cluster needs; --action-count is set per card in app.js. */
-  /* The body reserves the cluster's column, so the title — which is `display:
-     inline`, and so cannot reserve one itself: padding on an inline box only
-     affects its last line — wraps clear of the buttons. */
-  .assignment .assignment-body { padding-right: calc(var(--action-count, 0) * 2.3rem); }
+  /* Only the TITLE LINE clears the cluster. Reserving the column on the whole
+     body took the same bite out of the description and the footer, which sit
+     below the buttons and have the full width available to them — the
+     description lost about a third of the card for nothing.
+     It goes on the title's containing block rather than on .title itself,
+     which is `display: inline`: padding on an inline box only affects its last
+     line, so the buttons would sit on top of the text. */
+  .assignment .title-line { padding-right: calc(var(--action-count, 0) * 2.3rem); }
   /* One row in the normal case, and never an overflow. Wrapping stays available
      as the fallback — pinning the row with `nowrap` guarantees a spill on a
      320px screen, and a truncated "Overdue 3d" is worse than a second line.

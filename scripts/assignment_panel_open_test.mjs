@@ -112,6 +112,23 @@ try {
       metaHeight: Math.round(meta.getBoundingClientRect().height),
       overflows: meta.scrollWidth > meta.clientWidth + 1,
       actionsInCorner: getComputedStyle(card.querySelector(".card-actions")).position === "absolute",
+      // Only the title line clears the corner buttons. Reserving that column on
+      // the whole body cut the same third off the description and the footer,
+      // which sit below the buttons with the full width available.
+      titleLineWidth: (() => {
+        const el = card.querySelector(".title-line");
+        const cs = getComputedStyle(el);
+        return Math.round(el.clientWidth - parseFloat(cs.paddingRight) - parseFloat(cs.paddingLeft));
+      })(),
+      bodyWidth: (() => {
+        const el = card.querySelector(".assignment-body");
+        const cs = getComputedStyle(el);
+        return Math.round(el.clientWidth - parseFloat(cs.paddingRight) - parseFloat(cs.paddingLeft));
+      })(),
+      metaWidth: (() => {
+        const cs = getComputedStyle(meta);
+        return Math.round(meta.clientWidth - parseFloat(cs.paddingRight) - parseFloat(cs.paddingLeft));
+      })(),
     };
   }));
   assert.ok(footers.length > 0, "expected at least one card");
@@ -120,6 +137,9 @@ try {
     assert.ok(f.metaHeight <= 30, `card footer is ${f.metaHeight}px tall — it has wrapped to a second row`);
     assert.equal(f.overflows, false, "the footer must not spill out of the card");
     assert.equal(f.actionsInCorner, true, "the action buttons belong in the card's corner on a phone");
+    assert.equal(f.metaWidth, f.bodyWidth, "the footer should have the card's full width — the buttons are above it");
+    assert.ok(f.titleLineWidth < f.bodyWidth - 40,
+      `the title line should clear the buttons (title ${f.titleLineWidth}px vs body ${f.bodyWidth}px)`);
   }
   await phone2.close();
 

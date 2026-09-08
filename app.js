@@ -1891,6 +1891,8 @@ function assignmentCard(a) {
   body.className = "assignment-body";
 
   const titleLine = document.createElement("div");
+  // Named so the corner action cluster can be cleared by the title line alone.
+  titleLine.className = "title-line";
   if (verb) {
     const verbEl = document.createElement("span");
     verbEl.className = `verb ${verbCls}`;
