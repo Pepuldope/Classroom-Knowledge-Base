@@ -60,3 +60,76 @@ test("merging does not discard a course that has no notes", () => {
   // And the banner stays quiet across that round trip.
   assert.equal(detectClassroomChanges(merged, CLASSROOM).hasChanges, false);
 });
+
+// ---------------------------------------------------------------------------
+// The whole ingestion chain, not one hop of it.
+//
+// The first version of this fix tested mergeBundles in isolation and passed
+// while the real path stayed broken: kbBundleFromClassroomArchive sits BETWEEN
+// the build and the merge, and it rebuilt the course list from the notes —
+// discarding the empty course before the merge could preserve it. This test
+// runs the path the "Update now" button actually takes.
+// ---------------------------------------------------------------------------
+test("a course with nothing posted survives the real build -> convert -> merge path", async () => {
+  const { bundleFromRaw } = await import("../archive-builder.js");
+  const { kbBundleFromClassroomArchive } = await import("../kb-client-build.js");
+
+  // Exactly the owner's situation: one course with coursework, one brand-new
+  // course with nothing in it yet.
+  const raw = {
+    courses: [
+      { id: "c1", name: "NaE Y3 3.T", section: "2025/26", creationTime: "2025-07-01T12:31:18.847Z" },
+      { id: "c2", name: "MATURITA INFO Y4", section: "2026/2027", creationTime: "2026-06-18T08:59:57.111Z" },
+    ],
+    courseData: {
+      c1: { topics: [{ topicId: "t1", name: "Sprint 1" }], courseWork: [{ id: "w1", title: "Pitch", topicId: "t1" }] },
+      c2: {}, // nothing posted, and nothing to fetch
+    },
+  };
+
+  const archive = bundleFromRaw(raw);
+  assert.ok(archive.courses.some((c) => c.name === "MATURITA INFO Y4"),
+    "the build itself records every course it saw");
+  assert.equal(archive.notes.filter((n) => n.course === "MATURITA INFO Y4").length, 0,
+    "and that course legitimately produces no notes");
+
+  const converted = kbBundleFromClassroomArchive(archive);
+  assert.ok(converted.courses.some((c) => c.name === "MATURITA INFO Y4"),
+    "conversion to the KB schema must not drop it — this is where it was lost");
+
+  const saved = mergeBundles(null, converted);
+  assert.ok(saved.courses.some((c) => c.name === "MATURITA INFO Y4"),
+    "and neither must the merge that writes it to IndexedDB");
+
+  // The banner is quiet, and stays quiet across a second rebuild.
+  const classroom = raw.courses.map((c) => ({ name: c.name }));
+  assert.deepEqual(detectClassroomChanges(saved, classroom), { newCourses: [], hasChanges: false });
+  const rebuilt = mergeBundles(saved, kbBundleFromClassroomArchive(bundleFromRaw(raw)));
+  assert.deepEqual(detectClassroomChanges(rebuilt, classroom), { newCourses: [], hasChanges: false },
+    "a second Update now must not resurrect the banner");
+});
+
+test("a course whose coursework fetch failed is treated the same way", async () => {
+  // fetchFacetGraceful degrades to [] on an API error, so a transient failure
+  // produced a note-less course too — and the same permanent banner.
+  const { bundleFromRaw } = await import("../archive-builder.js");
+  const { kbBundleFromClassroomArchive } = await import("../kb-client-build.js");
+  const archive = bundleFromRaw({
+    courses: [{ id: "c1", name: "Databázy Y3", section: "2025/26", creationTime: "2025-09-01T00:00:00Z" }],
+    courseData: { c1: { topics: [], courseWork: [], courseWorkMaterials: [], announcements: [] } },
+  });
+  const saved = mergeBundles(null, kbBundleFromClassroomArchive(archive));
+  assert.deepEqual(detectClassroomChanges(saved, [{ name: "Databázy Y3" }]), { newCourses: [], hasChanges: false });
+});
+
+test("the banner names the courses it is talking about", async () => {
+  const { classroomChangesMessage } = await import("../kb.js");
+  assert.equal(classroomChangesMessage(["MATURITA INFO Y4"]),
+    "1 new course in Google Classroom: MATURITA INFO Y4.");
+  assert.equal(classroomChangesMessage(["A", "B"]), "2 new courses in Google Classroom: A, B.");
+  assert.equal(classroomChangesMessage(["A", "B", "C", "D", "E"]),
+    "5 new courses in Google Classroom: A, B, C and 2 more.");
+  assert.equal(classroomChangesMessage([]), "");
+  assert.equal(classroomChangesMessage(null), "");
+  assert.equal(classroomChangesMessage(["  ", ""]), "");
+});

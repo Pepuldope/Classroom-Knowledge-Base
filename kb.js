@@ -134,6 +134,24 @@ export function knownCourseNames(bundle) {
   return names;
 }
 
+/**
+ * The banner's sentence.
+ *
+ * It names the courses. "1 new course found in Google Classroom" said nothing
+ * about WHICH course, which is why a course that could never be satisfied went
+ * unnoticed as a permanent notice rather than being obviously one specific
+ * empty class. Bounded so a first-ever build does not print forty names.
+ */
+export function classroomChangesMessage(newCourses) {
+  const names = (Array.isArray(newCourses) ? newCourses : [])
+    .map((n) => String(n || "").trim())
+    .filter(Boolean);
+  if (names.length === 0) return "";
+  const count = `${names.length} new course${names.length === 1 ? "" : "s"} in Google Classroom`;
+  if (names.length > 3) return `${count}: ${names.slice(0, 3).join(", ")} and ${names.length - 3} more.`;
+  return `${count}: ${names.join(", ")}.`;
+}
+
 export function detectClassroomChanges(bundle, courses) {
   const cachedCourses = knownCourseNames(bundle);
   const newCourses = [...new Set((Array.isArray(courses) ? courses : [])
@@ -925,7 +943,7 @@ async function checkForClassroomChanges(bundle) {
     }
     banner.replaceChildren();
     const label = document.createElement("span");
-    label.textContent = `${changes.newCourses.length} new course${changes.newCourses.length === 1 ? "" : "s"} found in Google Classroom.`;
+    label.textContent = classroomChangesMessage(changes.newCourses);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "link-btn";
