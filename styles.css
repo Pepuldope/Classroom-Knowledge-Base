@@ -310,7 +310,20 @@ button.primary:hover { background: var(--accent-hover); }
    simply tracks the viewport, which is what makes this behave across aspect
    ratios. Prose blocks keep their own reading measure (--measure) so a wider
    page never means a 200-character line of body text. */
-:root { --page-max: 1560px; --page-width: 96vw; --measure: 74ch; }
+:root {
+  --page-max: 1560px;
+  --page-width: 96vw;
+  --measure: 74ch;
+  /* Clearance each side of the centred column, so it never runs under the
+     fixed account card in the bottom-left corner.
+       card right edge = 1rem inset + 200px wide  = 216px
+       + 12px breathing room                      = 228px
+       - main's own 1.5rem padding, which the visible content already sits
+         inside                                   = 204px
+     Applied to both sides because the column stays centred; the card itself is
+     untouched. */
+  --sidebar-gutter: 204px;
+}
 /* Text controls inherit the page's colours.
 
    Every one of these set a background but none set `color`, so the text stayed
@@ -332,6 +345,12 @@ select {
 ::placeholder { color: var(--muted); opacity: 1; }
 
 main { width: min(var(--page-width), var(--page-max)); max-width: 100%; margin: 0 auto; padding: 1.5rem; box-sizing: border-box; }
+/* 901px is exactly where the account card starts being displayed. Below it the
+   card is `display: none`, so the column keeps the full width. `100%` rather
+   than `100vw` so a scrollbar is already accounted for. */
+@media (min-width: 901px) {
+  main { width: min(var(--page-width), var(--page-max), calc(100% - 2 * var(--sidebar-gutter))); }
+}
 /* Cards fill the page — that is the point of the wider container — but the
    prose inside them keeps a reading measure, so a wide window means more
    columns and longer lists, never a 200-character line of body text. */

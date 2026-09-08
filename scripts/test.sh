@@ -251,6 +251,11 @@ BASE_URL="http://localhost:$PORT" node scripts/assignment_panel_close_test.mjs
 PANEL_CLOSE_OK=$?
 if [ "$PANEL_CLOSE_OK" -ne 0 ]; then echo "assignment panel close e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Sidebar overlap e2e"
+BASE_URL="http://localhost:$PORT" node scripts/sidebar_overlap_test.mjs
+SIDEBAR_OVERLAP_OK=$?
+if [ "$SIDEBAR_OVERLAP_OK" -ne 0 ]; then echo "sidebar overlap e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Sticky header e2e"
 BASE_URL="http://localhost:$PORT" node scripts/sticky_header_test.mjs
 STICKY_OK=$?
