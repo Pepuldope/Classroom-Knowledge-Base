@@ -10,8 +10,7 @@
       ]
     },
     {
-      "//": "Static assets were served `max-age=0, must-revalidate`, so every return visit blocked on ~27 conditional requests before anything ran. `stale-while-revalidate` lets the browser paint from cache immediately and check for a new copy in the background. The trade is that one load after a deploy may use the previous file; the visit after it is current. Nothing here is content-hashed, so a longer max-age is not safe.",
-      "source": "/(.*)\\.(js|css|svg|woff2)",
+      "source": "/(.*).js",
       "headers": [
         {
           "key": "Cache-Control",
@@ -20,12 +19,11 @@
       ]
     },
     {
-      "//": "The entry point always revalidates: it is small over the wire and it is what names every other file.",
-      "source": "/(index.html)?",
+      "source": "/(.*).css",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, no-cache"
+          "value": "public, max-age=0, stale-while-revalidate=86400"
         }
       ]
     }
