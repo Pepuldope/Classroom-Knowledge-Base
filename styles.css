@@ -401,19 +401,29 @@ main { width: min(var(--page-width), var(--page-max)); max-width: 100%; margin: 
 }
 
 .status { color: var(--muted); padding: 0.5rem 0; min-height: 1.5rem; }
+/* Planner reserves this band for a status line it usually has nothing to put
+   in, which left an unexplained 40px gap under the header that Study — having
+   no such element — did not have. Collapse it when there is no message; the
+   space comes back the moment one is set. */
+.status:empty { min-height: 0; padding: 0; }
 .status.error { color: var(--danger); }
 
 .stat-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 1.25rem;
+  gap: 0.4rem 1rem;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.5rem;
+  padding: 0.55rem 0.8rem;
+  /* 1.5rem of air under a one-line summary made the whole header area read as
+     oversized before any content began. */
+  margin-bottom: 0.7rem;
   font-size: 0.9rem;
 }
+/* Each stat stays on one line; the BAR wraps between them. Without this
+   "1,204" and "notes" broke across two lines inside a single cell. */
+.stat-bar span { white-space: nowrap; }
 .stat-bar .stat strong { font-size: 1.1rem; display: block; }
 .stat-bar .stat .label { color: var(--muted); font-size: 0.8rem; }
 .stat-bar .stat.alert strong { color: var(--danger); }
@@ -1333,10 +1343,10 @@ summary::-webkit-details-marker { color: var(--muted); }
        151px. Two rows instead: title + menu, switcher beneath. */
     grid-template-columns: minmax(0, 1fr) auto;
     row-gap: 0.5rem;
-    padding: 0.65rem 0.9rem;
-    padding-top: max(0.65rem, env(safe-area-inset-top));
+    padding: 0.5rem 0.9rem;
+    padding-top: max(0.5rem, env(safe-area-inset-top));
     gap: 0.5rem;
-    row-gap: 0.5rem;
+    row-gap: 0.35rem;
   }
   header h1 {
     grid-column: 1;
@@ -1346,12 +1356,12 @@ summary::-webkit-details-marker { color: var(--muted); }
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 1rem;
+    font-size: 0.95rem;
   }
   #auth { grid-column: 2; grid-row: 1; }
   #viewToggle { grid-column: 1 / -1; grid-row: 2; }
   .route-transition-status { grid-column: 1 / -1; grid-row: 3; }
-  .menu-btn { width: 44px; height: 44px; }
+  .menu-btn { width: 40px; height: 40px; }
   /* The switcher owns a full-width row here, and its two segments SPLIT that
      width. Previously the container stretched (flex: 1 1 auto) while the
      buttons kept their natural size (flex: 0 0 auto), so the bordered box
@@ -1363,7 +1373,10 @@ summary::-webkit-details-marker { color: var(--muted); }
     max-width: 100%;
   }
 
-  .view-toggle-btn { flex: 1 1 0; min-height: 50px; }
+  /* 44px is the platform minimum and enough here; 50px plus the
+     container's own padding was ~20px of header for nothing. */
+  .view-toggle-btn { flex: 1 1 0; min-height: 44px; }
+  .view-toggle { padding: 4px; border-radius: 12px; }
 
   main { padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 
@@ -2243,6 +2256,27 @@ summary::-webkit-details-marker { color: var(--muted); }
   flex: 0 0 auto;
 }
 @media (max-width: 640px) {
+  /* Above-the-tabs furniture, compacted. These four strips together used to
+     take about a third of a 390px screen before the first result. */
+  .stat-bar { gap: 0.25rem 0.7rem; padding: 0.45rem 0.6rem; font-size: 0.78rem; margin-bottom: 0.5rem; border-radius: 7px; }
+  .kb-study-stats { gap: 0.4rem; margin: 0.45rem 0 0.6rem; }
+  .kb-study-streak,
+  .kb-study-progress { padding: 0.45rem 0.55rem; font-size: 0.75rem; gap: 0.3rem; border-radius: 8px; }
+  .kb-study-streak strong,
+  .kb-study-progress strong { font-size: 0.85rem; }
+  /* Two cards to a 390px row leaves no room for the trailing sentence, and the
+     number carries the meaning on its own. Still in the accessibility tree.  */
+  .kb-study-streak span,
+  .kb-study-progress span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+  .kb-study-streak,
+  .kb-study-progress { position: relative; }
+  .kb-review-digest { margin: 0.5rem 0 0.7rem; padding: 0.6rem; border-radius: 10px; }
+  .kb-review-digest h3 { font-size: 0.9rem; }
+  .kb-review-detail { margin: 0.15rem 0 0.5rem; font-size: 0.76rem; }
+  .kb-search-bar { margin: 0.75rem 0 0.6rem; }
+}
+
+@media (max-width: 640px) {
   .kb-controls { gap: 0.4rem 0.5rem; padding: 0.5rem; }
   .kb-controls input[type="search"] { flex-basis: 100%; min-width: 0; }
   .kb-controls select,
@@ -2276,11 +2310,18 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-search-bar { margin: 1.25rem 0 0.75rem; }
 .kb-search-bar input { width: 100%; padding: 0.7rem 0.9rem; font-size: 1rem; border: 1px solid var(--border); border-radius: 10px; }
 .kb-export-bar { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; padding: 0.55rem 0.7rem; margin: 0.75rem 0 0; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; }
-.kb-study-streak { display: flex; align-items: baseline; gap: 0.55rem; margin: 0.65rem 0 0; padding: 0.65rem 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 0.84rem; }
+/* Streak and progress sit side by side. Two full-width bands stacked above the
+   tabs pushed the actual page content most of a phone screen down. */
+.kb-study-stats { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.6rem 0 0.85rem; }
+/* `flex: 1 1 0` rather than a rem basis: a 14rem basis meant two cards could
+   not share a 390px row and silently stacked again. They wrap only if the row
+   genuinely cannot hold them. */
+.kb-study-stats > * { flex: 1 1 0; min-width: 8rem; margin: 0; }
+.kb-study-streak { display: flex; align-items: baseline; gap: 0.55rem; margin: 0.65rem 0 0; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 0.84rem; }
 .kb-study-streak strong { color: var(--fg); font-size: 0.95rem; }
 .kb-study-streak.is-active { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
 .kb-study-streak.is-active strong { color: var(--accent); }
-.kb-study-progress { display: flex; align-items: baseline; gap: 0.55rem; margin: 0.55rem 0 0.9rem; padding: 0.65rem 0.8rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 0.84rem; }
+.kb-study-progress { display: flex; align-items: baseline; gap: 0.55rem; margin: 0.55rem 0 0.9rem; padding: 0.6rem 0.75rem; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--muted); font-size: 0.84rem; }
 .kb-study-progress strong { color: var(--accent); font-size: 0.95rem; }
 .kb-review-digest { margin: 0.65rem 0 1rem; padding: 0.8rem; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); border-radius: 12px; background: var(--surface); }
 .kb-review-digest h3 { margin: 0; font-size: 1rem; }

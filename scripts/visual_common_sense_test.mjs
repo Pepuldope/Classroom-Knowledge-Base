@@ -61,6 +61,11 @@ async function forceHarnessStates() {
       actions.innerHTML = '<button class="secondary kb-copy-context" type="button">Copy search context</button><button class="secondary kb-copy-context" type="button">Copy again</button><span class="kb-copy-status" role="status" aria-live="assertive">Copied 12 notes of titles and snippets.</span>';
       results.append(actions);
     }
+    // .status collapses to nothing when empty (Planner reserved a 40px band for
+    // a message it usually does not have). Its styling only exists when there
+    // IS a message, so give it one to sample.
+    const status = document.getElementById("status");
+    if (status && !status.textContent.trim()) status.textContent = "Loaded 1,204 assignments.";
     const archive = document.getElementById("archiveMain"); if (archive) archive.hidden = false;
     const pane = document.querySelector('[data-pane="knowledge-base"]'); if (pane) pane.hidden = false;
   });

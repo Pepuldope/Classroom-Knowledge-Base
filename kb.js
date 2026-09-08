@@ -953,15 +953,66 @@ export async function refreshKb() {
   }
 }
 
+/**
+ * The school years, as a range rather than a list.
+ *
+ * Four school years spelled out ("2023-24, 2024-25, 2025-26, 2026-27") is 39
+ * characters and on a phone wrapped the stat bar onto its own extra line, to
+ * say something a nine-character range says just as well.
+ */
+export function kbMetaYearRange(years) {
+  const list = (Array.isArray(years) ? years : [])
+    .map((y) => String(y || "").trim())
+    .filter((y) => /^\d{4}-\d{2}$/.test(y))
+    .sort();
+  if (list.length === 0) return "—";
+  if (list.length === 1) return list[0];
+  return `${list[0].slice(0, 4)}–${list[list.length - 1].slice(5)}`;
+}
+
+/**
+ * How long ago the corpus was last updated, in words.
+ *
+ * `toLocaleString()` produced things like "08/09/2026, 07:15:00" — precision
+ * nobody reads, in the widest possible form. What matters is whether it is
+ * current.
+ */
+export function kbMetaUpdatedLabel(iso, now = Date.now()) {
+  const then = Date.parse(String(iso || ""));
+  if (!Number.isFinite(then)) return "never";
+  const minutes = Math.floor((now - then) / 60000);
+  if (minutes < 0) return "just now";
+  if (minutes < 2) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(then).toLocaleDateString(undefined, { month: "short", year: "numeric" });
+}
+
 function renderKbMeta(meta) {
   const bar = $("kbMetaBar");
   if (!bar || !meta) return;
-  const yrs = Array.isArray(meta.years) && meta.years.length ? meta.years.join(", ") : "—";
-  const updated = meta.updatedAt ? new Date(meta.updatedAt).toLocaleString() : (meta.generatedAt ? new Date(meta.generatedAt).toLocaleString() : "unknown");
-  bar.innerHTML = `<span>📚 <strong>${meta.noteCount?.toLocaleString() ?? 0}</strong> notes</span>` +
-    `<span>🏫 ${meta.courses ?? 0} courses</span>` +
-    `<span>📅 ${yrs}</span>` +
-    `<span>🕑 updated ${updated}</span>`;
+  const yrs = kbMetaYearRange(meta.years);
+  const updated = kbMetaUpdatedLabel(meta.updatedAt || meta.generatedAt);
+  // textContent per cell: course and year strings come from Classroom.
+  bar.replaceChildren();
+  const cells = [
+    ["📚", `${meta.noteCount?.toLocaleString() ?? 0}`, "notes"],
+    ["🏫", `${meta.courses ?? 0}`, "courses"],
+    ["📅", yrs, ""],
+    ["🕑", updated, ""],
+  ];
+  for (const [icon, value, suffix] of cells) {
+    const span = document.createElement("span");
+    const strong = document.createElement("strong");
+    strong.textContent = value;
+    span.append(`${icon} `, strong);
+    if (suffix) span.append(` ${suffix}`);
+    bar.appendChild(span);
+  }
+  bar.title = `${meta.noteCount ?? 0} notes across ${meta.courses ?? 0} courses · updated ${meta.updatedAt || meta.generatedAt || "never"}`;
 }
 
 // The "new courses" banner doubles as the progress surface for the update it
