@@ -21,6 +21,19 @@ function tokenFuzzyMatch(indexToken, queryToken) {
   const stemLen = Math.min(6, minLen);
   return indexToken.slice(0, stemLen) === queryToken.slice(0, stemLen);
 }
+
+/**
+ * How much a match is worth: 1 for the word itself, less for a stem collision.
+ *
+ * "normal" is the whole title of one note and the first six letters of
+ * "normalisation" in another. Treating those as equal handed the query to the
+ * longer word, because it happened to appear in more fields.
+ */
+const FUZZY_MATCH_FACTOR = 0.45;
+function matchStrength(indexToken, queryToken) {
+  if (indexToken === queryToken) return 1;
+  return tokenFuzzyMatch(indexToken, queryToken) ? FUZZY_MATCH_FACTOR : 0;
+}
 // One token index per notes array. Building it walks every note body, which is
 // the whole cost of a search: ~70ms over a 2,000-note corpus, repeated on every
 // keystroke. Keyed weakly on the array itself, so a new bundle simply gets a
@@ -41,10 +54,11 @@ function buildIndex(notes) {
   const add = (tok, field, i) => {
     let entry = index.get(tok);
     if (!entry) {
-      entry = { title: new Set(), summary: new Set(), body: new Set(), course: new Set(), topic: new Set() };
+      entry = { title: new Set(), summary: new Set(), body: new Set(), course: new Set(), topic: new Set(), docs: new Set() };
       index.set(tok, entry);
     }
     entry[field].add(i);
+    entry.docs.add(i);
   };
   notes.forEach((n, i) => {
     for (const tok of tokenize(n.t)) add(tok, "title", i);
@@ -56,33 +70,105 @@ function buildIndex(notes) {
   return index;
 }
 const FIELD_WEIGHT = { title: 5, summary: 3, body: 1, course: 4, topic: 4 };
+const FIELDS = ["title", "summary", "body", "course", "topic"];
 
-function scoreNotes(notes, qTokens) {
+/**
+ * How much a word tells us, by how rare it is.
+ *
+ * Every note in a school corpus says "assignment", "sprint", "classroom" and
+ * "deadline" — the boilerplate a teacher pastes into every task. Weighting
+ * those like any other word meant a note whose TITLE was made of them won any
+ * query that contained one: "parabola sprint" returned the submission-guide
+ * note and not the note with the parabolas in it.
+ *
+ * Standard inverse document frequency, floored so a word in every note is
+ * discounted heavily but never worth exactly nothing.
+ */
+function idfFor(entry, total) {
+  const df = entry.docs ? entry.docs.size : 1;
+  return Math.max(0.05, Math.log(1 + total / (1 + df)));
+}
+
+/**
+ * Reward answering more of the question.
+ *
+ * This was a flat +2 when every token matched, which is a rounding error beside
+ * a title hit (5). A note matching one word of three in a heavy field beat a
+ * note matching all three in a light one. Coverage is a multiplier now, so
+ * matching the whole query is worth far more than matching part of it loudly.
+ */
+function coverageFactor(matchedCount, queryCount) {
+  if (queryCount <= 0) return 1;
+  return 0.35 + 0.65 * (matchedCount / queryCount);
+}
+
+function scoreNotes(notes, qTokens, query = "") {
   const idx = indexFor(notes);
+  const total = notes.length || 1;
   const scores = new Map();
+
   for (const qt of qTokens) {
-    for (const [tok, fields] of idx) {
-      if (!tokenFuzzyMatch(tok, qt)) continue;
-      for (const field of ["title", "summary", "body", "course", "topic"]) {
-        const weight = FIELD_WEIGHT[field];
-        for (const i of fields[field]) {
-          let rec = scores.get(i);
-          if (!rec) { rec = { score: 0, matched: new Set() }; scores.set(i, rec); }
-          rec.score += weight;
-          rec.matched.add(qt);
+    // Best match for THIS query token, per note and per field. Summing instead
+    // double-counted: "normal" matches the index token "normal" exactly and
+    // "normalisation" as a stem, so a note containing both collected the score
+    // twice for one word the reader typed — which is how a query for "normal"
+    // returned the normalisation note ahead of the one actually titled "The
+    // normal distribution".
+    const best = new Map();
+    for (const [tok, entry] of idx) {
+      const strength = matchStrength(tok, qt);
+      if (strength === 0) continue;
+      const weight = strength * idfFor(entry, total);
+      for (const field of FIELDS) {
+        for (const i of entry[field]) {
+          let rec = best.get(i);
+          if (!rec) { rec = {}; best.set(i, rec); }
+          if (!(rec[field] >= weight)) rec[field] = weight;
         }
       }
     }
+    for (const [i, fieldBest] of best) {
+      let rec = scores.get(i);
+      if (!rec) { rec = { score: 0, matched: new Set() }; scores.set(i, rec); }
+      for (const field of FIELDS) {
+        const weight = fieldBest[field];
+        if (weight) rec.score += FIELD_WEIGHT[field] * weight;
+      }
+      rec.matched.add(qt);
+    }
   }
+
+  // An exact multi-word phrase is a strong signal that this is the note meant —
+  // "cover letter" should prefer the cover-letter task over a note that happens
+  // to contain both words in unrelated sentences.
+  const phrase = qTokens.length > 1 ? qTokens.join(" ") : "";
   const results = [];
   for (const [i, rec] of scores) {
-    let score = rec.score;
-    if (rec.matched.size === qTokens.length) score += 2;
-    results.push({ index: i, score });
+    let score = rec.score * coverageFactor(rec.matched.size, qTokens.length);
+    if (phrase) {
+      const note = notes[i] || {};
+      if (foldText(note.t).includes(phrase)) score *= 1.6;
+      else if (foldText(note.s).includes(phrase)) score *= 1.35;
+      else if (foldText(note.x).includes(phrase)) score *= 1.15;
+    }
+    results.push({ index: i, score: Math.round(score * 1000) / 1000, matched: rec.matched.size });
   }
-  results.sort((a, b) => b.score - a.score);
+
+  // Notes answering the WHOLE query come first, however quietly, ahead of
+  // notes answering part of it loudly. A rare word carries far more meaning
+  // than a common one, but it usually lives in the body, where the field weight
+  // is 1 against a title's 5 — so no amount of reweighting reliably beats a
+  // boilerplate title. Ranking by how much of the question was answered, and
+  // only then by score, is the honest ordering: "parabola sprint" wants the
+  // note with the parabolas in it, not the one that says "sprint" in its title.
+  const wanted = qTokens.length;
+  results.sort((a, b) =>
+    (b.matched === wanted ? 1 : 0) - (a.matched === wanted ? 1 : 0) ||
+    b.matched - a.matched ||
+    b.score - a.score);
   return results;
 }
+
 function findMatchPos(text, qTokens) {
   const folded = foldText(text);
   const re2 = /[a-z0-9]+/g; let m;
@@ -144,7 +230,7 @@ export function searchNotes(notes, query, { limit = 8, requireTitleOrSummary = f
   if (!Array.isArray(notes) || notes.length === 0) return [];
   const qTokens = tokenize(query);
   if (qTokens.length === 0) return [];
-  const scored = scoreNotes(notes, qTokens);
+  const scored = scoreNotes(notes, qTokens, query);
   const out = [];
   for (const { index, score } of scored) {
     const n = notes[index];

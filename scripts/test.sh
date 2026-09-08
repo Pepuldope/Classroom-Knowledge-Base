@@ -144,6 +144,11 @@ node --test tests/kb-browse-state.test.js
 KB_BROWSE_STATE_OK=$?
 if [ "$KB_BROWSE_STATE_OK" -ne 0 ]; then echo "KB browse state tests FAILED"; exit 1; fi
 
+echo "==> Search relevance benchmark"
+node --test tests/kb-search-relevance.test.js
+RELEVANCE_OK=$?
+if [ "$RELEVANCE_OK" -ne 0 ]; then echo "search relevance tests FAILED"; exit 1; fi
+
 echo "==> Corpus reconciliation tests"
 node --test tests/kb-reconcile.test.js
 RECONCILE_OK=$?
