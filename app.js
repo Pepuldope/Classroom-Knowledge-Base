@@ -2258,10 +2258,27 @@ async function openAi(a) {
   if (!window.marked) ensureMarked().then(() => renderChatHistory()).catch(() => {});
 }
 
-$("aiClose").addEventListener("click", () => {
-  $("ai").hidden = true;
+function closeAssignmentPanel() {
+  const panel = $("ai");
+  if (!panel || panel.hidden) return false;
+  panel.hidden = true;
   activeAssignment = null;
   activeLibraryNotes = [];
+  return true;
+}
+
+$("aiClose").addEventListener("click", closeAssignmentPanel);
+
+// Escape closes the panel too. It is a full-screen sheet on a phone and a rail
+// that covers the header on a desktop, so "how do I get out of this" needs more
+// than one answer — and typing Escape in the question box should not send it.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const panel = $("ai");
+  if (!panel || panel.hidden) return;
+  const modalOpen = [...document.querySelectorAll(".modal")].some((m) => !m.hidden);
+  if (modalOpen) return; // the topmost surface handles its own Escape
+  if (closeAssignmentPanel()) e.stopPropagation();
 });
 
 $("aiGroundingCopy")?.addEventListener("click", async () => {

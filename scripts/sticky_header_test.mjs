@@ -58,7 +58,20 @@ try {
     assert.ok(after.height <= height * 0.25,
       `${label}: header takes ${after.height}px of a ${height}px viewport (${Math.round(after.height / height * 100)}%)`);
 
-    console.log(`✓ ${label}: header stays pinned at top:0, ${after.height}px (${Math.round(after.height / height * 100)}% of viewport)`);
+    // The switcher's labels must be fully readable, not ellipsised. Its segments
+    // are `flex: 1 1 0`, so they have no content width of their own and the
+    // container's floor is the only thing holding them open — a floor that had
+    // silently stopped applying on desktop, rendering "Planner" as "Plan...".
+    const labels = await page.evaluate(() => [...document.querySelectorAll(".view-toggle-text")].map((el) => ({
+      text: el.textContent,
+      truncated: el.scrollWidth > el.clientWidth + 1,
+    })));
+    assert.equal(labels.length, 2, `${label}: expected two switcher labels`);
+    for (const l of labels) {
+      assert.equal(l.truncated, false, `${label}: switcher label "${l.text}" is truncated`);
+    }
+
+    console.log(`✓ ${label}: header stays pinned at top:0, ${after.height}px (${Math.round(after.height / height * 100)}% of viewport), labels intact`);
     await page.close();
   }
 } finally {
