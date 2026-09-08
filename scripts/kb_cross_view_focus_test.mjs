@@ -59,7 +59,24 @@ try {
     assert.equal(state.marked, true, `${target} navigation focus must be visibly marked after a KB modal transition`);
     assert.notEqual(state.outline, "none", `${target} navigation focus must expose a visible outline`);
     const storageAfterTransition = await page.evaluate(() => Object.entries(localStorage));
-    assert.deepEqual(storageAfterTransition, storageBeforeTransition, `${target} route transition must not write focus markers to localStorage`);
+    // What this check is FOR: a route transition must not persist focus state.
+    // It used to compare the two snapshots for exact equality, which also fails
+    // on any unrelated legitimate write landing in the same window — entering
+    // Study records a study-streak day, and applyTheme rewrites its key, which
+    // even reorders Object.entries. That made this fail about one run in six
+    // for reasons having nothing to do with focus.
+    //
+    // Assert the invariant instead, and keep teeth: anything written that is
+    // not a known-incidental key still fails, so persisting focus under any
+    // name would be caught.
+    const INCIDENTAL = new Set(["cwa_theme", "cwa_kb_study_activity", "cwa_kb_study_progress"]);
+    const before = new Map(storageBeforeTransition);
+    const after = new Map(storageAfterTransition);
+    const written = [...after].filter(([k, v]) => before.get(k) !== v).map(([k]) => k);
+    const unexpected = written.filter((k) => !INCIDENTAL.has(k));
+    assert.deepEqual(unexpected, [], `${target} route transition wrote unexpected localStorage keys: ${unexpected.join(", ")}`);
+    const focusish = [...after.keys()].filter((k) => /focus|route|transition/i.test(k));
+    assert.deepEqual(focusish, [], `${target} route transition must not write focus markers to localStorage`);
     assert.equal(JSON.stringify(storageAfterTransition).includes("Focus restored"), false, `${target} localStorage must not contain route-transition marker text`);
     if (target === "planner") {
       await page.locator('.view-toggle-btn[data-view="kb"]').click({ force: true });

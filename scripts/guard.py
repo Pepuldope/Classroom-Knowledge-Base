@@ -6,10 +6,30 @@ Exits 0 if safe, 1 if a rule is violated (prints the violation).
 import subprocess, sys, re, os
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Owner-requested fix, 2026-09-08. The previous form matched a key PREFIX plus a
+# single character anywhere in a line — so `sk-[A-Za-z0-9]` fired on the "sk-k"
+# inside "task-kinds.js". Because the scan reads `git diff --cached`, which
+# carries three lines of context, any edit landing within three lines of that
+# import failed the secret check on a false positive with no way to tell why.
+#
+# Two changes, both of which NARROW what matches, so nothing real stops being
+# caught:
+#   1. A prefix must start a token, not sit inside a word (the lookbehind).
+#   2. It must be followed by enough characters to be a credential. Every key
+#      shape here is 36+ characters in reality; 20 is a generous floor.
+# `scripts/guard_regex_test.py` covers both directions.
 SECRET_RE = re.compile(
-    r"(sk-[A-Za-z0-9]|nvapi-[A-Za-z0-9]|gsk_[A-Za-z0-9]|csk-[A-Za-z0-9]"
-    r"|AKIA[0-9A-Z]{16}|ghp_[A-Za-z0-9]|github_pat_[A-Za-z0-9]"
-    r"|AIza[0-9A-Za-z_-]{35}|xox[baprs]-[A-Za-z0-9-]+)",
+    r"(?<![A-Za-z0-9_])("
+    r"sk-[A-Za-z0-9_-]{20,}"
+    r"|nvapi-[A-Za-z0-9_-]{20,}"
+    r"|gsk_[A-Za-z0-9]{20,}"
+    r"|csk-[A-Za-z0-9_-]{20,}"
+    r"|AKIA[0-9A-Z]{16}"
+    r"|ghp_[A-Za-z0-9]{20,}"
+    r"|github_pat_[A-Za-z0-9_]{20,}"
+    r"|AIza[0-9A-Za-z_-]{35}"
+    r"|xox[baprs]-[A-Za-z0-9-]{10,}"
+    r")",
     re.I,
 )
 PROTECTED = {

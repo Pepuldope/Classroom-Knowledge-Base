@@ -144,6 +144,11 @@ node --test tests/kb-browse-state.test.js
 KB_BROWSE_STATE_OK=$?
 if [ "$KB_BROWSE_STATE_OK" -ne 0 ]; then echo "KB browse state tests FAILED"; exit 1; fi
 
+echo "==> Commit-guard secret scanner tests"
+python3 scripts/guard_regex_test.py
+GUARD_REGEX_OK=$?
+if [ "$GUARD_REGEX_OK" -ne 0 ]; then echo "guard secret scanner tests FAILED"; exit 1; fi
+
 echo "==> Live-check mitigation classifier tests"
 node --test tests/live-http.test.js
 LIVE_HTTP_OK=$?
