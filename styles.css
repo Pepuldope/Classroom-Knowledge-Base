@@ -1315,23 +1315,19 @@ summary::-webkit-details-marker { color: var(--muted); }
   #auth { grid-column: 2; grid-row: 1; }
   #viewToggle { grid-column: 1 / -1; grid-row: 2; }
   .route-transition-status { grid-column: 1 / -1; grid-row: 3; }
-  /* Comfortable touch targets now that the switcher owns a full row. 32px
-     tall was below every platform's minimum. */
-  .view-toggle-btn { min-height: 44px; }
   .menu-btn { width: 44px; height: 44px; }
-  /* Keep the shared view switcher inside the phone viewport. Long result
-     labels can make the navigation wider than the available header space;
-     the switcher is the intentional horizontal scroll region, not the page. */
+  /* The switcher owns a full-width row here, and its two segments SPLIT that
+     width. Previously the container stretched (flex: 1 1 auto) while the
+     buttons kept their natural size (flex: 0 0 auto), so the bordered box
+     spanned the screen with both labels jammed against the left edge. The
+     horizontal scroll region that arrangement needed is gone with it: labels
+     ellipsis inside their own half instead of overflowing. */
   .view-toggle {
-    flex: 1 1 auto;
-    min-width: 0;
+    width: 100%;
     max-width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    white-space: nowrap;
-    scrollbar-width: thin;
   }
-  .view-toggle-btn { flex: 0 0 auto; }
+
+  .view-toggle-btn { flex: 1 1 0; min-height: 50px; }
 
   main { padding: 1rem; padding-bottom: max(1rem, env(safe-area-inset-bottom)); }
 
@@ -1405,24 +1401,64 @@ summary::-webkit-details-marker { color: var(--muted); }
 /* Archive                                                                 */
 /* ---------------------------------------------------------------------- */
 
+/* Planner | Study — the switch the whole site turns on.
+   Sized to be the most confident control on the page, not a pair of 0.85rem
+   chips in the corner: equal halves, 44px+ targets at every width, an icon and
+   a 1rem semibold label per segment, and a pill that slides between them. */
 .view-toggle {
+  position: relative;
   display: flex;
-  gap: 0.2rem;
-  background: var(--bg);
+  gap: 0;
+  background: var(--surface-subtle);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.2rem;
+  border-radius: 14px;
+  padding: 5px;
+  isolation: isolate;
+  /* The segments are `flex: 1 1 0` so the sliding pill can assume exact halves.
+     That leaves them with no content-based width, so the container needs its
+     own floor or it collapses and ellipsises "Planner" down to "Plan...". */
+  min-width: min(340px, 100%);
 }
 .view-toggle-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
   border: none;
   background: transparent;
-  padding: 0.4rem 0.85rem;
-  font-size: 0.85rem;
-  border-radius: 6px;
+  padding: 0.6rem 1.3rem;
+  min-height: 44px;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  border-radius: 10px;
   color: var(--muted);
+  /* Deliberately not transitioned. Switching view is a page change, so instant
+     is the honest feedback; and any colour transition here also fires when the
+     THEME changes, fading the label through genuinely unreadable intermediates
+     (white drifting over a blue that is itself drifting) for a couple of
+     frames. The visual gate catches exactly that. */
 }
-.view-toggle-btn:hover { background: var(--accent-bg); color: var(--accent); }
-.view-toggle-btn.active { background: var(--accent); color: #fff; }
+.view-toggle-icon { width: 18px; height: 18px; flex: 0 0 auto; }
+/* Long labels ellipsis inside their own half rather than widening the switch —
+   the header must never be pushed out of the viewport by a label. */
+.view-toggle-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.view-toggle-btn:hover:not(.active) { background: var(--accent-bg); color: var(--accent); }
+/* The highlight is the button's OWN background, not a pill sliding behind it.
+   A separate indicator element animated more nicely, but it left the active
+   button computing as `background: transparent`, so its white label was only
+   legible because a sibling happened to be painted underneath — white on
+   --surface-subtle is 1.05:1 on its own. The colour transition below keeps the
+   movement without making legibility depend on another element rendering. */
+.view-toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
+}
 .view-toggle-btn.active:hover { background: #1d4ed8; }
 
 .archive-search-bar { margin-bottom: 1rem; }
@@ -2123,7 +2159,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 
 @media (max-width: 640px) {
-  .view-toggle-btn { padding: 0.4rem 0.65rem; font-size: 0.8rem; }
+  .view-toggle-btn { padding: 0.5rem 0.6rem; font-size: 0.95rem; }
   .archive-course,
   .archive-topic { margin-left: 0.6rem; padding-left: 0.55rem; }
   .curriculum-row { grid-template-columns: minmax(96px, 120px) repeat(var(--curriculum-cols, 3), minmax(124px, 1fr)); }

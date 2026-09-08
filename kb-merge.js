@@ -29,11 +29,21 @@ function notesOf(bundle) {
  * would be a lie. Anything needing course-by-year (the Curriculum matrix) reads
  * the notes, which carry the real year.
  */
-function coursesFromNotes(notes) {
+function coursesFromNotes(notes, ...carried) {
   const counts = new Map();
   for (const note of notes) {
     const name = note?.course || "Uncategorized";
     counts.set(name, (counts.get(name) || 0) + 1);
+  }
+  // Carry across course names that produced no notes. A Classroom course with
+  // nothing posted in it yet is still a course the corpus has SEEN, and the
+  // "new course found" banner asks exactly that question — drop it here and the
+  // banner has no way to ever stop firing for it.
+  for (const list of carried) {
+    for (const course of Array.isArray(list) ? list : []) {
+      const name = String((typeof course === "string" ? course : course?.name) || "").trim();
+      if (name && !counts.has(name)) counts.set(name, 0);
+    }
   }
   return [...counts.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
@@ -140,7 +150,7 @@ export function mergeBundles(base, incoming) {
     source,
     generatedAt: newerOf(left.generatedAt, right.generatedAt) || new Date().toISOString(),
     years,
-    courses: coursesFromNotes(notes),
+    courses: coursesFromNotes(notes, left.courses, right.courses),
     notes,
     clusters: mergeClusters(left, right),
     ...(metadata ? { metadata } : {}),

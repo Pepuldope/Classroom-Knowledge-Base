@@ -111,10 +111,31 @@ export function buildLocalSearchResponse(bundle, query, {
   };
 }
 
+/**
+ * Which Classroom courses the corpus already knows about.
+ *
+ * Both the notes AND the bundle's own `courses` list, because a course that has
+ * nothing posted in it yet produces no notes at all. Reading only the notes
+ * meant such a course was "new" forever: the banner offered "Update now", the
+ * rebuild correctly found nothing to add, and the banner came straight back.
+ * Three of the owner's real courses are in that state, one of them current.
+ */
+export function knownCourseNames(bundle) {
+  const names = new Set();
+  for (const note of Array.isArray(bundle?.notes) ? bundle.notes : []) {
+    const name = String(note?.course || "").trim();
+    if (name) names.add(name);
+  }
+  for (const course of Array.isArray(bundle?.courses) ? bundle.courses : []) {
+    // `courses` entries are objects, but a legacy bundle stored bare strings.
+    const name = String((typeof course === "string" ? course : course?.name) || "").trim();
+    if (name) names.add(name);
+  }
+  return names;
+}
+
 export function detectClassroomChanges(bundle, courses) {
-  const cachedCourses = new Set((Array.isArray(bundle?.notes) ? bundle.notes : [])
-    .map((note) => String(note?.course || "").trim())
-    .filter(Boolean));
+  const cachedCourses = knownCourseNames(bundle);
   const newCourses = [...new Set((Array.isArray(courses) ? courses : [])
     .map((course) => String(course?.name || "").trim())
     .filter((name) => name && !cachedCourses.has(name)))];
@@ -895,7 +916,13 @@ async function checkForClassroomChanges(bundle) {
     if (!response.ok) return;
     const data = await response.json();
     const changes = detectClassroomChanges(bundle, data.courses);
-    if (!changes.hasChanges) return;
+    if (!changes.hasChanges) {
+      // Clear a banner raised by an earlier check: once the corpus catches up,
+      // the notice has to go away on its own.
+      banner.hidden = true;
+      banner.replaceChildren();
+      return;
+    }
     banner.replaceChildren();
     const label = document.createElement("span");
     label.textContent = `${changes.newCourses.length} new course${changes.newCourses.length === 1 ? "" : "s"} found in Google Classroom.`;
@@ -903,7 +930,14 @@ async function checkForClassroomChanges(bundle) {
     button.type = "button";
     button.className = "link-btn";
     button.textContent = "Update now";
-    button.addEventListener("click", () => startScrape());
+    button.addEventListener("click", () => {
+      // Dismiss on click. The rebuild is asynchronous and re-runs this check on
+      // completion, so leaving the banner up meant it read as "still pending"
+      // for the whole scrape and never visibly acknowledged the click.
+      banner.hidden = true;
+      banner.replaceChildren();
+      startScrape();
+    });
     banner.append(label, button);
     banner.hidden = false;
   } catch {}
