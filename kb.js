@@ -21,7 +21,7 @@ import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
-import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
+import { recordNoteProgress, studyProgressModel, studyProgressCopy, migrateNoteProgress } from "./study-progress.js";
 import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
@@ -75,22 +75,36 @@ export function buildLocalSearchResponse(bundle, query, {
   course = "", courses = [], year = "", kind = "", family = "", sort = "relevance", limit = 8,
 } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
-  const withFamilies = notes.map((note) => note?.family ? note : ({ ...note, family: deriveFamily(note?.course) || "" }));
+  // Reuse the bundle's own array when every note already carries a family —
+  // mergeBundles stamps one on ingest, so this is the normal case. Rebuilding
+  // it per call allocated a fresh array on every keystroke and, worse, defeated
+  // the search index cache, which is keyed on the array identity.
+  const needsFamilies = notes.some((note) => !note?.family);
+  const withFamilies = needsFamilies
+    ? notes.map((note) => note?.family ? note : ({ ...note, family: deriveFamily(note?.course) || "" }))
+    : notes;
   const scopedCourses = new Set((Array.isArray(courses) ? courses : [])
     .map((value) => String(value || "").trim()).filter(Boolean));
-  const filtered = withFamilies
-    .map((note, index) => ({ note, index }))
-    .filter(({ note }) =>
-      (!scopedCourses.size || scopedCourses.has(note.course || "")) &&
-      (!course || (note.course || "") === course) &&
-      (!year || (note.y || "") === year) &&
-      (!kind || (note.kind || "") === kind) &&
-      (!family || (note.family || "") === family)
-    );
-  const filteredNotes = filtered.map(({ note }) => note);
-  const indexMap = filtered.map(({ index }) => index);
+  const isFiltering = scopedCourses.size > 0 || !!course || !!year || !!kind || !!family;
+  const filtered = isFiltering
+    ? withFamilies
+      .map((note, index) => ({ note, index }))
+      .filter(({ note }) =>
+        (!scopedCourses.size || scopedCourses.has(note.course || "")) &&
+        (!course || (note.course || "") === course) &&
+        (!year || (note.y || "") === year) &&
+        (!kind || (note.kind || "") === kind) &&
+        (!family || (note.family || "") === family)
+      )
+    : null;
+  // Unfiltered searches pass the same array object every time, so the cached
+  // index is reused instead of rebuilt. `indexMap` is only needed to map
+  // positions back through a filter.
+  const filteredNotes = filtered ? filtered.map(({ note }) => note) : withFamilies;
+  const indexMap = filtered ? filtered.map(({ index }) => index) : null;
   const collect = (field) => [...new Set(withFamilies.map((note) => note?.[field]).filter(Boolean))]
     .sort((a, b) => String(a).localeCompare(String(b)));
+  const results = searchNotes(filteredNotes, query, { limit, sortFn: makeSortFn(sort), indexMap });
   return {
     meta: {
       noteCount: notes.length,
@@ -99,9 +113,9 @@ export function buildLocalSearchResponse(bundle, query, {
       generatedAt: bundle?.generatedAt || null,
       updatedAt: bundle?.generatedAt || null,
     },
-    results: searchNotes(filteredNotes, query, { limit, sortFn: makeSortFn(sort), indexMap }),
-    didYouMean: suggestCorrection(filteredNotes, query),
-    filteredCount: filtered.length,
+    results,
+    didYouMean: suggestCorrection(filteredNotes, query, { hasResults: results.length > 0 }),
+    filteredCount: filtered ? filtered.length : withFamilies.length,
     filters: {
       courses: collect("course"),
       years: collect("y"),
@@ -517,7 +531,20 @@ function markStudyActivity() {
   renderStudyStreak(updated);
 }
 function loadStudyProgress() {
-  try { return JSON.parse(localStorage.getItem(STUDY_PROGRESS_KEY) || "{}"); } catch { return {}; }
+  let raw;
+  try { raw = JSON.parse(localStorage.getItem(STUDY_PROGRESS_KEY) || "{}"); } catch { return {}; }
+  const notes = Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [];
+  // Nothing to migrate against until the corpus is loaded; returning the record
+  // untouched is safer than pruning every entry as "gone".
+  if (notes.length === 0) return raw && typeof raw === "object" ? raw : {};
+  const migrated = migrateNoteProgress(raw, notes);
+  // Write back only on an actual change, so a normal load does no storage work.
+  const before = JSON.stringify(raw);
+  const after = JSON.stringify(migrated);
+  if (before !== after) {
+    try { localStorage.setItem(STUDY_PROGRESS_KEY, after); } catch { /* private mode */ }
+  }
+  return migrated;
 }
 function renderStudyProgress(progress = loadStudyProgress()) {
   const card = $("kbStudyProgress");
@@ -558,7 +585,9 @@ function renderReviewDigest(progress = loadStudyProgress()) {
   card.hidden = digest.items.length === 0;
 }
 function markNoteProgress(index) {
-  const next = recordNoteProgress(loadStudyProgress(), index, todayIso());
+  // Record against the note itself; study-progress.js derives its stable key.
+  const note = localNoteFromBundle(localKbBundle, index);
+  const next = recordNoteProgress(loadStudyProgress(), note, todayIso());
   try { localStorage.setItem(STUDY_PROGRESS_KEY, JSON.stringify(next)); } catch {}
   renderStudyProgress(next);
   renderReviewDigest(next);
@@ -669,8 +698,22 @@ export function routeTransitionFocusPrivacyModel(text = "") {
 }
 
 /** Describe the visible surface while an incremental Classroom build is running. */
-export function kbBuildStartModel() {
-  return { onboardingHidden: true, mainVisible: true, panelVisible: true };
+/**
+ * Which surface shows build progress.
+ *
+ * `inline` means the build was started from the "new courses" banner, so the
+ * banner itself reports progress: same box, same place, same height. The full
+ * build card is 520px wide with a 140px log and `margin: 2rem auto`, so
+ * dropping it in above #kbMain shoved the entire page down — a jarring amount
+ * of movement for a background top-up of an existing corpus.
+ */
+export function kbBuildStartModel({ inline = false } = {}) {
+  return {
+    onboardingHidden: true,
+    mainVisible: true,
+    panelVisible: !inline,
+    inlineVisible: inline,
+  };
 }
 
 /** Keep async related-note previews from collapsing while local notes resolve. */
@@ -921,6 +964,70 @@ function renderKbMeta(meta) {
     `<span>🕑 updated ${updated}</span>`;
 }
 
+// The "new courses" banner doubles as the progress surface for the update it
+// offers, so accepting the offer does not move the page.
+let kbBuildInlineActive = false;
+
+/** Put the banner into progress mode, keeping its exact box. */
+function renderInlineBuildProgress(message, { percent = null, onCancel = null } = {}) {
+  const banner = $("kbChangesBanner");
+  if (!banner) return null;
+  let text = banner.querySelector(".kb-update-text");
+  let bar = banner.querySelector(".kb-update-progress-bar");
+  if (!text || !bar) {
+    banner.replaceChildren();
+    banner.classList.add("is-building");
+    text = document.createElement("span");
+    text.className = "kb-update-text";
+    banner.appendChild(text);
+    if (onCancel) {
+      const cancel = document.createElement("button");
+      cancel.type = "button";
+      cancel.className = "link-btn";
+      cancel.textContent = "Cancel";
+      cancel.addEventListener("click", onCancel);
+      banner.appendChild(cancel);
+    }
+    // A 3px rule pinned to the banner's bottom edge: visible progress that
+    // costs no height, so nothing below it moves while the build runs.
+    const track = document.createElement("span");
+    track.className = "kb-update-progress";
+    bar = document.createElement("span");
+    bar.className = "kb-update-progress-bar";
+    track.appendChild(bar);
+    banner.appendChild(track);
+  }
+  if (message != null) text.textContent = message;
+  if (percent != null) bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  banner.hidden = false;
+  return banner;
+}
+
+/** Leave progress mode. */
+function clearInlineBuildProgress({ message = "", isError = false } = {}) {
+  const banner = $("kbChangesBanner");
+  if (!banner) return;
+  banner.classList.remove("is-building");
+  banner.classList.toggle("is-error", !!isError);
+  if (!message) {
+    banner.hidden = true;
+    banner.replaceChildren();
+    return;
+  }
+  banner.replaceChildren();
+  const text = document.createElement("span");
+  text.className = "kb-update-text";
+  text.textContent = message;
+  banner.appendChild(text);
+  banner.hidden = false;
+}
+
+// Test hooks for scripts/inline_build_progress_test.mjs — the renderer is
+// otherwise only reachable through a real Google Classroom build.
+export function __setInlineBuildActiveForTest(value) { kbBuildInlineActive = !!value; }
+export function __renderInlineBuildProgressForTest(message, opts) { return renderInlineBuildProgress(message, opts); }
+export function __clearInlineBuildProgressForTest(opts) { return clearInlineBuildProgress(opts); }
+
 let kbChangeCheckInFlight = false;
 async function checkForClassroomChanges(bundle) {
   const banner = $("kbChangesBanner");
@@ -943,18 +1050,18 @@ async function checkForClassroomChanges(bundle) {
     }
     banner.replaceChildren();
     const label = document.createElement("span");
+    // Same class the progress state uses, so the offer cannot wrap to two lines
+    // while the progress line stays on one.
+    label.className = "kb-update-text";
     label.textContent = classroomChangesMessage(changes.newCourses);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "link-btn";
     button.textContent = "Update now";
     button.addEventListener("click", () => {
-      // Dismiss on click. The rebuild is asynchronous and re-runs this check on
-      // completion, so leaving the banner up meant it read as "still pending"
-      // for the whole scrape and never visibly acknowledged the click.
-      banner.hidden = true;
-      banner.replaceChildren();
-      startScrape();
+      // The banner becomes the progress surface for the update it just offered,
+      // rather than handing off to the full-page build card above #kbMain.
+      startScrape({ inline: true });
     });
     banner.append(label, button);
     banner.hidden = false;
@@ -1355,15 +1462,21 @@ export function cancelKbBuild() {
   kbBuildAbort?.abort();
 }
 
-export async function startScrape() {
+export async function startScrape({ inline = false } = {}) {
   if (kbBuildInFlight) return;
   kbBuildInFlight = true;
+  kbBuildInlineActive = inline && !!$("kbChangesBanner");
   kbBuildAbort = new AbortController();
   const cancelBtn = $("kbBuildCancelBtn");
-  if (cancelBtn) cancelBtn.hidden = false;
+  if (cancelBtn) cancelBtn.hidden = !kbBuildInlineActive ? false : true;
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
   const showStatus = (msg, isError) => {
+    if (kbBuildInlineActive) {
+      if (isError) clearInlineBuildProgress({ message: msg, isError: true });
+      else renderInlineBuildProgress(msg);
+      return;
+    }
     if (panel) panel.hidden = false;
     if (statusEl) { statusEl.textContent = msg; statusEl.classList.toggle("error", !!isError); }
   };
@@ -1373,6 +1486,7 @@ export async function startScrape() {
     // Need a fresh Classroom token with the read-only scopes.
     if (!window.__cwaTokenClient) {
       kbBuildInFlight = false;
+      kbBuildInlineActive = false;
       showStatus("Sign in with Google first (use the top-right button), then try again.", true);
       console.warn("[KB] startScrape: no token and no Google token client available.");
       return;
@@ -1397,12 +1511,18 @@ async function doScrape(token) {
   const statusEl = $("kbBuildStatus");
   const logEl = $("kbBuildLog");
   const progress = $("kbBuildProgressBar");
-  const buildSurface = kbBuildStartModel();
+  const buildSurface = kbBuildStartModel({ inline: kbBuildInlineActive });
   const onboarding = $("kbOnboarding");
   const main = $("kbMain");
   if (onboarding) onboarding.hidden = buildSurface.onboardingHidden;
   if (main) main.hidden = !buildSurface.mainVisible;
   if (panel) panel.hidden = !buildSurface.panelVisible;
+  if (buildSurface.inlineVisible) {
+    renderInlineBuildProgress("Checking Google Classroom…", {
+      percent: 5,
+      onCancel: () => kbBuildAbort?.abort(),
+    });
+  }
   if (statusEl) {
     statusEl.setAttribute("role", "status");
     statusEl.setAttribute("aria-live", "polite");
@@ -1431,12 +1551,16 @@ async function doScrape(token) {
       checkpoint: checkpoint.showBuildCard ? null : checkpoint,
       saveCheckpoint: (next) => saveKbBuildCheckpoint(kbBuildCheckpointModel(next)),
       onProgress: ({ message, done, total }) => {
+        const percent = total ? Math.round((done / total) * 90) + 5 : null;
         if (message) {
           const status = kbBuildProgressStatusModel({ message, done, total });
           if (statusEl) statusEl.textContent = status.message;
+          if (kbBuildInlineActive) renderInlineBuildProgress(status.message, { percent });
           log(message);
+        } else if (kbBuildInlineActive && percent != null) {
+          renderInlineBuildProgress(null, { percent });
         }
-        if (progress && total) progress.style.width = `${Math.round((done / total) * 90) + 5}%`;
+        if (progress && percent != null) progress.style.width = `${percent}%`;
       },
     });
     // Merge, never replace: a rebuild must not discard past years that were
@@ -1445,7 +1569,11 @@ async function doScrape(token) {
     localKbBundle = bundle;
     await removeKbBuildCheckpoint();
     if (progress) progress.style.width = "100%";
-    if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
+    const done = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
+    if (statusEl) statusEl.textContent = done;
+    if (kbBuildInlineActive) renderInlineBuildProgress(done, { percent: 100 });
+    // refreshKb re-runs the change check, which clears the banner outright once
+    // the corpus has caught up.
     setTimeout(() => refreshKb(), 600);
   } catch (e) {
     if (classroomAuthRecoveryModel(e?.status).resetSession) {
@@ -1457,7 +1585,9 @@ async function doScrape(token) {
     if (e?.name === "AbortError") {
       // Not a failure. The per-course checkpoint survives, so say what the
       // Resume button will do rather than showing an error.
-      if (statusEl) { statusEl.classList.remove("error"); statusEl.textContent = "Cancelled — resume any time to pick up where it stopped."; }
+      const cancelled = "Cancelled — resume any time to pick up where it stopped.";
+      if (statusEl) { statusEl.classList.remove("error"); statusEl.textContent = cancelled; }
+      if (kbBuildInlineActive) clearInlineBuildProgress({ message: cancelled });
       await refreshKb();
       return;
     }
@@ -1465,6 +1595,7 @@ async function doScrape(token) {
   } finally {
     kbBuildInFlight = false;
     kbBuildAbort = null;
+    kbBuildInlineActive = false;
     const cancelBtn = $("kbBuildCancelBtn");
     if (cancelBtn) cancelBtn.hidden = true;
   }
@@ -1473,6 +1604,8 @@ async function doScrape(token) {
 function setKbBuildError(msg) {
   const statusEl = $("kbBuildStatus");
   if (statusEl) { statusEl.textContent = `❌ ${msg}`; statusEl.classList.add("error"); }
+  // An inline build has no visible build card to put the error in.
+  if (kbBuildInlineActive) clearInlineBuildProgress({ message: `❌ ${msg}`, isError: true });
 }
 
 async function handleKbFile(e) {

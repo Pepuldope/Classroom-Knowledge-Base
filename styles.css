@@ -1933,17 +1933,59 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .archive-onboarding-sub { color: var(--muted); font-size: 0.92rem; margin: 0.5rem 0 1.5rem; line-height: 1.55; }
 .kb-update-banner {
+  /* Anchors the progress rule that appears while an inline build runs. */
+  position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
   margin: 0.7rem 0;
   padding: 0.65rem 0.8rem;
+  /* Fixed height across every state this box takes — the offer, the build
+     progress, the result line. Its height used to be set by whichever control
+     happened to be inside it, so swapping "Update now" for a progress line
+     shrank the box by 27px and pulled the whole page up mid-build. 3.6rem is
+     the height of the button state once .link-btn's stray margin is dropped. */
+  min-height: 3.6rem;
+  box-sizing: border-box;
   border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 10%, var(--surface));
   color: var(--text);
   font-size: 0.9rem;
+}
+
+/* Inline build progress. The banner that offered the update reports the update,
+   so accepting it does not push the page down by a 520px build card. The rule
+   is absolutely positioned along the banner's bottom edge and the text stays a
+   single line, so the box keeps exactly the height it already had. */
+.kb-update-banner.is-error {
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+/* .link-btn carries `margin: 0.85rem auto 0` for standalone use in a card. In
+   a flex row that margin is 13.6px of extra banner height and an auto-centred
+   button, which is what made the offer state 71px and the progress state 46px. */
+.kb-update-banner button { margin: 0; }
+.kb-update-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.kb-update-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+.kb-update-progress-bar {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.25s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .kb-update-progress-bar { transition: none; }
 }
 
 .link-btn {

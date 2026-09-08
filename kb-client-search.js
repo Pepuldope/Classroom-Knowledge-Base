@@ -21,6 +21,21 @@ function tokenFuzzyMatch(indexToken, queryToken) {
   const stemLen = Math.min(6, minLen);
   return indexToken.slice(0, stemLen) === queryToken.slice(0, stemLen);
 }
+// One token index per notes array. Building it walks every note body, which is
+// the whole cost of a search: ~70ms over a 2,000-note corpus, repeated on every
+// keystroke. Keyed weakly on the array itself, so a new bundle simply gets a
+// new entry and the old index is collected — the same shape as
+// `relatedTokenCache` below.
+const searchIndexCache = new WeakMap();
+
+function indexFor(notes) {
+  const cached = searchIndexCache.get(notes);
+  if (cached) return cached;
+  const built = buildIndex(notes);
+  searchIndexCache.set(notes, built);
+  return built;
+}
+
 function buildIndex(notes) {
   const index = new Map();
   const add = (tok, field, i) => {
@@ -43,7 +58,7 @@ function buildIndex(notes) {
 const FIELD_WEIGHT = { title: 5, summary: 3, body: 1, course: 4, topic: 4 };
 
 function scoreNotes(notes, qTokens) {
-  const idx = buildIndex(notes);
+  const idx = indexFor(notes);
   const scores = new Map();
   for (const qt of qTokens) {
     for (const [tok, fields] of idx) {
@@ -440,12 +455,15 @@ function bestCorrection(qt, vocab) {
  *
  * Reuses searchNotes() so the suggestion is always grounded in real results.
  */
-export function suggestCorrection(notes, query) {
+export function suggestCorrection(notes, query, { hasResults = null } = {}) {
   if (!Array.isArray(notes) || notes.length === 0) return null;
   const qTokens = tokenize(query);
   if (qTokens.length === 0) return null;
-  // Already matches something — no suggestion.
-  if (searchNotes(notes, query, { limit: 1 }).length > 0) return null;
+  // Already matches something — no suggestion. When the caller has just run the
+  // search it passes the answer in; running a second full search to rediscover
+  // it doubled the cost of every successful query, which is nearly all of them.
+  if (hasResults === true) return null;
+  if (hasResults === null && searchNotes(notes, query, { limit: 1 }).length > 0) return null;
   const vocab = collectVocabulary(notes);
   if (vocab.size === 0) return null;
   const corrected = [];

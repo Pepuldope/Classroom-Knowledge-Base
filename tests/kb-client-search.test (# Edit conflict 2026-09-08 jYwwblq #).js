@@ -40,7 +40,7 @@ test("suggestCorrection trusts a caller that already ran the search", async () =
   const notes = [{ p: "a/1", t: "Algebra", course: "Math", y: "2025-26", s: "quadratic", x: "quadratic equations" }];
   // Told there are results, it must not offer a correction (nor re-search).
   assert.equal(suggestCorrection(notes, "algebra", { hasResults: true }), null);
-  // Told there are none, it behaves as before. ("algebre" is not a useful test
+  // Told there are none, it behaves as before. ("algebre" is no use as a test
   // case: it already fuzzy-matches "algebra", so no correction is warranted.)
   assert.equal(suggestCorrection(notes, "algbra", { hasResults: false }), "algebra");
   // Not told, it works it out itself — the old signature still holds.

@@ -60,24 +60,29 @@ test("browseKbBundle applies a year filter alongside course facets", () => {
 });
 
 test("browseKbBundle can filter to notes opened in the last seven days", () => {
-  const result = browseKbBundle({
-    ...bundle,
-    notes: [
-      { ...bundle.notes[0], course: "Math" },
-      { ...bundle.notes[1], course: "Math" },
-      { ...bundle.notes[2], course: "Math" },
-    ],
-  }, "Math", {
-    recentDays: 7,
-    today: "2026-08-04",
-    progress: {
-      0: { opened: 1, lastOpened: "2026-08-04" },
-      1: { opened: 1, lastOpened: "2026-07-20" },
-      2: { opened: 1, lastOpened: "2026-07-29" },
-    },
+  // Progress is keyed by note PATH, not array position — see study-progress.js.
+  const notes = [
+    { ...bundle.notes[0], course: "Math", p: "2025/vault/Math/Algebra" },
+    { ...bundle.notes[1], course: "Math", p: "2024/vault/Math/Biology" },
+    { ...bundle.notes[2], course: "Math", p: "2024/vault/Math/Geometry" },
+  ];
+  const progress = {
+    "2025/vault/Math/Algebra": { opened: 1, lastOpened: "2026-08-04" },
+    "2024/vault/Math/Biology": { opened: 1, lastOpened: "2026-07-20" },
+    "2024/vault/Math/Geometry": { opened: 1, lastOpened: "2026-07-29" },
+  };
+  const result = browseKbBundle({ ...bundle, notes }, "Math", {
+    recentDays: 7, today: "2026-08-04", progress,
   });
-
   assert.deepEqual(result.notes.map((note) => note.noteIndex), [0, 2]);
+
+  // The whole point: reordering the corpus must not move the recency flags.
+  const reordered = [notes[2], notes[0], notes[1]];
+  const after = browseKbBundle({ ...bundle, notes: reordered }, "Math", {
+    recentDays: 7, today: "2026-08-04", progress,
+  });
+  assert.deepEqual(after.notes.map((note) => note.t).sort(), ["Algebra", "Geometry"],
+    "the same two notes stay 'recently studied' after a reorder");
 });
 
 test("browse facets feed the filter controls", async () => {

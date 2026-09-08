@@ -226,6 +226,16 @@ BASE_URL="http://localhost:$PORT" node scripts/mobile_navigation_overflow_test.m
 MOBILE_NAV_OK=$?
 if [ "$MOBILE_NAV_OK" -ne 0 ]; then echo "mobile navigation overflow e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Browser-local storage hygiene tests"
+node --test tests/kb-storage-hygiene.test.js
+STORAGE_OK=$?
+if [ "$STORAGE_OK" -ne 0 ]; then echo "storage hygiene tests FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Inline build progress layout e2e"
+BASE_URL="http://localhost:$PORT" node scripts/inline_build_progress_test.mjs
+INLINE_BUILD_OK=$?
+if [ "$INLINE_BUILD_OK" -ne 0 ]; then echo "inline build progress e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> KB reduced-motion loading e2e"
 BASE_URL="http://localhost:$PORT" node scripts/kb_reduced_motion_test.mjs
 REDUCED_MOTION_OK=$?

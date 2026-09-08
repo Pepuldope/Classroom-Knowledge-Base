@@ -6,7 +6,8 @@
 
 import { idbGet, idbPut, idbDelete } from "./archive.js";
 import { makeSortFn } from "./kb-client-search.js";
-import { kbBuildCheckpointModel } from "./kb-local-status.js";
+import { kbBuildCheckpointModel, isStaleKbBuildCheckpoint } from "./kb-local-status.js";
+import { noteProgressKey } from "./study-progress.js";
 import { mergeBundles } from "./kb-merge.js";
 
 const BUNDLE_ID = "kb-bundle";
@@ -23,17 +24,19 @@ export function validateKbBundle(bundle) {
   return bundle;
 }
 
-/** Save a validated KB bundle to the user's existing browser-local store. */
+/**
+ * Save a validated KB bundle to the user's existing browser-local store.
+ *
+ * One record. The old `kb-meta` companion held noteCount, years and
+ * generatedAt — every field of it derivable from the bundle sitting next to it,
+ * and nothing ever read it back: the stat bar builds its numbers from
+ * `browseKbBundle(...).meta`, computed from the notes. It was a second write on
+ * every save of a copy that could go stale against the thing it described.
+ * `removeKbBundle` still deletes it, so browsers carrying one shed it.
+ */
 export async function saveKbBundle(bundle) {
   const valid = validateKbBundle(bundle);
   await idbPut({ id: BUNDLE_ID, data: valid });
-  await idbPut({
-    id: META_ID,
-    noteCount: valid.notes.length,
-    years: Array.isArray(valid.years) ? valid.years : [],
-    generatedAt: valid.generatedAt || null,
-    savedAt: new Date().toISOString(),
-  });
   return valid;
 }
 
@@ -65,9 +68,10 @@ export function browseYearFacet(bundle, course = "") {
 }
 
 /** Build the no-network browse response for the user's local bundle. */
-function isRecentlyStudied(progress, noteIndex, today, recentDays) {
+function isRecentlyStudied(progress, note, today, recentDays) {
   if (!Number.isInteger(recentDays) || recentDays < 1) return true;
-  const opened = String(progress?.[noteIndex]?.lastOpened || "");
+  const key = noteProgressKey(note);
+  const opened = key ? String(progress?.[key]?.lastOpened || "") : "";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(opened) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) return false;
   const delta = (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${opened}T00:00:00Z`)) / 86_400_000;
   return Number.isFinite(delta) && delta >= 0 && delta < recentDays;
@@ -140,13 +144,13 @@ export function browseKbBundle(bundle, course = "", { year = "", kind = "", fami
   // the result cards need to open a note.
   const scopedNotes = notes
     .map((note, noteIndex) => ({ note, noteIndex }))
-    .filter(({ note, noteIndex }) =>
+    .filter(({ note }) =>
       (!cleanCourse || (note?.course || "Uncategorised") === cleanCourse) &&
       (!cleanYear || (note?.y || "") === cleanYear) &&
       (!cleanKind || (note?.kind || "") === cleanKind) &&
       (!cleanFamily || (note?.family || "") === cleanFamily) &&
       (!cleanTopic || (note?.topic || "") === cleanTopic) &&
-      isRecentlyStudied(progress, noteIndex, cleanToday, recentDays)
+      isRecentlyStudied(progress, note, cleanToday, recentDays)
     );
   if (cleanCourse) {
     return {
@@ -203,13 +207,27 @@ export async function removeKbBundle() {
 /** Persist only a normalized, resumable Classroom checkpoint; never persist OAuth tokens. */
 export async function saveKbBuildCheckpoint(checkpoint) {
   const safe = kbBuildCheckpointModel(checkpoint);
-  await idbPut({ id: BUILD_CHECKPOINT_ID, data: safe });
+  // `savedAt` is record metadata, not part of the normalized checkpoint the
+  // resume logic reads, so it lives on the wrapper.
+  await idbPut({ id: BUILD_CHECKPOINT_ID, data: safe, savedAt: new Date().toISOString() });
   return safe;
 }
 
+/**
+ * The resumable checkpoint, or null.
+ *
+ * An expired one is DELETED here rather than merely ignored: it is the largest
+ * thing this database stores after the corpus itself, and an abandoned build
+ * would otherwise keep a stale copy of most of Classroom forever.
+ */
 export async function loadKbBuildCheckpoint() {
   const record = await idbGet(BUILD_CHECKPOINT_ID);
-  return record?.data || null;
+  if (!record?.data) return null;
+  if (isStaleKbBuildCheckpoint(record.savedAt)) {
+    await idbDelete(BUILD_CHECKPOINT_ID).catch(() => {});
+    return null;
+  }
+  return record.data;
 }
 
 export async function removeKbBuildCheckpoint() {

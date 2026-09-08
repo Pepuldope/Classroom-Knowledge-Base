@@ -65,3 +65,27 @@ export function kbBuildResumeSummaryModel(input = null) {
     label: `Completed ${completedCourses.length} of ${checkpoint.courses.length} courses${preview ? `: ${preview}` : ""}${suffix}.`,
   };
 }
+
+/**
+ * How long an interrupted build stays resumable.
+ *
+ * A checkpoint holds the full raw Classroom payload for every course completed
+ * so far — coursework, materials, announcements and submissions — so an
+ * abandoned build leaves a second copy of most of the corpus in IndexedDB with
+ * nothing to ever clear it. It is also the kind of data that goes off: resuming
+ * a fortnight-old checkpoint ingests a fortnight-old Classroom.
+ */
+export const KB_CHECKPOINT_MAX_AGE_DAYS = 7;
+
+/** True when a stored checkpoint is too old to resume from (or undatable). */
+export function isStaleKbBuildCheckpoint(savedAt, now = new Date().toISOString(), maxAgeDays = KB_CHECKPOINT_MAX_AGE_DAYS) {
+  const saved = Date.parse(String(savedAt || ""));
+  const current = Date.parse(String(now || ""));
+  // An undated checkpoint predates this field; treat it as stale rather than
+  // keeping it forever.
+  if (!Number.isFinite(saved)) return true;
+  if (!Number.isFinite(current)) return false;
+  const ageDays = (current - saved) / 86_400_000;
+  // A clock that moved backwards is not evidence of freshness.
+  return !(ageDays >= 0 && ageDays < maxAgeDays);
+}
