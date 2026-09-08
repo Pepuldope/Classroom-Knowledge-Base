@@ -231,6 +231,11 @@ node --test tests/kb-storage-hygiene.test.js
 STORAGE_OK=$?
 if [ "$STORAGE_OK" -ne 0 ]; then echo "storage hygiene tests FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Sticky header e2e"
+BASE_URL="http://localhost:$PORT" node scripts/sticky_header_test.mjs
+STICKY_OK=$?
+if [ "$STICKY_OK" -ne 0 ]; then echo "sticky header e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Inline build progress layout e2e"
 BASE_URL="http://localhost:$PORT" node scripts/inline_build_progress_test.mjs
 INLINE_BUILD_OK=$?

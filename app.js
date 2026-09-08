@@ -2533,3 +2533,29 @@ async function refreshSuggestions() {
     renderQuickPrompts(suggestions.map((s) => ({ label: s.length > 32 ? s.slice(0, 30) + "…" : s, prompt: s })));
   } catch {}
 }
+
+// ---------------------------------------------------------------------------
+// Sticky-header height, published as --header-h.
+//
+// The header is `position: sticky`, so anything else that sticks to the top of
+// the viewport (the Curriculum matrix's year row) has to start below it. Its
+// height is not a constant: the switcher takes its own row under 640px, and a
+// long title can wrap. Measured rather than guessed, and kept up to date.
+// ---------------------------------------------------------------------------
+function trackHeaderHeight() {
+  const header = document.querySelector("header");
+  if (!header) return;
+  const apply = () => {
+    const height = Math.round(header.getBoundingClientRect().height);
+    if (height > 0) document.documentElement.style.setProperty("--header-h", `${height}px`);
+  };
+  apply();
+  if (typeof ResizeObserver === "function") new ResizeObserver(apply).observe(header);
+  else window.addEventListener("resize", apply);
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", trackHeaderHeight);
+} else {
+  trackHeaderHeight();
+}

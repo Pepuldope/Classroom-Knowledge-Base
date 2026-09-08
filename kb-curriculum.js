@@ -212,6 +212,12 @@ export function renderCurriculum(container, bundle, { onOpenCourse, controls = {
   for (const row of rows) {
     const tr = document.createElement("div");
     tr.className = "curriculum-row" + (row.multiYear ? " curriculum-row-multi" : "");
+    // The tint means "this subject continued across years" — the one thing the
+    // matrix exists to show. Nothing said so, which just made it look like some
+    // rows were arbitrarily selected.
+    if (row.multiYear) {
+      tr.title = `${row.label} ran across ${row.byYear.size} school years`;
+    }
     tr.appendChild(cell("curriculum-row-label", row.label));
     for (const y of years) {
       const td = document.createElement("div");
@@ -273,6 +279,16 @@ function curriculumControlsBar(opts, allYears, shownRows, totalRows, filtered, o
   const spacer = document.createElement("span");
   spacer.className = "kb-controls-spacer";
   bar.appendChild(spacer);
+
+  const legend = document.createElement("span");
+  legend.className = "kb-controls-legend";
+  const swatch = document.createElement("span");
+  swatch.className = "kb-controls-swatch";
+  swatch.setAttribute("aria-hidden", "true");
+  const legendText = document.createElement("span");
+  legendText.textContent = "ran across multiple years";
+  legend.append(swatch, legendText);
+  bar.appendChild(legend);
 
   const count = document.createElement("span");
   count.className = "kb-controls-count";

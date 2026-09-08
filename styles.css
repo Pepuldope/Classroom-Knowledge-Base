@@ -1,9 +1,13 @@
 :root {
+  color-scheme: light;
   --bg: #fafafa;
   --fg: #1a1a1a;
   --muted: #6b7280;
   --border: #e5e7eb;
   --accent: #2563eb;
+  /* Darker than --accent in light, LIGHTER in dark: the hover pair has to
+     stay legible against the same text colour the resting state uses. */
+  --accent-hover: #1d4ed8;
   --accent-bg: #eff6ff;
   --danger: #dc2626;
   --warn: #d97706;
@@ -40,11 +44,13 @@
   --callout-ok-fg: #15803d;
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
   --bg: #111827;
   --fg: #f3f4f6;
   --muted: #9ca3af;
   --border: #374151;
   --accent: #60a5fa;
+  --accent-hover: #93c5fd;
   --accent-bg: #1e3a5f;
   --danger: #f87171;
   --warn: #fbbf24;
@@ -73,11 +79,13 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #111827;
     --fg: #f3f4f6;
     --muted: #9ca3af;
     --border: #374151;
     --accent: #60a5fa;
+    --accent-hover: #93c5fd;
     --accent-bg: #1e3a5f;
     --danger: #f87171;
     --warn: #fbbf24;
@@ -137,6 +145,14 @@ header {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid var(--border);
   background: var(--card);
+  /* Always visible. The view switcher lives here and the whole site turns on
+     it, so it should never be a scroll away.
+     z-index 80 sits above the sidebar (40), tutor panel (50) and dropdowns
+     (60), but below modals (100) — an overlay with a scrim is meant to cover
+     the header, not slide under it. */
+  position: sticky;
+  top: 0;
+  z-index: 80;
 }
 header h1 {
   /* Top left, hard against the header's padding. It sat centred inside the
@@ -279,7 +295,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   overflow-wrap: anywhere;
 }
 button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
-button.primary:hover { background: #1d4ed8; }
+button.primary:hover { background: var(--accent-hover); }
 :root[data-theme="dark"] button.primary,
 :root[data-theme="dark"] .view-toggle-btn.active { color: #0f172a; }
 
@@ -291,6 +307,26 @@ button.primary:hover { background: #1d4ed8; }
    ratios. Prose blocks keep their own reading measure (--measure) so a wider
    page never means a 200-character line of body text. */
 :root { --page-max: 1560px; --page-width: 96vw; --measure: 74ch; }
+/* Text controls inherit the page's colours.
+
+   Every one of these set a background but none set `color`, so the text stayed
+   the user-agent default — black — in both themes. In dark mode that made the
+   search box a white UA rectangle in a dark page, and hovering it painted
+   --accent-bg (#1e3a5f) underneath text that was still black: 1.83:1, which is
+   what "practically invisible" was. Setting both halves together is the only
+   way a hover that changes one of them stays legible. */
+input[type="text"],
+input[type="search"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+textarea,
+select {
+  color: var(--fg);
+  background-color: var(--card);
+}
+::placeholder { color: var(--muted); opacity: 1; }
+
 main { width: min(var(--page-width), var(--page-max)); max-width: 100%; margin: 0 auto; padding: 1.5rem; box-sizing: border-box; }
 /* Cards fill the page — that is the point of the wider container — but the
    prose inside them keeps a reading measure, so a wide window means more
@@ -750,7 +786,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-color: var(--accent);
   font-weight: 600;
 }
-.ai-form button[type="submit"]:hover { background: #1d4ed8; }
+.ai-form button[type="submit"]:hover { background: var(--accent-hover); }
 #aiClearBtn { color: var(--muted); font-size: 0.85rem; }
 #aiClearBtn:hover { color: var(--danger); }
 .ai-quick {
@@ -792,7 +828,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .pin-btn.pinned { color: var(--p3); }
 .dismiss-btn:hover { color: var(--danger); }
 .kb-search-btn { color: var(--accent, #2563eb); font-weight: 600; }
-.kb-search-btn:hover { background: var(--accent-bg, #eff6ff); color: var(--accent-hover, #1d4ed8); }
+.kb-search-btn:hover { background: var(--accent-bg, #eff6ff); color: var(--accent-hover); }
 
 #pinnedWrap h2 { color: var(--p3); margin-top: 1rem; }
 
@@ -1028,8 +1064,8 @@ summary::-webkit-details-marker { color: var(--muted); }
   cursor: pointer;
   transition: border-color 0.15s, background-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
-.settings-row select.settings-select:hover { border-color: var(--accent); background: var(--accent-bg); transform: translateY(-1px); }
-.settings-row select.settings-select:active { border-color: var(--accent); background: var(--accent-bg); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 45%, transparent); transform: translateY(0); }
+.settings-row select.settings-select:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--fg); transform: translateY(-1px); }
+.settings-row select.settings-select:active { border-color: var(--accent); background: var(--accent-bg); color: var(--fg); box-shadow: 0 1px 0 color-mix(in srgb, var(--accent) 45%, transparent); transform: translateY(0); }
 .settings-row select.settings-select:focus-visible {
   outline: none;
   border-color: var(--accent);
@@ -1459,7 +1495,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   color: #fff;
   box-shadow: 0 2px 10px color-mix(in srgb, var(--accent) 30%, transparent);
 }
-.view-toggle-btn.active:hover { background: #1d4ed8; }
+.view-toggle-btn.active:hover { background: var(--accent-hover); }
 
 .archive-search-bar { margin-bottom: 1rem; }
 #archiveSearchInput {
@@ -1472,9 +1508,9 @@ summary::-webkit-details-marker { color: var(--muted); }
   background: var(--card);
 }
 #archiveSearchInput:hover,
-#kbSearchInput:hover { border-color: var(--accent); background: var(--accent-bg); }
+#kbSearchInput:hover,
 #archiveSearchInput:active,
-#kbSearchInput:active { border-color: var(--accent); background: var(--accent-bg); }
+#kbSearchInput:active { border-color: var(--accent); background: var(--accent-bg); color: var(--fg); }
 #archiveSearchInput:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 
 .archive-snippet { color: var(--muted); }
@@ -1685,7 +1721,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   background: none; border: none; padding: 0; cursor: pointer;
   text-decoration: underline;
 }
-.kb-didyoumean-btn:hover { color: var(--accent-hover, #1d4ed8); }
+.kb-didyoumean-btn:hover { color: var(--accent-hover); }
 
 .archive-year { margin-bottom: 0.75rem; }
 .archive-year > summary { font-weight: 600; }
@@ -1776,7 +1812,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   word-break: break-word;
 }
 .archive-note-content a:hover,
-#kbNoteBody a:hover { color: #1d4ed8; }
+#kbNoteBody a:hover { color: var(--accent-hover); }
 
 /* Richer markdown: blockquotes, strikethrough, and GitHub-style tables
    produced by renderRichMarkdown() (owner #10). */
@@ -1998,7 +2034,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   cursor: pointer;
   text-decoration: underline;
 }
-.link-btn:hover { color: #1d4ed8; }
+.link-btn:hover { color: var(--accent-hover); }
 
 /* Build-from-Classroom progress panel. */
 .archive-build-panel {
@@ -2116,7 +2152,10 @@ summary::-webkit-details-marker { color: var(--muted); }
   text-transform: uppercase;
   letter-spacing: 0.04em;
   position: sticky;
-  top: 0;
+  /* Below the page header, which is itself sticky. --header-h is measured in
+     app.js because the header's height changes with the breakpoint and with a
+     wrapped title. */
+  top: var(--header-h, 0px);
   z-index: 3;
 }
 .curriculum-row-multi { background: var(--accent-bg); border-radius: 6px; }
@@ -2193,6 +2232,16 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-controls-spacer { flex: 1 1 auto; }
 .kb-controls-reset { font-size: 0.8rem; }
 .kb-controls-count { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+/* Explains the tinted Curriculum rows. */
+.kb-controls-legend { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+.kb-controls-swatch {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 3px;
+  background: var(--accent-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  flex: 0 0 auto;
+}
 @media (max-width: 640px) {
   .kb-controls { gap: 0.4rem 0.5rem; padding: 0.5rem; }
   .kb-controls input[type="search"] { flex-basis: 100%; min-width: 0; }

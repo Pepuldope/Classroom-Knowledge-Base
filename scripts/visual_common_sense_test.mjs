@@ -95,7 +95,7 @@ async function checkContrast(theme) {
     if (ratio == null || ratio < minimum) fail(`${theme}: ${name} contrast ${ratio?.toFixed(2) ?? "n/a"}:1 (${data.fg} on ${data.bg}, need ${minimum}:1)`);
   }
 }
-async function checkControlStates() {
+async function checkControlStates(theme) {
   const controls = [
     ["view toggle", ".view-toggle-btn"], ["primary", "button.primary"],
     ["settings select", ".settings-select"], ["search input", "#kbSearchInput, #archiveSearchInput"],
@@ -128,6 +128,16 @@ async function checkControlStates() {
     const ring = focus.outline !== "none" || (focus.boxShadow && focus.boxShadow !== "none");
     if (!visiblyDifferent(base, hover)) fail(`${name}: hover is visually identical to default`);
     if (!visiblyDifferent(base, pressed)) fail(`${name}: pressed is visually identical to default`);
+    // Contrast in every interactive state, not only the resting one. A hover
+    // that repaints the background while leaving the text colour alone is how
+    // the search box ended up as black-on-#1e3a5f (1.83:1) in dark mode, with
+    // the resting-state check above passing the whole time.
+    for (const [stateName, state] of [["hover", hover], ["pressed", pressed], ["focus", focus]]) {
+      const ratio = contrast(state.color, state.backgroundColor);
+      if (ratio != null && ratio < 4.5) {
+        fail(`${theme}: ${name} ${stateName} contrast ${ratio.toFixed(2)}:1 (${state.color} on ${state.backgroundColor}, need 4.5:1)`);
+      }
+    }
     if (!ring) fail(`${name}: focus-visible has no outline/box-shadow ring`);
     if (await loc.evaluate((el) => el.tagName === "INPUT" || el.tagName === "SELECT" || el.tagName === "BUTTON")) {
       await loc.evaluate((el) => { el.dataset.visualGateDisabled = "1"; el.disabled = true; });
@@ -225,8 +235,11 @@ try {
   await forceHarnessStates();
   for (const theme of ["light", "dark"]) await checkContrast(theme);
   for (const theme of ["light", "dark"]) await checkCopyStatusLayout(theme);
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((t) => { document.documentElement.dataset.theme = t; }, theme);
+    await checkControlStates(theme);
+  }
   await page.evaluate(() => { document.documentElement.dataset.theme = "light"; });
-  await checkControlStates();
   await checkLayout();
   assert.deepEqual(failures, [], failures.join("\n"));
   console.log(`✓ visual common-sense gate passed: light + dark contrast, control states, layout hygiene, KB/Archive/Planner/Settings/onboarding/loading/modal (${BASE})`);
