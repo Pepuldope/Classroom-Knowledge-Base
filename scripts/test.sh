@@ -144,6 +144,16 @@ node --test tests/kb-browse-state.test.js
 KB_BROWSE_STATE_OK=$?
 if [ "$KB_BROWSE_STATE_OK" -ne 0 ]; then echo "KB browse state tests FAILED"; exit 1; fi
 
+echo "==> Corpus reconciliation tests"
+node --test tests/kb-reconcile.test.js
+RECONCILE_OK=$?
+if [ "$RECONCILE_OK" -ne 0 ]; then echo "reconciliation tests FAILED"; exit 1; fi
+
+echo "==> Auto-sync decision tests"
+node --test tests/kb-autosync.test.js
+AUTOSYNC_OK=$?
+if [ "$AUTOSYNC_OK" -ne 0 ]; then echo "auto-sync tests FAILED"; exit 1; fi
+
 echo "==> Commit-guard secret scanner tests"
 python3 scripts/guard_regex_test.py
 GUARD_REGEX_OK=$?
@@ -255,6 +265,11 @@ echo "==> Assignment panel close e2e"
 BASE_URL="http://localhost:$PORT" node scripts/assignment_panel_close_test.mjs
 PANEL_CLOSE_OK=$?
 if [ "$PANEL_CLOSE_OK" -ne 0 ]; then echo "assignment panel close e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Background auto-sync e2e"
+BASE_URL="http://localhost:$PORT" node scripts/kb_autosync_e2e_test.mjs
+AUTOSYNC_E2E_OK=$?
+if [ "$AUTOSYNC_E2E_OK" -ne 0 ]; then echo "background auto-sync e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
 echo "==> Sidebar overlap e2e"
 BASE_URL="http://localhost:$PORT" node scripts/sidebar_overlap_test.mjs

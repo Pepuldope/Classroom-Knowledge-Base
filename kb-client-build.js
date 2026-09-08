@@ -35,6 +35,8 @@ export function kbBundleFromClassroomArchive(archive) {
   return {
     ...bundle,
     source: "classroom",
+    // What this build fetched cleanly, so mergeBundles can reconcile it.
+    coverage: Array.isArray(archive?.coverage) ? archive.coverage : [],
     courses: [...byName.values()]
       .sort((a, b) => a.name.localeCompare(b.name))
       .map((course) => ({ ...course, family: deriveFamily(course.name) })),

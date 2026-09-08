@@ -131,6 +131,40 @@ export function mergeBundles(base, incoming) {
   notesOf(left).forEach(absorb);
   notesOf(right).forEach(absorb);
 
+  // ---- Reconciliation -----------------------------------------------------
+  // Merging alone never removes anything, which is right for past years
+  // imported from a School Backup export — Classroom no longer serves them, so
+  // the corpus is their only home. It is wrong for a course the build just
+  // read end to end: an assignment the teacher deleted lingered forever, and a
+  // renamed one appeared twice, once under each title.
+  //
+  // `incoming.coverage` names the courses this build fetched CLEANLY (see
+  // archive-builder.js). Inside those courses the build is authoritative, so a
+  // stored note the build did not produce is gone from Classroom. Outside them
+  // nothing is touched: an import carries no coverage, a course whose fetch
+  // errored is absent from it, and an interrupted build never reaches here.
+  const coverage = Array.isArray(right.coverage) ? right.coverage : [];
+  const coveredIds = new Set(coverage.map((c) => String(c?.cid || "")).filter(Boolean));
+  const coveredCourseYears = new Set(
+    coverage.filter((c) => c?.course).map((c) => `${c.course}|${c.y || ""}`),
+  );
+  const incomingPaths = new Set(notesOf(right).map((note) => note?.p).filter((p) => p != null && p !== ""));
+  // Course id when the note has one (survives a course rename); otherwise the
+  // course name and year it was filed under.
+  const withinCoverage = (note) => (note?.cid
+    ? coveredIds.has(String(note.cid))
+    : coveredCourseYears.has(`${note?.course || "Uncategorized"}|${note?.y || ""}`));
+
+  let pruned = 0;
+  if (coverage.length > 0) {
+    for (const [path, note] of [...byPath.entries()]) {
+      if (incomingPaths.has(note?.p)) continue;
+      if (!withinCoverage(note)) continue;
+      byPath.delete(path);
+      pruned++;
+    }
+  }
+
   const notes = [...byPath.values()];
   const years = [...new Set(notes.map((n) => n?.y).filter(Boolean))].sort();
 
@@ -154,6 +188,9 @@ export function mergeBundles(base, incoming) {
     notes,
     clusters: mergeClusters(left, right),
     ...(metadata ? { metadata } : {}),
+    // Describes the build that produced `right`, not the merged corpus, so it
+    // is deliberately not carried forward.
+    ...(pruned ? { prunedCount: pruned } : {}),
   };
 }
 

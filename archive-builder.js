@@ -245,6 +245,13 @@ export function bundleFromRaw(raw) {
   const courses = [];
   const usedPaths = new Set();
   const courseList = Array.isArray(raw.courses) ? raw.courses : [];
+  // Courses this run fetched cleanly. Only these may be reconciled against —
+  // see `coverage` below and mergeBundles(). A course whose fetch 403'd or
+  // errored is absent, so a transient API failure can never delete notes.
+  const covered = raw.coveredCourseIds instanceof Set
+    ? raw.coveredCourseIds
+    : new Set(Array.isArray(raw.coveredCourseIds) ? raw.coveredCourseIds : []);
+  const coverage = [];
 
   for (const course of courseList) {
     const year = courseSchoolYear(course);
@@ -264,6 +271,7 @@ export function bundleFromRaw(raw) {
         p: makeUniquePath(basePath, usedPaths),
         t: title,
         course: course.name,
+        cid: String(course.id),
         y: year,
         topic: topicName,
         kind: "note",
@@ -281,6 +289,7 @@ export function bundleFromRaw(raw) {
         p: makeUniquePath(basePath, usedPaths),
         t: title,
         course: course.name,
+        cid: String(course.id),
         y: year,
         topic: topicName,
         kind: "note",
@@ -298,6 +307,7 @@ export function bundleFromRaw(raw) {
         p: makeUniquePath(basePath, usedPaths),
         t: title,
         course: course.name,
+        cid: String(course.id),
         y: year,
         topic: null,
         kind: "announcements",
@@ -308,6 +318,7 @@ export function bundleFromRaw(raw) {
     }
 
     courses.push({ name: course.name, y: year, family: null, noteCount });
+    if (covered.has(course.id)) coverage.push({ cid: String(course.id), course: course.name, y: year });
   }
 
   const years = [...new Set(courses.map((c) => c.y))].sort();
@@ -320,6 +331,7 @@ export function bundleFromRaw(raw) {
     courses,
     notes,
     clusters: [],
+    coverage,
   };
 }
 
@@ -355,6 +367,7 @@ export function bundleFromVault(rawNotes, meta = {}) {
       p: makeUniquePath(basePath, usedPaths),
       t: title,
       course: course || "Uncategorized",
+      ...(n.cid ? { cid: String(n.cid) } : {}),
       y: year || "undated",
       topic,
       kind: "note",
@@ -464,14 +477,22 @@ const noop = () => {};
  * throughout for a live log + progress bar. `signal` (an AbortSignal) lets
  * the caller cancel cleanly — a pending abort surfaces as an `AbortError`.
  */
-export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, signal, checkpoint = null, saveCheckpoint = noop } = {}) {
+export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, signal, checkpoint = null, saveCheckpoint = noop, courseStates = ["ACTIVE", "ARCHIVED"] } = {}) {
+  // A background top-up reads ACTIVE courses only. An archived course is one
+  // the school has closed: nothing is posted to it again, so re-reading it every
+  // few hours is most of the request budget spent to learn nothing. The full
+  // build still reads both, and reconciliation only ever touches the courses a
+  // given run actually covered, so skipping them here cannot delete anything.
+  const states = (Array.isArray(courseStates) && courseStates.length ? courseStates : ["ACTIVE", "ARCHIVED"])
+    .map((state) => `courseStates=${encodeURIComponent(state)}`)
+    .join("&");
   onProgress({ phase: "courses", message: checkpoint?.courses?.length ? "Resuming your saved course progress…" : "Finding your courses…" });
   const courses = Array.isArray(checkpoint?.courses) && checkpoint.courses.length
     ? checkpoint.courses
     : await fetchAllPages(
       gFetch,
       (pageToken) =>
-        `${CLASSROOM_BASE}/courses?courseStates=ACTIVE&courseStates=ARCHIVED&pageSize=${PAGE_SIZE}${pageToken ? `&pageToken=${pageToken}` : ""}`,
+        `${CLASSROOM_BASE}/courses?${states}&pageSize=${PAGE_SIZE}${pageToken ? `&pageToken=${pageToken}` : ""}`,
       "courses",
       signal
     );
@@ -488,6 +509,10 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
   let failures = 0;
   let completed = 0;
   let cursor = 0;
+  // Courses fetched end to end with no skipped endpoint IN THIS RUN. Courses
+  // restored from a resume checkpoint are deliberately absent: this run cannot
+  // vouch for them, and reconciliation only ever acts on what it can vouch for.
+  const coveredCourseIds = new Set();
 
   async function worker() {
     while (cursor < courses.length) {
@@ -510,6 +535,7 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
         if (signal && signal.aborted) throw abortError();
         courseData[course.id] = { topics, courseWork, courseWorkMaterials, announcements, submissions };
         await saveCheckpoint({ courses, courseData });
+        if (failCounter.count === 0) coveredCourseIds.add(course.id);
         failures += failCounter.count;
         const noteCount = courseWork.length + courseWorkMaterials.length + (announcements.length > 0 ? 1 : 0);
         onProgress({ phase: "course", message: `Fetching course ${completed + 1}/${courses.length}… ${course.name} (${noteCount} note${noteCount === 1 ? "" : "s"})`, done: completed + 1, total: courses.length });
@@ -527,7 +553,7 @@ export async function buildArchiveFromClassroom(gFetch, { onProgress = noop, sig
   if (signal && signal.aborted) throw abortError();
 
   onProgress({ phase: "build", message: "Building your archive…" });
-  const bundle = bundleFromRaw({ courses, courseData });
+  const bundle = bundleFromRaw({ courses, courseData, coveredCourseIds });
   onProgress({
     phase: "done",
     message: `${bundle.notes.length.toLocaleString()} notes from ${bundle.courses.length} courses across ${bundle.years.length} year${

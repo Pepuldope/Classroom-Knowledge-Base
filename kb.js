@@ -18,6 +18,7 @@ import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
+import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -944,6 +945,7 @@ export async function refreshKb() {
   if (hasDb) {
     renderKbMeta(meta);
     void checkForClassroomChanges(localKbBundle);
+    void maybeBackgroundSync();
     // Browse is its own tab now, so this no longer force-shows it under the
     // search box — that was the page answering "find me a note" twice at once.
     // Restore whichever tab is active; each loads its own content.
@@ -1078,6 +1080,97 @@ function clearInlineBuildProgress({ message = "", isError = false } = {}) {
 export function __setInlineBuildActiveForTest(value) { kbBuildInlineActive = !!value; }
 export function __renderInlineBuildProgressForTest(message, opts) { return renderInlineBuildProgress(message, opts); }
 export function __clearInlineBuildProgressForTest(opts) { return clearInlineBuildProgress(opts); }
+
+// ---------------------------------------------------------------------------
+// Keeping the corpus current on its own.
+//
+// The first build is manual: it reads every course and every year and is worth
+// watching. Keeping up with a school week is not — the answer is usually one
+// new assignment — so it happens quietly while the page is in use. There is no
+// setting for this; kb-autosync.js works out which of the two a given moment
+// calls for.
+// ---------------------------------------------------------------------------
+const KB_SYNC_ATTEMPT_KEY = "cwa_kb_last_sync_attempt";
+let kbBackgroundSyncInFlight = false;
+
+function loadLastSyncAttempt() {
+  try { return localStorage.getItem(KB_SYNC_ATTEMPT_KEY) || null; } catch { return null; }
+}
+function saveLastSyncAttempt(value) {
+  try { localStorage.setItem(KB_SYNC_ATTEMPT_KEY, value); } catch { /* private mode */ }
+}
+
+/** Show sync state in the stat bar's "updated" cell — the only surface it gets. */
+function renderSyncStatus(state, counts) {
+  const bar = $("kbMetaBar");
+  if (!bar) return;
+  const cell = bar.lastElementChild;
+  if (!cell) return;
+  const model = kbSyncStatusModel(state, counts);
+  if (!model.label) return;
+  cell.replaceChildren();
+  const strong = document.createElement("strong");
+  strong.textContent = model.label;
+  cell.append("🕑 ", strong);
+  cell.classList.toggle("is-syncing", model.busy);
+}
+
+async function maybeBackgroundSync() {
+  const decision = kbAutoSyncModel({
+    hasCorpus: Array.isArray(localKbBundle?.notes) && localKbBundle.notes.length > 0,
+    lastSyncAt: localKbBundle?.generatedAt || null,
+    lastAttemptAt: loadLastSyncAttempt(),
+    online: typeof navigator === "undefined" || navigator.onLine !== false,
+    signedIn: !!currentAccessToken(),
+    buildInFlight: kbBuildInFlight || kbBackgroundSyncInFlight,
+  });
+  if (decision.action !== "background") return decision;
+
+  kbBackgroundSyncInFlight = true;
+  saveLastSyncAttempt(new Date().toISOString());
+  const before = localKbBundle?.notes?.length ?? 0;
+  renderSyncStatus("syncing");
+  try {
+    const token = currentAccessToken();
+    const gFetch = async (url) => {
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        const error = new Error(`Classroom API ${response.status}`);
+        error.status = response.status;
+        throw error;
+      }
+      return response.json();
+    };
+    // ACTIVE courses only: an archived course is closed, and reconciliation
+    // only touches courses a run actually covered, so this cannot delete
+    // anything belonging to the years it skips.
+    const archive = await buildArchiveFromClassroom(gFetch, { courseStates: ["ACTIVE"] });
+    const bundle = await saveMergedKbBundle(kbBundleFromClassroomArchive(archive));
+    localKbBundle = bundle;
+    const added = Math.max(0, bundle.notes.length - before + (bundle.prunedCount || 0));
+    renderSyncStatus("done", { added, removed: bundle.prunedCount || 0 });
+    // Re-render what is on screen so new notes are actually reachable.
+    renderStudyProgress();
+    renderReviewDigest();
+    setStudyTab(activeStudyTab);
+    // The corpus just absorbed every ACTIVE course, so the "new courses" offer
+    // is answered. Clearing it directly rather than re-running the check saves
+    // a second full course listing moments after the build did one. A course
+    // that is both new to the student AND already archived would be missed
+    // until the next load, which is when the check runs again anyway.
+    clearInlineBuildProgress();
+    return { action: "background", reason: "done", added, removed: bundle.prunedCount || 0 };
+  } catch (error) {
+    // Quiet by design: a background top-up that cannot run is not the user's
+    // problem to solve mid-sentence. The stat bar says so and the backoff in
+    // kb-autosync.js keeps it from retrying on every page load.
+    renderSyncStatus("failed");
+    console.warn("[KB] background sync skipped:", error?.message || error);
+    return { action: "background", reason: "failed" };
+  } finally {
+    kbBackgroundSyncInFlight = false;
+  }
+}
 
 let kbChangeCheckInFlight = false;
 async function checkForClassroomChanges(bundle) {

@@ -458,6 +458,9 @@ h2,
 /* Each stat stays on one line; the BAR wraps between them. Without this
    "1,204" and "notes" broke across two lines inside a single cell. */
 .stat-bar span { white-space: nowrap; }
+/* A background top-up gets one word in the "updated" cell and nothing else. */
+.stat-bar span.is-syncing { color: var(--accent); }
+.stat-bar span.is-syncing strong { font-weight: 500; }
 .stat-bar .stat strong { font-size: 1.1rem; display: block; }
 .stat-bar .stat .label { color: var(--muted); font-size: 0.8rem; }
 .stat-bar .stat.alert strong { color: var(--danger); }
