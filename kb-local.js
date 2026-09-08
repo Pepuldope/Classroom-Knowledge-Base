@@ -73,12 +73,56 @@ function isRecentlyStudied(progress, noteIndex, today, recentDays) {
   return Number.isFinite(delta) && delta >= 0 && delta < recentDays;
 }
 
-export function browseKbBundle(bundle, course = "", { year = "", kind = "", family = "", sort = "recency", progress = null, today = "", recentDays = 0 } = {}) {
+/** Distinct class-type families across the corpus, alphabetically. */
+export function browseFamilyFacet(bundle) {
+  const families = new Set(
+    (Array.isArray(bundle?.notes) ? bundle.notes : [])
+      .map((note) => String(note?.family || "").trim())
+      .filter(Boolean),
+  );
+  return [...families].sort((a, b) => a.localeCompare(b));
+}
+
+/** Distinct topics within one course (optionally within one year), alphabetically. */
+export function browseTopicFacet(bundle, course = "", year = "") {
+  const cleanCourse = String(course || "").trim();
+  const cleanYear = String(year || "").trim();
+  const topics = new Set(
+    (Array.isArray(bundle?.notes) ? bundle.notes : [])
+      .filter((note) => (!cleanCourse || (note?.course || "Uncategorised") === cleanCourse))
+      .filter((note) => (!cleanYear || (note?.y || "") === cleanYear))
+      .map((note) => String(note?.topic || "").trim())
+      .filter(Boolean),
+  );
+  return [...topics].sort((a, b) => a.localeCompare(b));
+}
+
+export const BROWSE_COURSE_SORTS = ["notes", "alpha", "recent"];
+
+/**
+ * Sort the course grid.
+ *
+ * "recent" is newest year first — the courses you are actually taking — which
+ * the fixed count-descending order buried under whichever old class happened
+ * to have the most notes.
+ */
+export function sortBrowseCourses(courses, sort = "notes") {
+  const key = BROWSE_COURSE_SORTS.includes(sort) ? sort : "notes";
+  const latest = (c) => (Array.isArray(c.years) && c.years.length ? c.years[c.years.length - 1] : "");
+  return [...courses].sort((a, b) => {
+    if (key === "alpha") return a.course.localeCompare(b.course);
+    if (key === "recent") return latest(b).localeCompare(latest(a)) || b.count - a.count || a.course.localeCompare(b.course);
+    return b.count - a.count || a.course.localeCompare(b.course);
+  });
+}
+
+export function browseKbBundle(bundle, course = "", { year = "", kind = "", family = "", topic = "", sort = "recency", courseSort = "notes", progress = null, today = "", recentDays = 0 } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const cleanCourse = String(course || "").trim();
   const cleanYear = String(year || "").trim();
   const cleanKind = String(kind || "").trim();
   const cleanFamily = String(family || "").trim();
+  const cleanTopic = String(topic || "").trim();
   const cleanToday = String(today || "").trim();
   const sortKey = new Set(["relevance", "recency", "course", "title"]).has(sort) ? sort : "recency";
   const browseSnippet = (note) => {
@@ -91,18 +135,24 @@ export function browseKbBundle(bundle, course = "", { year = "", kind = "", fami
     generatedAt: bundle?.generatedAt || null,
     updatedAt: bundle?.generatedAt || null,
   };
-  const scopedNotes = notes.filter((note) =>
-    (!cleanCourse || (note?.course || "Uncategorised") === cleanCourse) &&
-    (!cleanYear || (note?.y || "") === cleanYear) &&
-    (!cleanKind || (note?.kind || "") === cleanKind) &&
-    (!cleanFamily || (note?.family || "") === cleanFamily) &&
-    isRecentlyStudied(progress, notes.indexOf(note), cleanToday, recentDays)
-  );
+  // Index alongside the note rather than looking it back up: `notes.indexOf`
+  // inside this filter made scoping quadratic, and the note index is also what
+  // the result cards need to open a note.
+  const scopedNotes = notes
+    .map((note, noteIndex) => ({ note, noteIndex }))
+    .filter(({ note, noteIndex }) =>
+      (!cleanCourse || (note?.course || "Uncategorised") === cleanCourse) &&
+      (!cleanYear || (note?.y || "") === cleanYear) &&
+      (!cleanKind || (note?.kind || "") === cleanKind) &&
+      (!cleanFamily || (note?.family || "") === cleanFamily) &&
+      (!cleanTopic || (note?.topic || "") === cleanTopic) &&
+      isRecentlyStudied(progress, noteIndex, cleanToday, recentDays)
+    );
   if (cleanCourse) {
     return {
       meta,
       notes: scopedNotes
-        .map((note) => ({
+        .map(({ note, noteIndex }) => ({
           t: note?.t || "",
           course: note?.course || "",
           y: note?.y || "",
@@ -110,7 +160,7 @@ export function browseKbBundle(bundle, course = "", { year = "", kind = "", fami
           kind: note?.kind || "",
           family: note?.family || "",
           p: note?.p || "",
-          noteIndex: notes.indexOf(note),
+          noteIndex,
           _score: 0,
           _snippet: browseSnippet(note),
         }))
@@ -118,7 +168,7 @@ export function browseKbBundle(bundle, course = "", { year = "", kind = "", fami
     };
   }
   const map = new Map();
-  scopedNotes.forEach((note) => {
+  scopedNotes.forEach(({ note }) => {
     const name = note?.course || "Uncategorised";
     const entry = map.get(name) || { course: name, count: 0, years: new Set() };
     entry.count += 1;
@@ -127,9 +177,10 @@ export function browseKbBundle(bundle, course = "", { year = "", kind = "", fami
   });
   return {
     meta,
-    courses: [...map.values()]
-      .map((entry) => ({ ...entry, years: [...entry.years].sort() }))
-      .sort((a, b) => b.count - a.count || a.course.localeCompare(b.course)),
+    courses: sortBrowseCourses(
+      [...map.values()].map((entry) => ({ ...entry, years: [...entry.years].sort() })),
+      courseSort,
+    ),
   };
 }
 

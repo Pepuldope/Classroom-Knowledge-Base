@@ -156,15 +156,33 @@
       <div id="studyPanel-browse" class="study-panel" role="tabpanel" tabindex="-1" hidden>
         <div id="kbBrowse" class="kb-browse" hidden>
           <div class="kb-browse-head">
-            <h3>Browse by course</h3>
-            <label id="kbBrowseYearLabel" class="kb-browse-year-label" for="kbBrowseYear">Year</label>
-            <select id="kbBrowseYear" class="settings-select" aria-label="Filter browsed course notes by year" hidden>
-              <option value="">All years</option>
-            </select>
-            <label id="kbBrowseRecentLabel" class="kb-browse-recent-label" for="kbBrowseRecent" hidden>
+            <h3 id="kbBrowseTitle">Browse by course</h3>
+            <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+          </div>
+          <div id="kbBrowseControls" class="kb-controls" role="group" aria-label="Filter and sort what you are browsing">
+            <input id="kbBrowseSearch" type="search" placeholder="Filter courses…" aria-label="Filter courses by name" />
+            <label class="kb-controls-field" for="kbBrowseYear">
+              <span class="kb-controls-label">Year</span>
+              <select id="kbBrowseYear" aria-label="Filter by school year"><option value="">All years</option></select>
+            </label>
+            <label id="kbBrowseFamilyField" class="kb-controls-field" for="kbBrowseFamily">
+              <span class="kb-controls-label">Type</span>
+              <select id="kbBrowseFamily" aria-label="Filter by class type"><option value="">All types</option></select>
+            </label>
+            <label id="kbBrowseTopicField" class="kb-controls-field" for="kbBrowseTopic" hidden>
+              <span class="kb-controls-label">Topic</span>
+              <select id="kbBrowseTopic" aria-label="Filter by topic"><option value="">All topics</option></select>
+            </label>
+            <label class="kb-controls-field" for="kbBrowseSort">
+              <span class="kb-controls-label">Sort</span>
+              <select id="kbBrowseSort" aria-label="Sort what you are browsing"></select>
+            </label>
+            <label id="kbBrowseRecentLabel" class="kb-controls-check" for="kbBrowseRecent" hidden>
               <input id="kbBrowseRecent" type="checkbox" /> Studied in last 7 days
             </label>
-            <button id="kbBrowseBack" class="link-btn" type="button" hidden>← All courses</button>
+            <span class="kb-controls-spacer"></span>
+            <span id="kbBrowseCount" class="kb-controls-count" role="status" aria-live="polite"></span>
+            <button id="kbBrowseReset" class="link-btn kb-controls-reset" type="button" hidden>Reset</button>
           </div>
           <div id="kbBrowseCourses" class="kb-browse-courses"></div>
           <div id="kbBrowseNotes" class="list compact" hidden></div>

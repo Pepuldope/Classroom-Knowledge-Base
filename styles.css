@@ -283,7 +283,21 @@ button.primary:hover { background: #1d4ed8; }
 :root[data-theme="dark"] button.primary,
 :root[data-theme="dark"] .view-toggle-btn.active { color: #0f172a; }
 
-main { max-width: 900px; margin: 0 auto; padding: 1.5rem; }
+/* Page container.
+   Viewport-relative rather than a fixed cap, so the layout follows the window
+   instead of leaving a 900px column stranded in the middle of a wide monitor.
+   The cap only stops a very wide screen from sprawling; below it the container
+   simply tracks the viewport, which is what makes this behave across aspect
+   ratios. Prose blocks keep their own reading measure (--measure) so a wider
+   page never means a 200-character line of body text. */
+:root { --page-max: 1560px; --page-width: 96vw; --measure: 74ch; }
+main { width: min(var(--page-width), var(--page-max)); max-width: 100%; margin: 0 auto; padding: 1.5rem; box-sizing: border-box; }
+/* Cards fill the page — that is the point of the wider container — but the
+   prose inside them keeps a reading measure, so a wide window means more
+   columns and longer lists, never a 200-character line of body text. */
+.kb-result-card .summary,
+.kb-result-card .archive-snippet,
+.settings-hint { max-width: var(--measure); }
 
 #welcome {
   display: flex;
@@ -1994,37 +2008,125 @@ summary::-webkit-details-marker { color: var(--muted); }
   .study-manage-actions button { min-height: 44px; }
 }
 
-/* Curriculum map — per-subject-across-years grid. */
-.curriculum-grid { overflow-x: auto; }
+/* Curriculum map — per-subject-across-years grid.
+
+   Sized to fit rather than to scroll. Columns share the available width evenly
+   (1fr, floored at 132px) instead of the old 180px minimum, and the chips carry
+   their counts on one line, so a four- or five-year curriculum lands inside the
+   page on a laptop. If it still overflows — many years, a narrow window — the
+   grid scrolls horizontally as before, but the subject column is now sticky, so
+   you never lose track of which row you are reading. */
+/* The scroller wraps the table only, so the filter bar above it stays put
+   when the matrix scrolls sideways. */
+.curriculum-grid { min-width: 0; }
+.curriculum-scroll { overflow-x: auto; overscroll-behavior-x: contain; }
 .curriculum-table { display: flex; flex-direction: column; min-width: min-content; }
-.curriculum-row { display: grid; grid-template-columns: 160px repeat(var(--curriculum-cols, 3), minmax(180px, 1fr)); gap: 0.5rem; align-items: stretch; padding: 0.4rem 0; border-bottom: 1px solid var(--border); }
-.curriculum-header { border-bottom: 2px solid var(--border); font-weight: 600; color: var(--muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.curriculum-row {
+  display: grid;
+  grid-template-columns: minmax(112px, 168px) repeat(var(--curriculum-cols, 3), minmax(132px, 1fr));
+  gap: 0.4rem;
+  align-items: stretch;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+}
+.curriculum-header {
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
 .curriculum-row-multi { background: var(--accent-bg); border-radius: 6px; }
-.curriculum-row-label { display: flex; align-items: center; font-weight: 500; font-size: 0.88rem; padding-left: 0.25rem; }
+.curriculum-row-label {
+  display: flex;
+  align-items: center;
+  font-weight: 500;
+  font-size: 0.85rem;
+  padding-left: 0.25rem;
+  /* Sticky so the subject stays readable when the grid does scroll sideways.
+     `inherit` keeps the multi-year row's accent tint behind it instead of
+     punching a --bg hole through the highlight. */
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: inherit;
+}
 .curriculum-col-label { display: flex; align-items: center; }
-.curriculum-cell { display: flex; flex-direction: column; gap: 0.35rem; justify-content: center; }
+.curriculum-cell { display: flex; flex-direction: column; gap: 0.3rem; justify-content: center; min-width: 0; }
 .curriculum-chip {
   text-align: left;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 0.4rem 0.6rem;
+  padding: 0.35rem 0.5rem;
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.05rem;
   cursor: pointer;
   width: 100%;
+  min-width: 0;
 }
 .curriculum-chip:hover { border-color: var(--accent); background: var(--accent-bg); }
-.curriculum-chip-name { font-size: 0.85rem; font-weight: 500; }
-.curriculum-chip-meta { font-size: 0.72rem; color: var(--muted); }
+.curriculum-chip-name {
+  font-size: 0.82rem;
+  font-weight: 500;
+  /* Long Classroom course names ("MATURITA INFO Y4") were the widest thing in
+     the grid and set the column width for every other row. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.curriculum-chip-meta { font-size: 0.7rem; color: var(--muted); white-space: nowrap; }
 .curriculum-chip-badge { font-size: 0.75rem; }
+.curriculum-empty-cell { min-height: 0.5rem; }
+
+/* Filter/sort bar shared by Browse and Curriculum. */
+.kb-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.5rem 0 0.75rem;
+  padding: 0.6rem 0.75rem;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.kb-controls-field { display: flex; align-items: center; gap: 0.35rem; min-width: 0; }
+.kb-controls-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; }
+.kb-controls select,
+.kb-controls input[type="search"] {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--card);
+  color: var(--fg);
+  min-width: 0;
+}
+.kb-controls input[type="search"] { min-width: 12rem; flex: 1 1 12rem; }
+.kb-controls-check { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.85rem; white-space: nowrap; }
+.kb-controls-spacer { flex: 1 1 auto; }
+.kb-controls-reset { font-size: 0.8rem; }
+.kb-controls-count { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
+@media (max-width: 640px) {
+  .kb-controls { gap: 0.4rem 0.5rem; padding: 0.5rem; }
+  .kb-controls input[type="search"] { flex-basis: 100%; min-width: 0; }
+  .kb-controls select,
+  .kb-controls input[type="search"] { min-height: 40px; }
+}
 
 @media (max-width: 640px) {
   .view-toggle-btn { padding: 0.4rem 0.65rem; font-size: 0.8rem; }
   .archive-course,
   .archive-topic { margin-left: 0.6rem; padding-left: 0.55rem; }
-  .curriculum-row { grid-template-columns: 120px repeat(var(--curriculum-cols, 3), minmax(140px, 1fr)); }
+  .curriculum-row { grid-template-columns: minmax(96px, 120px) repeat(var(--curriculum-cols, 3), minmax(124px, 1fr)); }
   /* Defect fix: never let a modal exceed the phone viewport (with breathing
      room). The .modal-card-tall (560px) and any min-content blowout would
      otherwise push the close button off-screen on narrow devices. */
@@ -2111,10 +2213,17 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; }
 .kb-examples-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.1rem; }
 .kb-browse { margin: 0.75rem 0 1rem; }
-.kb-browse-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.5rem; }
+/* `margin-right: auto` on the title rather than `justify-content: space-between`:
+   the whitespace between the two elements is an anonymous flex item, so
+   space-between distributed THREE items and parked "← All courses" in the
+   middle of the row. */
+.kb-browse-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+.kb-browse-head h3 { margin-right: auto; }
 .kb-browse-head h3 { margin: 0; font-size: 1rem; }
-.kb-browse-recent-label { display: inline-flex; align-items: center; gap: 0.35rem; color: var(--muted); font-size: 0.8rem; }
-.kb-browse-courses { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.6rem; }
+/* The course grid now tracks the page width instead of a fixed 180px minimum,
+   so a wide window packs more cards per row rather than stretching four of them. */
+.kb-browse-year-label { display: none; }
+.kb-browse-courses { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 210px), 1fr)); gap: 0.6rem; }
 .kb-course-card {
   display: flex; flex-direction: column; gap: 0.25rem; text-align: left;
   padding: 0.7rem 0.85rem; border-radius: 12px; cursor: pointer;

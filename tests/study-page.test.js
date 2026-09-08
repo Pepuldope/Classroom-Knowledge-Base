@@ -130,7 +130,7 @@ test("notes with no course or year still appear", () => {
 
 test("an empty or malformed bundle yields an empty matrix", () => {
   for (const bad of [null, undefined, {}, { notes: [] }, { notes: "nope" }]) {
-    assert.deepEqual(curriculumModel(bad), { years: [], rows: [] });
+    assert.deepEqual(curriculumModel(bad), { years: [], rows: [], allYears: [], totalRows: 0, filtered: false });
   }
 });
 

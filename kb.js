@@ -17,8 +17,8 @@
 import { highlightSnippet } from "./kb-highlight.js";
 import { renderLightMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
-import { renderCurriculum } from "./kb-curriculum.js";
-import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
+import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
+import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy } from "./study-progress.js";
@@ -175,11 +175,40 @@ export function kbSearchStateModel(value = {}) {
   };
 }
 
-/** Normalize the browser-local course/year selection used by Browse. */
+export const KB_BROWSE_GRID_SORTS = ["notes", "alpha", "recent"];
+export const KB_BROWSE_NOTE_SORTS = ["recency", "title", "course"];
+
+/**
+ * Normalize the browser-local Browse selection.
+ *
+ * `year` and `family` are corpus-wide and deliberately survive stepping into
+ * and back out of a course: the year control used to be created per-course and
+ * thrown away on the way back to the grid, which is why filtering by year never
+ * felt like it did anything. `q`, `topic`, `sort` and `recent` are scoped to the
+ * view that owns them.
+ */
 export function kbBrowseStateModel(value = {}) {
   const input = value && typeof value === "object" ? value : {};
   const text = (key) => typeof input[key] === "string" ? input[key].trim() : "";
-  return { course: text("course"), year: text("year") };
+  const gridSort = KB_BROWSE_GRID_SORTS.includes(input.gridSort) ? input.gridSort : "notes";
+  const noteSort = KB_BROWSE_NOTE_SORTS.includes(input.noteSort) ? input.noteSort : "recency";
+  return {
+    course: text("course"),
+    year: text("year"),
+    family: text("family"),
+    topic: text("topic"),
+    q: text("q"),
+    gridSort,
+    noteSort,
+    recent: input.recent === true,
+  };
+}
+
+/** True when nothing is filtering or re-sorting the current Browse view. */
+export function kbBrowseIsDefault(state, { inCourse = false } = {}) {
+  const s = kbBrowseStateModel(state);
+  if (s.year || s.q) return false;
+  return inCourse ? !s.topic && !s.recent && s.noteSort === "recency" : !s.family && s.gridSort === "notes";
 }
 
 function loadKbBrowseState() {
@@ -699,8 +728,33 @@ export function setStudyTab(requested) {
   return model.active;
 }
 
-function renderStudyCurriculum() {
-  renderCurriculum($("kbCurriculumGrid"), localKbBundle, {
+// Curriculum filter/sort state. Persisted like the Browse selection is, so
+// coming back to the tab does not silently drop the range you were reading.
+const KB_CURRICULUM_STATE_KEY = "cwa_kb_curriculum_state";
+
+function loadKbCurriculumState() {
+  try {
+    return curriculumControlsModel(JSON.parse(localStorage.getItem(KB_CURRICULUM_STATE_KEY) || "null"));
+  } catch { return curriculumControlsModel(); }
+}
+
+function saveKbCurriculumState(value) {
+  const state = curriculumControlsModel(value);
+  try { localStorage.setItem(KB_CURRICULUM_STATE_KEY, JSON.stringify(state)); } catch { /* private mode */ }
+  return state;
+}
+
+function renderStudyCurriculum(controls = loadKbCurriculumState()) {
+  const grid = $("kbCurriculumGrid");
+  // The search box is re-created on every render, so put the caret back where
+  // it was — otherwise typing a second character loses focus to the container.
+  const active = document.activeElement;
+  const restoreId = grid && active && grid.contains(active) ? active.id : "";
+  const caret = restoreId && typeof active.selectionStart === "number" ? active.selectionStart : null;
+
+  renderCurriculum(grid, localKbBundle, {
+    controls,
+    onControlsChange: (next) => renderStudyCurriculum(saveKbCurriculumState(next)),
     onOpenCourse: (course, year) => {
       // A chip is a way into the corpus, not a dead end: land on Browse with
       // that course already open.
@@ -708,6 +762,16 @@ function renderStudyCurriculum() {
       openCourse(course, year || "");
     },
   });
+
+  if (restoreId) {
+    const again = $(restoreId);
+    if (again) {
+      again.focus();
+      if (caret !== null && typeof again.setSelectionRange === "function") {
+        try { again.setSelectionRange(caret, caret); } catch { /* not a text input */ }
+      }
+    }
+  }
 }
 
 export function showKbView() {
@@ -1126,21 +1190,36 @@ export function wireKbEvents() {
   });
 
   // Browse-by-course: "back to all courses" returns to the course grid.
-  $("kbBrowseBack")?.addEventListener("click", () => {
-    const notesEl = $("kbBrowseNotes");
-    if (notesEl) notesEl.hidden = true;
-    loadBrowseCourses();
-    const back = $("kbBrowseBack");
-    if (back) back.hidden = true;
-    const yearSelect = $("kbBrowseYear");
-    const yearLabel = $("kbBrowseYearLabel");
-    if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
-    if (yearLabel) yearLabel.hidden = true;
-    const recent = $("kbBrowseRecent");
-    const recentLabel = $("kbBrowseRecentLabel");
-    if (recent) recent.checked = false;
-    if (recentLabel) recentLabel.hidden = true;
-    saveKbBrowseState();
+  $("kbBrowseBack")?.addEventListener("click", backToBrowseCourses);
+
+  // Browse filter/sort bar. Every control writes the shared state and re-renders
+  // whichever view is showing, so the grid and the in-course list stay in step
+  // instead of each owning a private copy of the year.
+  const browseUpdate = (patch) => {
+    kbBrowseState = saveKbBrowseState({ ...kbBrowseState, ...patch });
+    refreshBrowse();
+  };
+  const browseSearch = $("kbBrowseSearch");
+  // Debounced: filtering re-renders the whole list, and a large course would
+  // otherwise re-render on every keystroke.
+  let browseSearchTimer = null;
+  browseSearch?.addEventListener("input", () => {
+    clearTimeout(browseSearchTimer);
+    browseSearchTimer = setTimeout(() => browseUpdate({ q: browseSearch.value }), 150);
+  });
+  $("kbBrowseYear")?.addEventListener("change", (e) => browseUpdate({ year: e.target.value }));
+  $("kbBrowseFamily")?.addEventListener("change", (e) => browseUpdate({ family: e.target.value }));
+  $("kbBrowseTopic")?.addEventListener("change", (e) => browseUpdate({ topic: e.target.value }));
+  $("kbBrowseSort")?.addEventListener("change", (e) => {
+    browseUpdate(kbCurrentCourse ? { noteSort: e.target.value } : { gridSort: e.target.value });
+  });
+  $("kbBrowseRecent")?.addEventListener("change", (e) => browseUpdate({ recent: e.target.checked }));
+  $("kbBrowseReset")?.addEventListener("click", () => {
+    // Reset clears the filters, not your place: the course you are reading
+    // stays open.
+    kbBrowseState = saveKbBrowseState({ ...kbBrowseStateModel(), course: kbCurrentCourse });
+    refreshBrowse();
+    $("kbBrowseSearch")?.focus();
   });
 
   // Keyboard shortcuts (agent-proposed backlog):
@@ -1661,21 +1740,94 @@ function renderExamples() {
   wrap.hidden = false;
 }
 
+// Which Browse view is showing, and the filters applied to it. One state
+// object drives both the course grid and the in-course note list; the controls
+// bar is a pure function of it, so nothing can drift the way the old
+// per-course year <select> did.
+let kbBrowseState = kbBrowseStateModel();
+
+function setBrowseControlsMode(inCourse) {
+  const search = $("kbBrowseSearch");
+  if (search) {
+    search.placeholder = inCourse ? "Filter notes…" : "Filter courses…";
+    search.setAttribute("aria-label", inCourse ? "Filter notes by title" : "Filter courses by name");
+  }
+  const familyField = $("kbBrowseFamilyField");
+  if (familyField) familyField.hidden = inCourse;
+  const topicField = $("kbBrowseTopicField");
+  if (topicField) topicField.hidden = !inCourse;
+  const recentLabel = $("kbBrowseRecentLabel");
+  if (recentLabel) recentLabel.hidden = !inCourse;
+  const title = $("kbBrowseTitle");
+  if (title) title.textContent = inCourse ? kbBrowseState.course || "Course" : "Browse by course";
+
+  const sort = $("kbBrowseSort");
+  if (sort) {
+    const options = inCourse
+      ? [["recency", "Newest first"], ["title", "By title"], ["course", "By topic"]]
+      : [["notes", "Most notes"], ["alpha", "A–Z"], ["recent", "Newest year"]];
+    sort.innerHTML = "";
+    for (const [value, label] of options) {
+      const o = document.createElement("option");
+      o.value = value;
+      o.textContent = label;
+      sort.appendChild(o);
+    }
+    sort.value = inCourse ? kbBrowseState.noteSort : kbBrowseState.gridSort;
+  }
+}
+
+/** Fill a <select> with facet values, keeping the current choice if it survives. */
+function fillFacetSelect(select, values, anyLabel, current) {
+  if (!select) return "";
+  select.innerHTML = "";
+  const any = document.createElement("option");
+  any.value = "";
+  any.textContent = anyLabel;
+  select.appendChild(any);
+  for (const value of values) {
+    const o = document.createElement("option");
+    o.value = value;
+    o.textContent = value;
+    select.appendChild(o);
+  }
+  const kept = values.includes(current) ? current : "";
+  select.value = kept;
+  // A facet with nothing to choose between is noise, not a control.
+  const field = select.closest(".kb-controls-field");
+  if (field && field.id) field.hidden = values.length === 0;
+  return kept;
+}
+
+function syncBrowseControls({ inCourse, shown, total }) {
+  const search = $("kbBrowseSearch");
+  if (search && search.value !== kbBrowseState.q) search.value = kbBrowseState.q;
+  const recent = $("kbBrowseRecent");
+  if (recent) recent.checked = inCourse && kbBrowseState.recent;
+
+  const count = $("kbBrowseCount");
+  if (count) {
+    const noun = inCourse ? "note" : "course";
+    count.textContent = shown === total
+      ? `${total} ${noun}${total === 1 ? "" : "s"}`
+      : `${shown} of ${total} ${noun}s`;
+  }
+  const reset = $("kbBrowseReset");
+  if (reset) reset.hidden = kbBrowseIsDefault(kbBrowseState, { inCourse });
+}
+
 function showBrowsePanel({ restore = true } = {}) {
   renderExamples();
   const panel = $("kbBrowse");
   if (panel) panel.hidden = false;
-  // Restore the last local course/year when it still exists in this bundle.
+  kbBrowseState = restore ? loadKbBrowseState() : kbBrowseStateModel();
   const notesEl = $("kbBrowseNotes");
   if (notesEl) notesEl.hidden = true;
-  const yearSelect = $("kbBrowseYear");
-  const yearLabel = $("kbBrowseYearLabel");
-  if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
-  if (yearLabel) yearLabel.hidden = true;
-  const saved = restore ? loadKbBrowseState() : kbBrowseStateModel();
-  const hasCourse = restore && saved.course && Array.isArray(localKbBundle?.notes) && localKbBundle.notes.some((note) => (note?.course || "Uncategorised") === saved.course);
-  if (hasCourse) openCourse(saved.course, saved.year);
-  else loadBrowseCourses();
+  // Restore the last local course when it still exists in this bundle.
+  const hasCourse = restore && kbBrowseState.course && Array.isArray(localKbBundle?.notes)
+    && localKbBundle.notes.some((note) => (note?.course || "Uncategorised") === kbBrowseState.course);
+  if (hasCourse) openCourse(kbBrowseState.course, kbBrowseState.year);
+  else { kbBrowseState.course = ""; loadBrowseCourses(); }
 }
 
 function hideBrowsePanel() {
@@ -1685,25 +1837,54 @@ function hideBrowsePanel() {
   if (ex) ex.hidden = true;
   const back = $("kbBrowseBack");
   if (back) back.hidden = true;
-  const yearSelect = $("kbBrowseYear");
-  const yearLabel = $("kbBrowseYearLabel");
-  if (yearSelect) { yearSelect.hidden = true; yearSelect.value = ""; }
-  if (yearLabel) yearLabel.hidden = true;
-  const recent = $("kbBrowseRecent");
-  const recentLabel = $("kbBrowseRecentLabel");
-  if (recent) recent.checked = false;
-  if (recentLabel) recentLabel.hidden = true;
+}
+
+/** Back out of a course to the grid, keeping the corpus-wide filters. */
+function backToBrowseCourses() {
+  const notesEl = $("kbBrowseNotes");
+  if (notesEl) notesEl.hidden = true;
+  const back = $("kbBrowseBack");
+  if (back) back.hidden = true;
+  kbCurrentCourse = "";
+  // Course-scoped filters do not survive leaving the course; year and type do.
+  kbBrowseState = saveKbBrowseState({ ...kbBrowseState, course: "", topic: "", q: "", recent: false });
+  loadBrowseCourses();
 }
 
 async function loadBrowseCourses() {
   const list = $("kbBrowseCourses");
   if (!list) return;
+  setBrowseControlsMode(false);
   list.hidden = false;
   list.innerHTML = `<div class="empty">Loading courses…</div>`;
   try {
-    const d = browseKbBundle(localKbBundle);
-    const courses = Array.isArray(d.courses) ? d.courses : [];
-    if (!courses.length) { list.innerHTML = `<div class="empty">No courses yet — the knowledge base is empty.</div>`; return; }
+    // Facets come from the whole corpus, not the filtered slice, so choosing a
+    // year never removes the option that would take you back.
+    const keptYear = fillFacetSelect($("kbBrowseYear"), browseYearFacet(localKbBundle), "All years", kbBrowseState.year);
+    const keptFamily = fillFacetSelect($("kbBrowseFamily"), browseFamilyFacet(localKbBundle), "All types", kbBrowseState.family);
+    kbBrowseState = saveKbBrowseState({ ...kbBrowseState, year: keptYear, family: keptFamily });
+
+    const unfiltered = browseKbBundle(localKbBundle, "", {}).courses || [];
+    const d = browseKbBundle(localKbBundle, "", {
+      year: kbBrowseState.year,
+      family: kbBrowseState.family,
+      courseSort: kbBrowseState.gridSort,
+    });
+    const needle = kbBrowseState.q.toLowerCase();
+    const courses = (Array.isArray(d.courses) ? d.courses : [])
+      .filter((c) => !needle || String(c.course).toLowerCase().includes(needle));
+
+    syncBrowseControls({ inCourse: false, shown: courses.length, total: unfiltered.length });
+
+    if (!unfiltered.length) { list.innerHTML = `<div class="empty">No courses yet — the knowledge base is empty.</div>`; return; }
+    if (!courses.length) {
+      list.innerHTML = "";
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No courses match these filters.";
+      list.appendChild(empty);
+      return;
+    }
     list.innerHTML = "";
     for (const c of courses) {
       const card = document.createElement("button");
@@ -1729,51 +1910,58 @@ async function loadBrowseCourses() {
 
 async function openCourse(course, year = "") {
   kbCurrentCourse = String(course || "").trim();
-  let selectedYear = String(year || "").trim();
-  saveKbBrowseState({ course: kbCurrentCourse, year: selectedYear });
+  setBrowseControlsMode(true);
   const list = $("kbBrowseCourses");
   const notesEl = $("kbBrowseNotes");
   const back = $("kbBrowseBack");
-  const yearSelect = $("kbBrowseYear");
-  const yearLabel = $("kbBrowseYearLabel");
-  const recent = $("kbBrowseRecent");
-  const recentLabel = $("kbBrowseRecentLabel");
-  if (yearSelect) {
-    const years = browseYearFacet(localKbBundle, kbCurrentCourse);
-    yearSelect.innerHTML = `<option value="">All years</option>`;
-    for (const value of years) {
-      const option = document.createElement("option");
-      option.value = value;
-      option.textContent = value;
-      yearSelect.appendChild(option);
-    }
-    yearSelect.value = years.includes(selectedYear) ? selectedYear : "";
-    selectedYear = yearSelect.value;
-    saveKbBrowseState({ course: kbCurrentCourse, year: selectedYear });
-    yearSelect.hidden = years.length === 0;
-    if (yearLabel) yearLabel.hidden = years.length === 0;
-    yearSelect.onchange = () => openCourse(kbCurrentCourse, yearSelect.value);
-  }
-  if (recent) {
-    recent.hidden = false;
-    if (recentLabel) recentLabel.hidden = false;
-    recent.onchange = () => openCourse(kbCurrentCourse, yearSelect?.value || selectedYear);
-  }
+
+  // Entering a course from the Curriculum matrix carries a year with it; a
+  // plain click from the grid keeps whatever year filter is already set.
+  const requestedYear = String(year || "").trim();
+  kbBrowseState = kbBrowseStateModel({
+    ...kbBrowseState,
+    course: kbCurrentCourse,
+    year: requestedYear || kbBrowseState.year,
+  });
+
+  // Year options narrow to this course; type is a grid-level facet only.
+  const courseYears = browseYearFacet(localKbBundle, kbCurrentCourse);
+  const keptYear = fillFacetSelect($("kbBrowseYear"), courseYears, "All years", kbBrowseState.year);
+  kbBrowseState.year = keptYear;
+  const topics = browseTopicFacet(localKbBundle, kbCurrentCourse, keptYear);
+  kbBrowseState.topic = fillFacetSelect($("kbBrowseTopic"), topics, "All topics", kbBrowseState.topic);
+  kbBrowseState = saveKbBrowseState(kbBrowseState);
+
+  const title = $("kbBrowseTitle");
+  if (title) title.textContent = kbCurrentCourse;
   if (list) list.hidden = true;
   if (notesEl) { notesEl.hidden = false; notesEl.innerHTML = `<div class="empty">Loading ${course}…</div>`; }
   if (back) back.hidden = false;
+
   try {
-    const d = browseKbBundle(localKbBundle, course, {
-      year: selectedYear,
-      recentDays: recent?.checked ? 7 : 0,
+    const scope = {
+      year: kbBrowseState.year,
+      topic: kbBrowseState.topic,
+      sort: kbBrowseState.noteSort,
+      recentDays: kbBrowseState.recent ? 7 : 0,
       today: todayIso(),
       progress: loadStudyProgress(),
-    });
-    const notes = Array.isArray(d.notes) ? d.notes : [];
+    };
+    // Total for the counter is the course before any filter, so "3 of 47" is
+    // honest about how much the filters are hiding.
+    const total = (browseKbBundle(localKbBundle, kbCurrentCourse, {}).notes || []).length;
+    const d = browseKbBundle(localKbBundle, kbCurrentCourse, scope);
+    const needle = kbBrowseState.q.toLowerCase();
+    const notes = (Array.isArray(d.notes) ? d.notes : [])
+      .filter((n) => !needle || String(n.t || "").toLowerCase().includes(needle)
+        || String(n.topic || "").toLowerCase().includes(needle));
+
+    syncBrowseControls({ inCourse: true, shown: notes.length, total });
+
     if (!notes.length) {
       if (notesEl) {
-        if (recent?.checked) {
-          const emptyState = kbBrowseRecentEmptyStateModel({ course, year: selectedYear });
+        if (kbBrowseState.recent) {
+          const emptyState = kbBrowseRecentEmptyStateModel({ course, year: kbBrowseState.year });
           notesEl.innerHTML = "";
           const message = document.createElement("div");
           message.className = "empty";
@@ -1784,12 +1972,18 @@ async function openCourse(course, year = "") {
           recover.textContent = emptyState.actionLabel;
           recover.setAttribute("aria-label", emptyState.actionAriaLabel);
           recover.addEventListener("click", () => {
-            recent.checked = false;
-            openCourse(kbCurrentCourse, yearSelect?.value || selectedYear);
+            kbBrowseState = saveKbBrowseState({ ...kbBrowseState, recent: false });
+            openCourse(kbCurrentCourse);
           });
           notesEl.append(message, recover);
         } else {
-          notesEl.innerHTML = `<div class="empty">No notes in ${course}.</div>`;
+          notesEl.innerHTML = "";
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          empty.textContent = kbBrowseIsDefault(kbBrowseState, { inCourse: true })
+            ? `No notes in ${course}.`
+            : `No notes in ${course} match these filters.`;
+          notesEl.appendChild(empty);
         }
       }
       return;
@@ -1858,6 +2052,12 @@ async function openCourse(course, year = "") {
   } catch (e) {
     if (notesEl) notesEl.innerHTML = `<div class="empty">Couldn't load this course (${e.message}).</div>`;
   }
+}
+
+/** Re-render whichever Browse view is showing, from the current state. */
+function refreshBrowse() {
+  if (kbCurrentCourse) openCourse(kbCurrentCourse);
+  else loadBrowseCourses();
 }
 
 // Render a compact related-notes preview inside a search-result card.

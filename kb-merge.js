@@ -61,23 +61,62 @@ function newerOf(a, b) {
 }
 
 /**
+ * A note's path with its leading school-year segment removed.
+ *
+ * Every ingestion path names the year first ("2024-25/vault/<course>/…"), so a
+ * note whose course is re-filed into a different year gets a brand-new path and
+ * looks, to path dedupe, like a brand-new note. The rest of the path — course,
+ * topic, title — is the note's real identity.
+ *
+ * Returns null when the path does not start with a year segment, so callers
+ * fall back to plain path dedupe rather than guessing.
+ */
+export function yearlessPath(path) {
+  const value = String(path == null ? "" : path);
+  const slash = value.indexOf("/");
+  if (slash <= 0) return null;
+  const head = value.slice(0, slash);
+  if (!/^(\d{4}-\d{2}|undated)$/.test(head)) return null;
+  return value.slice(slash + 1);
+}
+
+/**
  * Merge `incoming` into `base`, returning a new bundle. Incoming notes win on a
  * path collision, so the freshest ingestion is authoritative for anything it
  * covers while everything it does not cover survives.
+ *
+ * An incoming note also wins over a stored note that is the SAME note filed
+ * under a different year — same course, topic and title, different leading year
+ * segment. Without that, correcting a course's year (archive-builder.js now
+ * reads Classroom's `section` field instead of guessing from the creation date)
+ * would leave the old copy behind and show one course in two Curriculum
+ * columns at once. Re-ingestion re-files a note; it does not clone it.
  */
 export function mergeBundles(base, incoming) {
   const left = base && typeof base === "object" ? base : EMPTY;
   const right = incoming && typeof incoming === "object" ? incoming : EMPTY;
 
   const byPath = new Map();
+  // yearless path -> the path currently holding that note, so a re-filed note
+  // can evict the copy stored under its old year.
+  const identityToPath = new Map();
   let pathless = 0;
   const absorb = (note) => {
     if (!note || typeof note !== "object") return;
     // Give every note a family so the class-type facet is populated across the
     // whole corpus, without overwriting one that was imported.
     const enriched = note.family ? note : { ...note, family: deriveFamily(note.course) };
-    if (note.p != null && note.p !== "") byPath.set(note.p, enriched);
-    else byPath.set(`__pathless_${pathless++}`, enriched);
+    if (note.p == null || note.p === "") {
+      byPath.set(`__pathless_${pathless++}`, enriched);
+      return;
+    }
+    const identity = yearlessPath(note.p);
+    if (identity !== null) {
+      const previous = identityToPath.get(identity);
+      if (previous !== undefined && previous !== note.p) byPath.delete(previous);
+      identityToPath.set(identity, note.p);
+    }
+    byPath.set(note.p, enriched);
   };
   notesOf(left).forEach(absorb);
   notesOf(right).forEach(absorb);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { browseKbBundle } from "../kb-local.js";
+import { browseKbBundle, sortBrowseCourses } from "../kb-local.js";
 
 const bundle = {
   version: 1,
@@ -79,3 +79,55 @@ test("browseKbBundle can filter to notes opened in the last seven days", () => {
 
   assert.deepEqual(result.notes.map((note) => note.noteIndex), [0, 2]);
 });
+
+test("browse facets feed the filter controls", async () => {
+  const { browseFamilyFacet, browseTopicFacet, sortBrowseCourses } = await import("../kb-local.js");
+  const bundle = {
+    notes: [
+      { course: "NaE Y3 3.T", y: "2025-26", topic: "Sprint 1", family: "Business" },
+      { course: "NaE Y3 3.T", y: "2025-26", topic: "Sprint 2", family: "Business" },
+      { course: "NaE Y3 3.T", y: "2024-25", topic: "Old", family: "Business" },
+      { course: "Matematika 1", y: "2023-24", topic: "Algebra", family: "Science/Math" },
+    ],
+  };
+  assert.deepEqual(browseFamilyFacet(bundle), ["Business", "Science/Math"]);
+  assert.deepEqual(browseTopicFacet(bundle, "NaE Y3 3.T"), ["Old", "Sprint 1", "Sprint 2"]);
+  // Topics narrow with the year, so the list only offers what is reachable.
+  assert.deepEqual(browseTopicFacet(bundle, "NaE Y3 3.T", "2025-26"), ["Sprint 1", "Sprint 2"]);
+  assert.deepEqual(browseFamilyFacet({ notes: [] }), []);
+});
+
+test("the course grid can be sorted by volume, name, or most recent year", () => {
+  const courses = [
+    { course: "Old Big", count: 40, years: ["2023-24"] },
+    { course: "Current", count: 9, years: ["2025-26"] },
+    { course: "Middle", count: 20, years: ["2024-25"] },
+  ];
+  assert.deepEqual(sortBrowseCoursesNames(courses, "notes"), ["Old Big", "Middle", "Current"]);
+  assert.deepEqual(sortBrowseCoursesNames(courses, "alpha"), ["Current", "Middle", "Old Big"]);
+  // The whole point: what you are taking now, not what has the most notes.
+  assert.deepEqual(sortBrowseCoursesNames(courses, "recent"), ["Current", "Middle", "Old Big"]);
+  // An unknown sort falls back rather than returning an arbitrary order.
+  assert.deepEqual(sortBrowseCoursesNames(courses, "sideways"), ["Old Big", "Middle", "Current"]);
+});
+
+test("filtering by topic scopes a course's notes", () => {
+  const bundle = {
+    notes: [
+      { t: "A", course: "NaE", y: "2025-26", topic: "Sprint 1", p: "a" },
+      { t: "B", course: "NaE", y: "2025-26", topic: "Sprint 2", p: "b" },
+    ],
+  };
+  const all = browseKbBundle(bundle, "NaE", {});
+  assert.equal(all.notes.length, 2);
+  const scoped = browseKbBundle(bundle, "NaE", { topic: "Sprint 2" });
+  assert.deepEqual(scoped.notes.map((n) => n.t), ["B"]);
+  // noteIndex still points into the original notes array, which is what the
+  // result cards use to open a note.
+  assert.equal(scoped.notes[0].noteIndex, 1);
+});
+
+/** Sort helper wrapper: assert on names, which is what the grid renders. */
+function sortBrowseCoursesNames(courses, sort) {
+  return sortBrowseCourses(courses, sort).map((c) => c.course);
+}

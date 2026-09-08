@@ -867,6 +867,91 @@ try {
   });
 
   // --- No uncaught page errors throughout ---
+  // --- Browse and Curriculum filter/sort controls -------------------------
+  // These are the controls the owner asked for; without a check here the gate
+  // passes whether or not the bar is even in the DOM (it was missing from the
+  // harness page entirely until it was synced with index.html).
+  await check("browse course grid filters by year and re-sorts", async () => {
+    await page.click('.study-tab-btn[data-tab="browse"]');
+    const back = page.locator("#kbBrowseBack");
+    if (await back.count() && await back.isVisible()) await back.click();
+    await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 8000 });
+
+    const all = await page.locator("#kbBrowseCourses .kb-course-card").count();
+    assert.ok(all >= 2, `expected several courses, got ${all}`);
+
+    // Year is a real corpus-wide facet on the GRID, which is the part that
+    // previously had no controls at all.
+    await page.selectOption("#kbBrowseYear", "2024-25");
+    await page.waitForFunction(
+      (n) => document.querySelectorAll("#kbBrowseCourses .kb-course-card").length < n,
+      all, { timeout: 5000 },
+    );
+    const count = await page.locator("#kbBrowseCount").textContent();
+    assert.match(count, /of \d+ courses/, `expected an "N of M" count, got "${count}"`);
+
+    // Reset restores everything and hides itself.
+    await page.locator("#kbBrowseReset").click();
+    await page.waitForFunction(
+      (n) => document.querySelectorAll("#kbBrowseCourses .kb-course-card").length === n,
+      all, { timeout: 5000 },
+    );
+    assert.equal(await page.locator("#kbBrowseReset").isVisible(), false, "Reset should hide once filters are cleared");
+
+    await page.selectOption("#kbBrowseSort", "alpha");
+    await page.waitForTimeout(200);
+    const names = await page.locator("#kbBrowseCourses .kb-course-name").allTextContents();
+    assert.deepEqual(names, [...names].sort((a, b) => a.localeCompare(b)), "A-Z sort should order the grid");
+    await page.selectOption("#kbBrowseSort", "notes");
+  });
+
+  await check("the year filter survives stepping into a course", async () => {
+    // The old per-course <select> was rebuilt on entry and discarded on the way
+    // back out, which is why filtering by year never seemed to hold.
+    await page.selectOption("#kbBrowseYear", "2024-25");
+    await page.waitForTimeout(200);
+    await page.locator("#kbBrowseCourses .kb-course-card").first().click();
+    await page.waitForFunction(() => !document.querySelector("#kbBrowseNotes")?.hidden, { timeout: 5000 });
+    assert.equal(await page.locator("#kbBrowseYear").inputValue(), "2024-25", "year should carry into the course");
+    // The controls swap to the in-course set.
+    assert.equal(await page.locator("#kbBrowseTopicField").isVisible(), true, "topic filter belongs to the course view");
+    assert.equal(await page.locator("#kbBrowseFamilyField").isVisible(), false, "type filter is grid-only");
+    await page.locator("#kbBrowseBack").click();
+    await page.waitForSelector("#kbBrowseCourses .kb-course-card", { timeout: 5000 });
+    assert.equal(await page.locator("#kbBrowseYear").inputValue(), "2024-25", "year should survive going back");
+    await page.locator("#kbBrowseReset").click();
+  });
+
+  await check("curriculum filters, sorts, and keeps its subject column visible", async () => {
+    await page.click('.study-tab-btn[data-tab="curriculum"]');
+    await page.waitForSelector("#kbCurriculumGrid .curriculum-row", { timeout: 8000 });
+    const rows = await page.locator("#kbCurriculumGrid .curriculum-row:not(.curriculum-header)").count();
+    assert.ok(rows >= 1, "expected curriculum rows");
+
+    // The subject column must stay put when the grid scrolls sideways.
+    const sticky = await page.locator("#kbCurriculumGrid .curriculum-row-label").first()
+      .evaluate((el) => getComputedStyle(el).position);
+    assert.equal(sticky, "sticky", "the subject column should be sticky");
+
+    // Filtering to nothing must be an empty grid, not a broken one.
+    await page.fill("#kbCurriculumSearch", "zzzznope");
+    await page.waitForFunction(
+      () => document.querySelectorAll("#kbCurriculumGrid .curriculum-row:not(.curriculum-header)").length === 0,
+      { timeout: 5000 },
+    );
+    await page.fill("#kbCurriculumSearch", "");
+    await page.waitForFunction(
+      (n) => document.querySelectorAll("#kbCurriculumGrid .curriculum-row:not(.curriculum-header)").length === n,
+      rows, { timeout: 5000 },
+    );
+
+    // Typing must not lose the caret — the bar is re-rendered on every change.
+    await page.fill("#kbCurriculumSearch", "a");
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => document.activeElement?.id), "kbCurriculumSearch", "focus should stay in the filter box");
+    await page.fill("#kbCurriculumSearch", "");
+  });
+
   await check("no uncaught page errors during the run", async () => {
     assert.equal(pageErrors.length, 0, "page errors: " + pageErrors.join(" | "));
   });

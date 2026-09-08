@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mergeBundles, migrateArchiveBundle } from "../kb-merge.js";
+import { mergeBundles, migrateArchiveBundle, yearlessPath } from "../kb-merge.js";
 
 const note = (over = {}) => ({
   p: "2024-25/vault/Math/Algebra/quadratics",
@@ -169,4 +169,38 @@ test("an absent or empty Archive bundle leaves the KB untouched", () => {
   assert.equal(migrateArchiveBundle(null, existing), existing);
   assert.equal(migrateArchiveBundle(bundle([]), existing), existing);
   assert.equal(migrateArchiveBundle(null, null), null);
+});
+
+test("re-filing a course into the corrected year moves the note, not clones it", () => {
+  // The stored corpus was built when NaE Y3 was wrongly filed under 2024-25.
+  const stored = {
+    version: 1,
+    notes: [{ p: "2024-25/vault/NaE Y3 3.T/Sprint 1/Pitch", t: "Pitch", course: "NaE Y3 3.T", y: "2024-25", topic: "Sprint 1" }],
+  };
+  // A rebuild now resolves the year from the course's section field.
+  const rebuilt = {
+    version: 1,
+    notes: [{ p: "2025-26/vault/NaE Y3 3.T/Sprint 1/Pitch", t: "Pitch", course: "NaE Y3 3.T", y: "2025-26", topic: "Sprint 1" }],
+  };
+  const merged = mergeBundles(stored, rebuilt);
+  assert.equal(merged.notes.length, 1, "the note moved years; it is not two notes");
+  assert.equal(merged.notes[0].y, "2025-26");
+  assert.deepEqual(merged.years, ["2025-26"], "the stale year leaves the facet entirely");
+});
+
+test("a genuinely different note in another year still survives", () => {
+  // Same subject, different course name and title: two real notes, two years.
+  const a = { version: 1, notes: [{ p: "2024-25/vault/NaE 2.T/Sprint 1/Pitch", t: "Pitch", course: "NaE 2.T", y: "2024-25" }] };
+  const b = { version: 1, notes: [{ p: "2025-26/vault/NaE Y3 3.T/Sprint 1/Pitch", t: "Pitch", course: "NaE Y3 3.T", y: "2025-26" }] };
+  assert.equal(mergeBundles(a, b).notes.length, 2);
+});
+
+test("paths without a leading year segment fall back to plain path dedupe", () => {
+  const a = { version: 1, notes: [{ p: "notes/thing", t: "A", course: "X", y: "2024-25" }] };
+  const b = { version: 1, notes: [{ p: "other/thing", t: "B", course: "X", y: "2025-26" }] };
+  assert.equal(mergeBundles(a, b).notes.length, 2, "'notes' and 'other' are not year segments");
+  assert.equal(yearlessPath("2024-25/vault/a/b"), "vault/a/b");
+  assert.equal(yearlessPath("undated/vault/a/b"), "vault/a/b");
+  assert.equal(yearlessPath("vault/a/b"), null);
+  assert.equal(yearlessPath("nosl4sh"), null);
 });

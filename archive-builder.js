@@ -8,7 +8,7 @@
 // the resulting bundle is handed back to the caller to persist locally
 // (see archive.js's storeArchiveBundle). Nothing is ever POSTed anywhere.
 //
-// `schoolYearOf`, `subjectKeyOf` and `bundleFromRaw` are pure and DOM-free so
+// `courseSchoolYear`, `subjectKeyOf` and `bundleFromRaw` are pure and DOM-free so
 // they're node-testable, mirroring archive.js's own pure/impure split.
 
 import { foldText } from "./archive.js";
@@ -25,17 +25,63 @@ const COURSE_CONCURRENCY = 4;
 // ---------------------------------------------------------------------------
 
 /**
- * Slovak school-year string ("YYYY-YY") for a Classroom `creationTime`.
- * Boundary: Aug–Dec belongs to `thatYear-(thatYear+1)`, Jan–Jul to
- * `(thatYear-1)-thatYear` (a course set up in August already belongs to the
- * school year starting that September).
+ * Slovak school-year string ("YYYY-YY") inferred from a Classroom `creationTime`.
+ *
+ * Last resort only — see `courseSchoolYear`. A creation date is weak evidence:
+ * teachers set courses up whenever they please, and the ones set up over the
+ * summer for the coming autumn are exactly the ones that land wrong.
+ *
+ * Boundary: July onwards belongs to `thatYear-(thatYear+1)`. July rather than
+ * August or September because summer setup is the common case and the school
+ * year ends in June, so nothing real is created in July for the year just
+ * finished. Two of the owner's own courses ("NaE Y3 3.T", created 1 July; and
+ * "MATURITA INFO Y4", created 18 June) were filed a year early under the old
+ * August boundary — June still needs the `section` field to come out right,
+ * which is why that is consulted first.
  */
 export function schoolYearOf(creationTime) {
   const d = new Date(creationTime);
   const y = d.getUTCFullYear();
   const m = d.getUTCMonth() + 1; // 1-12
-  const startYear = m >= 8 ? y : y - 1;
+  const startYear = m >= 7 ? y : y - 1;
   return `${startYear}-${String((startYear + 1) % 100).padStart(2, "0")}`;
+}
+
+/**
+ * School year stated outright in a course's `section` (or name): "2025/26",
+ * "2026/2027", "2025-26". Returns null when the text does not name one.
+ *
+ * This mirrors `schoolYearFromSection` in School Backup's assign-years.mjs.
+ * That pipeline has always preferred the stated year over the inferred one;
+ * this module did not, which is the entire reason a summer-created course
+ * showed up one column to the left in the Curriculum matrix.
+ *
+ * The two years must be consecutive. "Class 2027" and "Stáže - class of 2027"
+ * name a graduating cohort, not a school year, and must not match.
+ */
+export function schoolYearFromSection(text) {
+  const m = String(text == null ? "" : text).match(/\b(20\d{2})\s*[/\u2013\u2014-]\s*(\d{2}|\d{4})\b/);
+  if (!m) return null;
+  const start = Number(m[1]);
+  const endRaw = m[2];
+  const end = endRaw.length === 4 ? Number(endRaw) : Number(String(start + 1).slice(0, 2) + endRaw);
+  if (end !== start + 1) return null;
+  return `${start}-${String(end % 100).padStart(2, "0")}`;
+}
+
+/**
+ * The school year a Classroom course belongs to.
+ *
+ * Stated beats inferred: the `section` field, then the course name, then the
+ * creation date. Classroom's own API returns `section` on every course in the
+ * default `courses.list` response, so this costs nothing extra to read.
+ */
+export function courseSchoolYear(course) {
+  return (
+    schoolYearFromSection(course?.section) ||
+    schoolYearFromSection(course?.name) ||
+    schoolYearOf(course?.creationTime)
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -201,7 +247,7 @@ export function bundleFromRaw(raw) {
   const courseList = Array.isArray(raw.courses) ? raw.courses : [];
 
   for (const course of courseList) {
-    const year = schoolYearOf(course.creationTime);
+    const year = courseSchoolYear(course);
     const data = (raw.courseData && raw.courseData[course.id]) || {};
     const topics = Array.isArray(data.topics) ? data.topics : [];
     const topicNameById = new Map(topics.map((t) => [t.topicId, t.name]));
