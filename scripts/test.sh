@@ -231,6 +231,16 @@ node --test tests/kb-storage-hygiene.test.js
 STORAGE_OK=$?
 if [ "$STORAGE_OK" -ne 0 ]; then echo "storage hygiene tests FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Planner card model tests"
+node --test tests/planner-cards.test.js
+PLANNER_CARDS_OK=$?
+if [ "$PLANNER_CARDS_OK" -ne 0 ]; then echo "planner card tests FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Mobile session resume e2e"
+BASE_URL="http://localhost:$PORT" node scripts/mobile_session_resume_test.mjs
+SESSION_RESUME_OK=$?
+if [ "$SESSION_RESUME_OK" -ne 0 ]; then echo "mobile session resume e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Assignment panel close e2e"
 BASE_URL="http://localhost:$PORT" node scripts/assignment_panel_close_test.mjs
 PANEL_CLOSE_OK=$?

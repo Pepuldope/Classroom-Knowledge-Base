@@ -70,3 +70,25 @@ export async function clearAuthSession() {
   clearLegacyToken();
   await idbDelete(AUTH_SESSION_ID).catch(() => {});
 }
+
+/**
+ * Whether a returning page needs its session re-checked before it is used.
+ *
+ * A phone does not reload the page when you switch away and come back: it
+ * freezes it and restores it (bfcache), so no boot code runs, no timer fired
+ * while it was frozen, and the access token may well have expired in the
+ * meantime. The first Classroom call then 401s, and the recovery from there is
+ * what the user experiences as "it wants me to sign in".
+ *
+ * `persisted` is `PageTransitionEvent.persisted` — true only for a bfcache
+ * restore. A tab merely becoming visible is checked too, but only when the
+ * token is at or near expiry, so ordinary tab switching costs nothing.
+ */
+export function sessionResumeModel({ persisted = false, visible = true, expiresAt = 0, now = Date.now(), skewMs = 60_000 } = {}) {
+  if (!visible) return { recheck: false, reason: "hidden" };
+  const expiry = Number(expiresAt);
+  const expired = !Number.isFinite(expiry) || expiry - skewMs <= now;
+  if (persisted) return { recheck: true, reason: expired ? "restored-expired" : "restored" };
+  if (expired) return { recheck: true, reason: "expired" };
+  return { recheck: false, reason: "fresh" };
+}

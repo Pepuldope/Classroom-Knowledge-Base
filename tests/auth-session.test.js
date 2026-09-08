@@ -61,3 +61,20 @@ test("oauth revoke clears the refresh cookie when no browser credential is prese
     globalThis.fetch = originalFetch;
   }
 });
+
+test("a page coming back from the phone's freezer re-checks its session", async () => {
+  const { sessionResumeModel } = await import("../auth-session.js");
+  const now = Date.parse("2026-09-08T12:00:00Z");
+  // A bfcache restore always re-checks: no boot code ran and no refresh timer
+  // fired while the page was frozen, so nothing else would have noticed.
+  assert.equal(sessionResumeModel({ persisted: true, expiresAt: now + 30 * 60000, now }).recheck, true);
+  assert.equal(sessionResumeModel({ persisted: true, expiresAt: now - 60000, now }).reason, "restored-expired");
+  // Ordinary tab switching costs nothing while the token is good...
+  assert.equal(sessionResumeModel({ persisted: false, expiresAt: now + 30 * 60000, now }).recheck, false);
+  // ...but a token at or near expiry is re-checked before it is used.
+  assert.equal(sessionResumeModel({ persisted: false, expiresAt: now - 1, now }).recheck, true);
+  assert.equal(sessionResumeModel({ persisted: false, expiresAt: now + 30000, now }).recheck, true,
+    "a token 30s from expiry is not worth starting a request with");
+  // A hidden page does no work.
+  assert.equal(sessionResumeModel({ persisted: true, visible: false, now }).recheck, false);
+});

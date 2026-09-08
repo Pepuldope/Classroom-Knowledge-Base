@@ -12,6 +12,8 @@ import {
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { migrateArchiveBundle } from "./kb-merge.js";
 import { relatedNotes } from "./kb-client-search.js";
+import { dueChipModel, groupPlannerItems } from "./planner-cards.js";
+import { sessionResumeModel } from "./auth-session.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
@@ -291,6 +293,44 @@ function withAuthUser(url) {
 let codeClient = null;
 let serverRefreshAvailable = true;
 
+/**
+ * Get a usable access token, trying every recovery route in one fixed order.
+ *
+ * This exists because the order was NOT fixed. Boot tried the server refresh
+ * (the httpOnly refresh cookie, which survives the browser being closed) before
+ * falling back to GIS silent auth. gFetch's 401 handler tried ONLY GIS silent
+ * auth — and GIS silent auth is exactly what fails on a phone, where
+ * third-party cookie restrictions make a promptless token request unreliable.
+ *
+ * So on mobile: come back after the token expired, the first Classroom call
+ * 401s, the GIS-only recovery fails, the session is cleared, and you are asked
+ * to sign in. Reload the page and boot's server-refresh path signs you straight
+ * back in "as if nothing happened".
+ *
+ * `useStored` is false when the caller already knows the stored token is the
+ * one that just failed.
+ */
+async function recoverAccessToken({ useStored = true } = {}) {
+  if (useStored) {
+    const stored = await loadStoredToken();
+    if (stored?.token) {
+      accessToken = stored.token;
+      scheduleSilentRefresh(Math.max(60, Math.round((stored.expiresAt - Date.now()) / 1000)));
+      return accessToken;
+    }
+  }
+  const cfg = await getOauthConfig().catch(() => ({}));
+  if (cfg?.hasRefreshTokens && hasServerSession()) {
+    const token = await serverRefreshAccessToken();
+    if (token) return token;
+  }
+  if (loadUserHint()) {
+    const ok = await silentRefresh();
+    if (ok && accessToken) return accessToken;
+  }
+  return null;
+}
+
 async function serverRefreshAccessToken() {
   if (!serverRefreshAvailable) return null;
   if (!hasServerSession()) return null;
@@ -534,6 +574,32 @@ async function initGis() {
     });
   }
 
+  // Restoring a session does not need any of the above; see restoreSession().
+}
+
+let restoreSessionStarted = false;
+
+/**
+ * Sign the user back in from what this browser already has.
+ *
+ * Deliberately independent of the Google Identity Services script. This ran
+ * inside initGis(), which only runs once `window.google.accounts.oauth2`
+ * exists — and waitForGis() polls for that forever. So if accounts.google.com
+ * was slow, blocked or unreachable (a phone on a patchy connection returning to
+ * the site is the everyday case), the app sat on the sign-in screen with a
+ * perfectly good token in IndexedDB and a refresh cookie on the server, and the
+ * sign-in button did nothing either because its token client was never built.
+ * Reloading once the script was cached then "signed you back in as if nothing
+ * happened".
+ *
+ * Neither the stored token nor the server refresh needs Google's script. Only
+ * the last-resort GIS silent refresh does, and that is left to run if and when
+ * the script turns up.
+ */
+async function restoreSession() {
+  if (restoreSessionStarted) return;
+  restoreSessionStarted = true;
+
   // consumeAuthRedirect() may still be redeeming a code. Wait for it, then
   // bail if it signed us in: storeToken() already armed the refresh timer, and
   // a second onSignedIn() here would bump sessionEpoch and strand the first
@@ -549,14 +615,17 @@ async function initGis() {
     onSignedIn();
     return;
   }
-  // Try server-side refresh first (works after browser restart), fall back to legacy silent refresh
+
+  const cfg = await getOauthConfig().catch(() => ({ hasRefreshTokens: false }));
+  // Server-side refresh first: it works after a browser restart, and needs no
+  // Google script. GIS silent auth is the fallback, not the first resort.
   if (cfg.hasRefreshTokens && hasServerSession()) {
-    serverRefreshAccessToken().then((token) => {
-      if (token) onSignedIn();
-      else if (loadUserHint()) silentRefresh().then((ok) => { if (ok) onSignedIn(); });
-    });
-  } else if (loadUserHint()) {
-    silentRefresh().then((ok) => { if (ok) onSignedIn(); });
+    const token = await serverRefreshAccessToken();
+    if (token) { onSignedIn(); return; }
+  }
+  if (loadUserHint()) {
+    const ok = await silentRefresh();
+    if (ok) onSignedIn();
   }
 }
 
@@ -686,6 +755,12 @@ async function consumeAuthRedirect() {
 // Kick off before initGis so a token is in place by the time it looks.
 const authRedirectSettled = consumeAuthRedirect();
 
+// Restore first, and without waiting for anything of Google's.
+void restoreSession();
+
+const GIS_WAIT_TIMEOUT_MS = 20_000;
+let gisWaitStarted = 0;
+
 function waitForGis() {
   if (window.google?.accounts?.oauth2) {
     initGis();
@@ -694,9 +769,21 @@ function waitForGis() {
     window.__cwaTokenClient = kbTokenClient;
     // Wire KB events once the DOM is parsed (safe even before first KB view).
     import("./kb.js").then((m) => m.wireKbEvents()).catch(() => {});
-  } else {
-    setTimeout(waitForGis, 100);
+    return;
   }
+  if (!gisWaitStarted) gisWaitStarted = Date.now();
+  if (Date.now() - gisWaitStarted > GIS_WAIT_TIMEOUT_MS) {
+    // Stop polling forever and say so. A restored session keeps working — it
+    // never needed this script — but interactive sign-in cannot happen without
+    // it, and silence was indistinguishable from "the button is broken".
+    if (!accessToken) {
+      setStatus("Google sign-in could not load. Check your connection and reload.", true);
+    }
+    // Still wire the KB up; it does not need GIS to read the local corpus.
+    import("./kb.js").then((m) => m.wireKbEvents()).catch(() => {});
+    return;
+  }
+  setTimeout(waitForGis, 100);
 }
 waitForGis();
 
@@ -1223,8 +1310,9 @@ async function gFetch(url) {
     throw networkError(e);
   }
   if (r.status === 401) {
-    const ok = await silentRefresh();
-    if (ok && accessToken) {
+    // Every route, in the same order boot uses — not GIS silent auth alone.
+    const token = await recoverAccessToken({ useStored: false });
+    if (token) {
       try {
         r = await call();
       } catch (e) {
@@ -1843,14 +1931,13 @@ function assignmentCard(a) {
   if (due) {
     const dueSpan = document.createElement("span");
     const days = daysUntil(due);
-    let label;
-    if (days < 0) label = `Overdue ${-days}d`;
-    else if (days === 0) label = "Due today";
-    else if (days === 1) label = "Due tomorrow";
-    else label = `Due in ${days}d`;
-    dueSpan.textContent = label;
-    if (days < 0 && isPending(a)) dueSpan.className = "overdue";
-    meta.appendChild(dueSpan);
+    // Submitted work is never overdue, whatever its due date says.
+    const chip = dueChipModel(days, { pending: isPending(a) });
+    if (chip) {
+      dueSpan.textContent = chip.text;
+      if (chip.className) dueSpan.className = chip.className;
+      meta.appendChild(dueSpan);
+    }
   }
 
   // How long it will take is only useful while it is still to be done. The
@@ -2058,7 +2145,20 @@ function renderTodayNew(all) {
     list.innerHTML = `<div class="empty">No new assignments posted since yesterday.</div>`;
     return;
   }
-  items.forEach((a) => list.appendChild(assignmentCard(a)));
+  // Work to do first, reading material after — they used to be interleaved.
+  const { groups, showLabels } = groupPlannerItems(items);
+  for (const group of groups) {
+    const wrap = document.createElement("div");
+    wrap.className = "course-group";
+    if (showLabels) {
+      const label = document.createElement("div");
+      label.className = "day-label";
+      label.textContent = `${group.label} · ${group.items.length}`;
+      wrap.appendChild(label);
+    }
+    group.items.forEach((a) => wrap.appendChild(assignmentCard(a)));
+    list.appendChild(wrap);
+  }
 }
 
 function renderAnnouncements(all) {
@@ -2576,3 +2676,43 @@ if (document.readyState === "loading") {
 } else {
   trackHeaderHeight();
 }
+
+// ---------------------------------------------------------------------------
+// Coming back to the page.
+//
+// A phone does not reload when you switch apps and return: it freezes the page
+// and restores it. No boot code runs, no refresh timer fired while it was
+// frozen, and the access token may have expired in the meantime — so the first
+// thing the restored page does is fail. Re-check the session on the way back in
+// instead of finding out through a 401.
+// ---------------------------------------------------------------------------
+let sessionRecheckInFlight = null;
+
+async function recheckSessionOnResume(persisted) {
+  const stored = await loadStoredToken().catch(() => null);
+  const decision = sessionResumeModel({
+    persisted,
+    visible: document.visibilityState !== "hidden",
+    expiresAt: stored?.expiresAt ?? 0,
+  });
+  if (!decision.recheck) return;
+  if (sessionRecheckInFlight) return sessionRecheckInFlight;
+  sessionRecheckInFlight = (async () => {
+    try {
+      // Nothing to restore for a user who was never signed in here.
+      if (!hasServerSession() && !loadUserHint() && !stored?.token) return;
+      const token = await recoverAccessToken();
+      // Only re-render when this actually changed something. A restored page
+      // whose token was still good must not be torn down and rebuilt.
+      if (token && $("welcome") && !$("welcome").hidden) onSignedIn();
+    } finally {
+      sessionRecheckInFlight = null;
+    }
+  })();
+  return sessionRecheckInFlight;
+}
+
+window.addEventListener("pageshow", (e) => { void recheckSessionOnResume(!!e.persisted); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") void recheckSessionOnResume(false);
+});
