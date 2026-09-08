@@ -345,6 +345,17 @@ select {
 ::placeholder { color: var(--muted); opacity: 1; }
 
 main { width: min(var(--page-width), var(--page-max)); max-width: 100%; margin: 0 auto; padding: 1.5rem; box-sizing: border-box; }
+/* The page header is sticky, so anything the browser scrolls to — a focused
+   result card during keyboard navigation, a heading, a fragment link — would
+   otherwise land underneath it. --header-h is measured in app.js because the
+   header's height changes with the breakpoint and with a wrapped title. */
+:target,
+h2,
+.assignment,
+.kb-result-card,
+.study-panel,
+.curriculum-row,
+.kb-sprint-group { scroll-margin-top: calc(var(--header-h, 0px) + 12px); }
 /* 901px is exactly where the account card starts being displayed. Below it the
    card is `display: none`, so the column keeps the full width. `100%` rather
    than `100vw` so a scrollbar is already accounted for. */
@@ -1445,8 +1456,32 @@ summary::-webkit-details-marker { color: var(--muted); }
   h2.small-h { margin-top: 1.5rem; }
 
   .assignment { padding: 0.75rem 0.85rem; }
-  .assignment .meta { gap: 0.5rem 0.75rem; row-gap: 0.25rem; }
-  .open-link { font-size: 0.85rem; padding: 0.25rem 0; }
+  /* The footer used to run to two rows, the second holding nothing but the
+     star: "Open \2197" fits on the line, the star did not. Lifting the star to
+     the card's top-right corner leaves the footer one row, and gives it a
+     bigger target that is not sitting against a link. */
+  .assignment { position: relative; }
+  .assignment .assignment-body { padding-right: 2rem; }
+  .assignment .meta { gap: 0.4rem 0.7rem; row-gap: 0.25rem; padding-right: 0; }
+  .assignment .meta .pin-btn,
+  .assignment .meta .dismiss-btn {
+    position: absolute;
+    top: 0.35rem;
+    right: 0.35rem;
+    margin: 0;
+    min-width: 40px;
+    min-height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.15rem;
+  }
+  /* Two of them stack rather than overlap. */
+  .assignment .meta .dismiss-btn ~ .pin-btn { right: 2.6rem; }
+  .open-link { font-size: 0.95rem; padding: 0.25rem 0; }
+  /* Glyph only. "Open \2197" was the item that pushed the footer onto a second
+     row on a busy card; the link keeps an explicit aria-label. */
+  .open-link-label { display: none; }
 
   .ai-context { max-height: 160px; padding: 0.55rem 0.85rem; }
   .ai-messages { padding: 0.75rem; gap: 0.6rem; }
@@ -2212,12 +2247,6 @@ summary::-webkit-details-marker { color: var(--muted); }
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  position: sticky;
-  /* Below the page header, which is itself sticky. --header-h is measured in
-     app.js because the header's height changes with the breakpoint and with a
-     wrapped title. */
-  top: var(--header-h, 0px);
-  z-index: 3;
 }
 .curriculum-row-multi { background: var(--accent-bg); border-radius: 6px; }
 .curriculum-row-label {

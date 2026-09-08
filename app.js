@@ -1968,7 +1968,14 @@ function assignmentCard(a) {
     open.target = "_blank";
     open.rel = "noopener";
     open.className = "open-link";
-    open.textContent = "Open ↗";
+    // The word is hidden on phones (see styles.css) to keep the card footer on
+    // one line, so the accessible name is stated rather than left to the glyph.
+    open.setAttribute("aria-label", "Open in Google Classroom");
+    open.title = "Open in Google Classroom";
+    const openLabel = document.createElement("span");
+    openLabel.className = "open-link-label";
+    openLabel.textContent = "Open";
+    open.append(openLabel, " ↗");
     open.addEventListener("click", (ev) => ev.stopPropagation());
     meta.appendChild(open);
   }
@@ -2312,13 +2319,28 @@ function ensureMarked() {
   return markedLoadPromise;
 }
 
+/**
+ * Open the assignment panel.
+ *
+ * Everything the panel needs to APPEAR happens synchronously, inside the click
+ * that asked for it. Loading the saved conversation is a network round-trip and
+ * is done afterwards.
+ *
+ * It used to be the other way round, and that one `await` before
+ * `$("ai").hidden = false` caused both of the symptoms reported:
+ *
+ *   - The sheet's slide-up animation began in a promise continuation, long
+ *     after the tap, so it read as "nothing, hitch, already open".
+ *   - `$("aiInput").focus()` landed outside the user-gesture task, and mobile
+ *     browsers will not raise the keyboard from there. On a cache HIT there was
+ *     no await, focus stayed inside the gesture, and the keyboard appeared —
+ *     which is why it happened on exactly every other open.
+ *
+ * The keyboard is now never raised on a touch device; see the focus call below.
+ */
 async function openAi(a) {
   activeAssignment = a;
-  if (!chatHistories.has(a.id)) {
-    const remote = await loadChatHistory(a.id);
-    chatHistories.set(a.id, Array.isArray(remote) ? remote : []);
-  }
-  aiHistory = chatHistories.get(a.id);
+  aiHistory = chatHistories.get(a.id) || [];
   activeMaterials = [];
   $("aiTitle").textContent = a.title || "Assignment";
   const due = dueDateObj(a);
@@ -2350,11 +2372,42 @@ async function openAi(a) {
   renderLibraryStrip(a);
   renderChatHistory();
   $("aiInput").placeholder = a.kind === "material" ? "Ask about this material…" : "Ask about this assignment…";
-  if (aiHistory.length >= 2) refreshSuggestions();
-  else renderQuickPrompts(DEFAULT_QUICK_PROMPTS);
+  renderQuickPrompts(DEFAULT_QUICK_PROMPTS);
+
+  // Visible now, in the same task as the tap, so the sheet animates from the
+  // start rather than after a round-trip.
   $("ai").hidden = false;
-  $("aiInput").focus();
+  // Not on a touch device: raising the keyboard covers half the sheet before
+  // the reader has seen any of it. A pointer user gets the caret for free.
+  if (!prefersNoAutoFocus()) $("aiInput").focus();
+
   if (!window.marked) ensureMarked().then(() => renderChatHistory()).catch(() => {});
+
+  // The saved conversation arrives afterwards. Guard on activeAssignment: the
+  // panel may have been closed, or another assignment opened, while it loaded.
+  if (!chatHistories.has(a.id)) {
+    const remote = await loadChatHistory(a.id);
+    chatHistories.set(a.id, Array.isArray(remote) ? remote : []);
+  }
+  if (activeAssignment?.id !== a.id) return;
+  aiHistory = chatHistories.get(a.id);
+  renderChatHistory();
+  if (aiHistory.length >= 2) refreshSuggestions();
+}
+
+/**
+ * True where focusing a text field would raise an on-screen keyboard.
+ *
+ * `pointer: coarse` with no hover is the honest test for a touch device; a
+ * width query would also catch a small desktop window, where auto-focus is
+ * harmless and useful.
+ */
+function prefersNoAutoFocus() {
+  try {
+    return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  } catch {
+    return false;
+  }
 }
 
 function closeAssignmentPanel() {

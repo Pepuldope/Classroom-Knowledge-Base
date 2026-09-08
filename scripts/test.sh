@@ -246,6 +246,11 @@ BASE_URL="http://localhost:$PORT" node scripts/mobile_session_resume_test.mjs
 SESSION_RESUME_OK=$?
 if [ "$SESSION_RESUME_OK" -ne 0 ]; then echo "mobile session resume e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
+echo "==> Assignment panel open e2e"
+BASE_URL="http://localhost:$PORT" node scripts/assignment_panel_open_test.mjs
+PANEL_OPEN_OK=$?
+if [ "$PANEL_OPEN_OK" -ne 0 ]; then echo "assignment panel open e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
 echo "==> Assignment panel close e2e"
 BASE_URL="http://localhost:$PORT" node scripts/assignment_panel_close_test.mjs
 PANEL_CLOSE_OK=$?
