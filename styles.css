@@ -311,8 +311,12 @@ button.primary:hover { background: var(--accent-hover); }
    ratios. Prose blocks keep their own reading measure (--measure) so a wider
    page never means a 200-character line of body text. */
 :root {
-  --page-max: 1560px;
-  --page-width: 96vw;
+  /* Two knobs, in one place. --page-max caps a wide monitor; --page-width keeps
+     the column proportional below that. Note that from roughly 1440px down the
+     binding constraint is neither of these but --sidebar-gutter below, which
+     keeps the column clear of the account card. */
+  --page-max: 1240px;
+  --page-width: 92vw;
   --measure: 74ch;
   /* Clearance each side of the centred column, so it never runs under the
      fixed account card in the bottom-left corner.
@@ -501,6 +505,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .day-label .day-meta { color: var(--muted); font-weight: 400; font-size: 0.8rem; }
 
 .assignment {
+  position: relative;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -877,6 +882,10 @@ summary::-webkit-details-marker { color: var(--muted); }
   line-height: 1;
 }
 .open-link:hover { background: var(--accent-bg); }
+
+/* On a pointer screen the actions stay inline at the end of the footer, where
+   they have always been; .open-link's auto margin pushes the pair right. */
+.card-actions { display: inline-flex; align-items: center; gap: 0.15rem; }
 
 .card-action {
   background: transparent;
@@ -1459,28 +1468,58 @@ summary::-webkit-details-marker { color: var(--muted); }
   h2.small-h { margin-top: 1.5rem; }
 
   .assignment { padding: 0.75rem 0.85rem; }
-  /* The footer used to run to two rows, the second holding nothing but the
-     star: "Open \2197" fits on the line, the star did not. Lifting the star to
-     the card's top-right corner leaves the footer one row, and gives it a
-     bigger target that is not sitting against a link. */
-  .assignment { position: relative; }
-  .assignment .assignment-body { padding-right: 2rem; }
-  .assignment .meta { gap: 0.4rem 0.7rem; row-gap: 0.25rem; padding-right: 0; }
-  .assignment .meta .pin-btn,
-  .assignment .meta .dismiss-btn {
+  /* The footer used to run to two rows. The buttons — star, "🔍 KB", dismiss —
+     were items in the same wrapping row as the course and due date, and the
+     last of them fell onto a line of its own. They sit in the card's corner
+     now, as one cluster, which also gives them 36px targets that are not
+     pressed against a link. The body reserves exactly as much room as the
+     cluster needs; --action-count is set per card in app.js. */
+  /* The body reserves the cluster's column, so the title — which is `display:
+     inline`, and so cannot reserve one itself: padding on an inline box only
+     affects its last line — wraps clear of the buttons. */
+  .assignment .assignment-body { padding-right: calc(var(--action-count, 0) * 2.3rem); }
+  /* One row in the normal case, and never an overflow. Wrapping stays available
+     as the fallback — pinning the row with `nowrap` guarantees a spill on a
+     320px screen, and a truncated "Overdue 3d" is worse than a second line.
+     What makes one row the normal case is removing the two items that used to
+     force a second one: the buttons (now in the corner) and the link (below). */
+  .assignment .meta { flex-wrap: wrap; gap: 0.3rem 0.45rem; align-items: baseline; min-width: 0; }
+  .assignment .meta > * { white-space: nowrap; }
+  /* The course name is the long one, and the only chip that can lose characters
+     without losing meaning. */
+  .assignment .meta > .meta-course {
+    max-width: 60%;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* The per-card link goes. The card opens a panel with a full "Open in Google
+     Classroom" link in it, and on a phone a 20px glyph pressed against a
+     full-card tap target is a mis-tap waiting to happen. */
+  .assignment .meta .open-link { display: none; }
+  /* Once work is handed in, its due date is history — "Submitted" is the status
+     that matters, and the panel still shows the date. Dropping it is what keeps
+     a submitted card's footer on one line. */
+  .assignment.state-submitted .meta .meta-due { display: none; }
+  .assignment .card-actions {
     position: absolute;
-    top: 0.35rem;
-    right: 0.35rem;
+    top: 0.3rem;
+    right: 0.3rem;
     margin: 0;
-    min-width: 40px;
-    min-height: 40px;
+    display: flex;
+    gap: 0;
+  }
+  .assignment .card-actions .card-action {
+    min-width: 36px;
+    min-height: 36px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.15rem;
+    padding: 0;
+    font-size: 1.05rem;
   }
-  /* Two of them stack rather than overlap. */
-  .assignment .meta .dismiss-btn ~ .pin-btn { right: 2.6rem; }
+  /* Icon only; the buttons carry aria-labels. */
+  .card-action-label { display: none; }
   .open-link { font-size: 0.95rem; padding: 0.25rem 0; }
   /* Glyph only. "Open \2197" was the item that pushed the footer onto a second
      row on a busy card; the link keeps an explicit aria-label. */
@@ -1514,6 +1553,13 @@ summary::-webkit-details-marker { color: var(--muted); }
 
   .original-desc { padding: 0.7rem 0.8rem; }
   .original-desc-body { font-size: 0.9rem; max-height: 260px; }
+}
+
+@media (max-width: 360px) {
+  /* Below this a course name, a due state and an effort estimate cannot share
+     a line. The course goes rather than wrapping — the card sits in a day- or
+     course-grouped list, and the panel names it on open. */
+  .assignment .meta > .meta-course { display: none; }
 }
 
 @media (max-width: 380px) {

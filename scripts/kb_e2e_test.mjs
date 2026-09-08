@@ -232,7 +232,10 @@ test("build surface stays hidden while bundle state is unknown or loading, and o
 });
 
 test("build surface stays hidden while a Classroom build is in progress", () => {
-  assert.deepEqual(kbBuildStartModel(), { onboardingHidden: true, mainVisible: true, panelVisible: true });
+  assert.deepEqual(kbBuildStartModel(), { onboardingHidden: true, mainVisible: true, panelVisible: true, inlineVisible: false });
+  // Started from the "new courses" banner: the banner reports progress and the
+  // full build card stays down.
+  assert.deepEqual(kbBuildStartModel({ inline: true }), { onboardingHidden: true, mainVisible: true, panelVisible: false, inlineVisible: true });
 });
 
 test("related preview reserves a stable loading row until async notes resolve", () => {

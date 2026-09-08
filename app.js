@@ -17,7 +17,7 @@ import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
 import { kbLocalStatusModel } from "./kb-local-status.js";
-import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel, routeTransitionFocusPrivacyModel } from "./kb.js";
+import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel, routeTransitionFocusPrivacyModel } from "./route-transition.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession, sessionResumeModel } from "./auth-session.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
@@ -766,8 +766,11 @@ function waitForGis() {
     // Expose the token client so the Knowledge-Base module can request a
     // Classroom-scoped token for building the user's local knowledge base.
     window.__cwaTokenClient = kbTokenClient;
-    // Wire KB events once the DOM is parsed (safe even before first KB view).
-    import("./kb.js").then((m) => m.wireKbEvents()).catch(() => {});
+    // kb.js is NOT loaded here. It is 141KB and pulls the search index, the
+    // Classroom builder, the curriculum matrix and the local store behind it —
+    // none of which the Planner needs. showKbView() wires the KB's listeners
+    // itself, idempotently, so the only thing this eager import bought was
+    // putting the whole Study subsystem on the critical path of every load.
     return;
   }
   if (!gisWaitStarted) gisWaitStarted = Date.now();
@@ -778,8 +781,6 @@ function waitForGis() {
     if (!accessToken) {
       setStatus("Google sign-in could not load. Check your connection and reload.", true);
     }
-    // Still wire the KB up; it does not need GIS to read the local corpus.
-    import("./kb.js").then((m) => m.wireKbEvents()).catch(() => {});
     return;
   }
   setTimeout(waitForGis, 100);
@@ -1923,6 +1924,10 @@ function assignmentCard(a) {
 
   if (!isAnnouncement) {
     const courseSpan = document.createElement("span");
+    // Named rather than matched by :first-child — the course chip is
+    // conditional, so on a card without one that selector would style the due
+    // date instead.
+    courseSpan.className = "meta-course";
     courseSpan.textContent = a.courseName;
     meta.appendChild(courseSpan);
   }
@@ -1934,7 +1939,7 @@ function assignmentCard(a) {
     const chip = dueChipModel(days, { pending: isPending(a) });
     if (chip) {
       dueSpan.textContent = chip.text;
-      if (chip.className) dueSpan.className = chip.className;
+      dueSpan.className = ["meta-due", chip.className].filter(Boolean).join(" ");
       meta.appendChild(dueSpan);
     }
   }
@@ -1980,6 +1985,12 @@ function assignmentCard(a) {
     meta.appendChild(open);
   }
 
+  // Actions live together in one cluster. Appended individually they were just
+  // more items in the wrapping meta row, and on a phone the last of them —
+  // usually "🔍 KB" — fell onto a line of its own.
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+
   if (!isPassive) {
     const pin = document.createElement("button");
     pin.className = "card-action pin-btn" + (pinnedIds.has(a.id) ? " pinned" : "");
@@ -1992,14 +2003,16 @@ function assignmentCard(a) {
       saveIdSet(PINNED_KEY, pinnedIds);
       if (window.__renderAll) window.__renderAll();
     });
-    meta.appendChild(pin);
+    actions.appendChild(pin);
   }
 
   if (!isPassive) {
     const kbBtn = document.createElement("button");
     kbBtn.className = "card-action kb-search-btn";
     kbBtn.title = "Search the knowledge base for this topic";
-    kbBtn.textContent = "🔍 KB";
+    kbBtn.setAttribute("aria-label", "Search the knowledge base for this topic");
+    // The word is hidden on phones; the label above keeps the name.
+    kbBtn.append("🔍", Object.assign(document.createElement("span"), { className: "card-action-label", textContent: " KB" }));
     kbBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const topic = [a.courseName, a.title].filter(Boolean).join(" ");
@@ -2007,7 +2020,7 @@ function assignmentCard(a) {
         .then((m) => m.kbSearchTopic(topic))
         .catch(() => {});
     });
-    meta.appendChild(kbBtn);
+    actions.appendChild(kbBtn);
   }
 
   if (!isPassive && !due) {
@@ -2021,7 +2034,14 @@ function assignmentCard(a) {
       saveIdSet(DISMISSED_KEY, dismissedIds);
       if (window.__renderAll) window.__renderAll();
     });
-    meta.appendChild(del);
+    actions.appendChild(del);
+  }
+
+  if (actions.childElementCount > 0) {
+    // The clearance the cluster needs when it sits in the card's corner is a
+    // function of how many buttons there actually are.
+    el.style.setProperty("--action-count", String(actions.childElementCount));
+    meta.appendChild(actions);
   }
 
   body.appendChild(meta);

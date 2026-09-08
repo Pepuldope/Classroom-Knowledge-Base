@@ -99,10 +99,14 @@ TUTOR_RETRY_OK=$?
 if [ "$TUTOR_RETRY_OK" -ne 0 ]; then echo "tutor retry tests FAILED"; exit 1; fi
 
 echo "==> API / retrieval tests"
+# Both exit codes are checked. `API_OK=$?` after two commands captured only the
+# SECOND one, so kb_e2e_test.mjs — 114 tests — could fail while the gate
+# reported ALL TESTS PASSED. It had been doing exactly that.
 node scripts/kb_e2e_test.mjs
+KB_E2E_OK=$?
 node scripts/pinned_notes_test.mjs
-API_OK=$?
-if [ "$API_OK" -ne 0 ]; then echo "API tests FAILED"; exit 1; fi
+PINNED_OK=$?
+if [ "$KB_E2E_OK" -ne 0 ] || [ "$PINNED_OK" -ne 0 ]; then echo "API tests FAILED"; exit 1; fi
 
 echo "==> Local retrieval snippet model tests"
 node --test tests/kb-client-search.test.js

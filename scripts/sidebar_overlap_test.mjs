@@ -36,10 +36,12 @@ try {
     assert.equal(m.cardDisplayed, true, `${width}px: the card should be shown here`);
     assert.ok(m.contentLeft >= m.cardRight,
       `${width}px: content starts at ${Math.round(m.contentLeft)} but the card ends at ${Math.round(m.cardRight)}`);
-    // ...and no narrower than it has to be: widening by 24px more would collide.
-    assert.ok(m.contentLeft <= m.cardRight + 40,
-      `${width}px: column is needlessly narrow — ${Math.round(m.contentLeft - m.cardRight)}px of dead space beside the card`);
-    assert.ok(m.mainWidth > 400, `${width}px: column collapsed to ${Math.round(m.mainWidth)}px`);
+    // The column used to be as wide as clearing the card allowed. It is now
+    // capped narrower than that by --page-max, at the owner's request, so
+    // "hugs the card" is no longer the requirement — not collapsing is.
+    assert.ok(m.mainWidth > 500, `${width}px: column collapsed to ${Math.round(m.mainWidth)}px`);
+    assert.ok(m.mainWidth >= Math.min(600, m.viewport * 0.45),
+      `${width}px: column is only ${Math.round(m.mainWidth)}px of a ${m.viewport}px viewport`);
     await page.close();
   }
 

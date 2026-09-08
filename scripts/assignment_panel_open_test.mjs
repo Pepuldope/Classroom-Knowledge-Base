@@ -100,7 +100,30 @@ try {
     "a pointer user should still land in the question box");
   await desktop.close();
 
-  console.log("✓ panel opens immediately on tap; no keyboard on touch, caret kept on desktop");
+  // --- the card footer stays one row on a phone ----------------------------
+  const phone2 = await browser.newContext({ ...devices["iPhone 13"] });
+  const { page: cardPage } = await openPlannerWithOneAssignment(phone2);
+  const footers = await cardPage.evaluate(() => [...document.querySelectorAll(".assignment")].map((card) => {
+    const meta = card.querySelector(".meta");
+    return {
+      // Height is the measure, not the number of distinct child tops: the row
+      // is `align-items: baseline`, so chips of different font sizes have
+      // different box tops while sitting on the same line.
+      metaHeight: Math.round(meta.getBoundingClientRect().height),
+      overflows: meta.scrollWidth > meta.clientWidth + 1,
+      actionsInCorner: getComputedStyle(card.querySelector(".card-actions")).position === "absolute",
+    };
+  }));
+  assert.ok(footers.length > 0, "expected at least one card");
+  for (const f of footers) {
+    // Two rows of chips is the reported defect; one line is ~19-24px.
+    assert.ok(f.metaHeight <= 30, `card footer is ${f.metaHeight}px tall — it has wrapped to a second row`);
+    assert.equal(f.overflows, false, "the footer must not spill out of the card");
+    assert.equal(f.actionsInCorner, true, "the action buttons belong in the card's corner on a phone");
+  }
+  await phone2.close();
+
+  console.log(`✓ panel opens immediately on tap; no keyboard on touch, caret kept on desktop; card footer one row (${footers[0].metaHeight}px)`);
 } finally {
   await browser.close();
 }
