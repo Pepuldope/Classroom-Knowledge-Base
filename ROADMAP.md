@@ -36,23 +36,32 @@ approve it. Keep items concrete and student-facing.
 ## 📅 Google Calendar (Pepuldo, 2026-09-09) — planned, not started
 Full design: `docs/google-calendar-plan.md`. Read it before starting any item
 below; the scope choice and the deterministic-id decision are load-bearing.
-Phases 1-3 are sync-on-open and cost nothing new. **Phase 4 (true background
-sync) is a decision for Pepuldo, not a task** — it means holding refresh tokens
-on a shared server, which the privacy copy currently promises we do not.
+Decided by Pepuldo 2026-09-09: sync-on-open only (background sync REJECTED, so
+this needs no backend); a Settings toggle that **deletes the whole calendar**
+when switched off, behind a confirm dialog; pending work with any due date, no
+history backfill, hidden courses excluded; submitted work kept and marked ✓.
+**Blocked until `calendar.app.created` is added to the OAuth consent screen of
+the `classroom-knowledge-google` Cloud project** — only Pepuldo can do that, and
+items 3 onward fail at Google without it.
 - [ ] Calendar: `calendar-event.js` + tests — deterministic base32hex event id,
   event body, all-day end-exclusivity, Classroom-UTC to local timezone. Pure, no
   network. (2026-09-09)
 - [ ] Calendar: `calendarSyncPlan()` + tests — corpus x existing events to a list
   of create/patch/delete/skip operations. Pure. (2026-09-09)
-- [ ] Calendar: incremental-auth opt-in in Settings, requesting ONLY
-  `calendar.app.created` with `include_granted_scopes=true`, plus the updated
-  privacy summary. No syncing yet. (2026-09-09)
+- [ ] Calendar: the Settings toggle (off by default) + incremental auth
+  requesting ONLY `calendar.app.created` with `include_granted_scopes=true`,
+  the updated privacy summary, and the confirm dialog for switching it off.
+  No syncing yet. (2026-09-09)
 - [ ] Calendar: create the secondary calendar on first opt-in, store its id,
   recreate it on a 404 rather than wedging. (2026-09-09)
 - [ ] Calendar: wire the sync plan to the API on `kbAutoSyncModel`'s cadence, and
   add a `calendar` group to `scripts/test.sh`. Phase 1 complete. (2026-09-09)
-- [ ] Calendar: submitted/deleted handling, the fingerprint guard that never
-  clobbers a student's own edit, and full reconcile. (2026-09-09)
+- [ ] Calendar: ✓-on-submit and its reversal when work is handed back,
+  deleted-coursework handling, the fingerprint guard that never clobbers a
+  student's own edit, and full reconcile. (2026-09-09)
+- [ ] Calendar: the OFF path — confirm dialog naming what is lost, then
+  `calendars.delete`; a failed delete retries rather than silently flipping the
+  switch back. (2026-09-09)
 - [ ] Calendar: `freebusy` + proposed work blocks from `estimatedMinutes` —
   propose, never impose. (2026-09-09)
 

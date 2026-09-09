@@ -19,9 +19,10 @@ different products:
 | **Sync on open** | The calendar is correct within seconds of you opening the site | Nothing new. The app already syncs the corpus on open (`kb-autosync.js`) |
 | **True background** | The event appears while the tab is closed | A server that stores refresh tokens and runs on a cron — see Phase 4 |
 
-Phases 1–3 deliver sync-on-open, which for a student who opens the planner most
-days is indistinguishable from magic. Phase 4 is the real thing and carries a
-real cost. **Do not start with Phase 4.**
+**Decided (Pepuldo, 2026-09-09): sync-on-open only. Phase 4 is not being built.**
+That keeps the promise that nothing of the student's reaches our server, and it
+means this feature needs no backend at all. Phase 4 stays documented in §7 only
+so nobody re-derives why it was rejected.
 
 ### The privacy question, answered up front
 
@@ -74,6 +75,37 @@ change, the feature should not ship.
 
 ---
 
+## 2b. The Settings switch, and what OFF means
+
+One toggle in **Settings → Study**, off by default. It is the only way the
+feature turns on, and turning it on is what triggers the incremental consent.
+
+**ON (first time)** — request `calendar.app.created`; on success create the
+secondary calendar, store its id, run a full sync.
+**ON (subsequently)** — resume; the next sync repairs any drift.
+
+**OFF — deletes the calendar (decided by Pepuldo, 2026-09-09).** Not just the
+events: the whole secondary calendar goes, via `calendars.delete`. Verified
+2026-09-09 that `calendar.app.created` is an accepted scope for that call — and
+because that scope only ever grants access to calendars this app created, this
+can never delete a calendar the student made themselves.
+
+This is destructive and irreversible, so:
+
+- it is behind a **confirm dialog**, not a bare switch;
+- the confirm copy must say what is actually lost, including the ✓-marked record
+  of completed work (§5) and any study blocks the student moved by hand — those
+  are the things they would miss, and "turn sync off" does not sound like
+  "delete my term's history";
+- if the delete fails, do not silently flip the switch back: report it, keep the
+  stored calendar id, and let the next attempt retry.
+
+Turning it off does **not** revoke the OAuth grant — Google owns that screen, and
+silently revoking would make re-enabling a full consent round-trip every time.
+Link to Google's permissions page for a student who wants the grant gone too.
+
+---
+
 ## 3. Event identity: deterministic ids, no mapping table
 
 Google accepts a client-supplied event id. The rules (verified against the
@@ -101,6 +133,25 @@ Upsert is `events.insert`; on `409 Conflict` fall back to `events.patch`.
 ## 4. Phase 1 — the one-way mirror
 
 **Goal:** every pending assignment with a due date exists as an event.
+
+### What is in scope (decided by Pepuldo, 2026-09-09)
+
+| | |
+|---|---|
+| ✅ | pending work with a due date, **however far out** — not a 30-day window |
+| ✅ | overdue pending work |
+| ❌ | assignments with **no due date** — there is nowhere to put them |
+| ❌ | courses hidden in Settings → Classes (`hiddenCourseIds`) |
+| ❌ | past years, and work already submitted **before** the switch was turned on |
+| ❌ | announcements and course materials — only assignments |
+
+Two consequences worth stating so they read as intentional rather than as bugs:
+
+- Hiding a course in Settings removes its events on the next sync; un-hiding
+  brings them back. The Classes list becomes the calendar's filter for free.
+- Work you had already handed in before enabling never appears at all, but work
+  you submit *afterwards* stays as a ✓ record (§5). The calendar starts the day
+  you turn it on; it is not a backfilled archive.
 
 New pure module `calendar-event.js`:
 
@@ -147,9 +198,15 @@ consumer of that decision.
 
 A mirror that only ever adds is worse than no mirror.
 
-- **Submitted → delete the event.** A calendar full of finished work is noise.
-  (Alternative: prefix `✓` and strip reminders. Pepuldo's call — recommend
-  delete.)
+- **Submitted → keep it, marked done** (decided by Pepuldo, 2026-09-09). Prefix
+  the summary with `✓` and strip the reminders, so a met deadline stops nagging
+  but the week still shows what got done. The calendar is a record, not only a
+  queue.
+  - These accumulate — nothing else ever removes them. That is the intent, and
+    the reconcile below is still the backstop: if the coursework disappears from
+    Classroom, its ✓ event goes with it.
+  - Re-opening a submission (`RECLAIMED_BY_STUDENT`) must reverse this: drop the
+    `✓`, restore the reminders. Handing work back in is not rare.
 - **Coursework deleted or unpublished → delete the event.**
 - **Due date or title changed → patch.**
 - **Full reconcile:** list events on our calendar carrying our
@@ -164,6 +221,14 @@ Store a `fingerprint` of what we last wrote in the event's extended properties.
 On sync, if the live event's own fields differ from that fingerprint, a human
 changed it: patch nothing, log it, leave it alone. Only fields we still own get
 updated.
+
+### One calendar id per Google account
+
+The app supports switching accounts. The stored calendar id must be keyed by
+account (the `sub` from userinfo, which auth already fetches), not stored
+globally — otherwise switching accounts points the sync at a calendar id that
+belongs to someone else's account, every write 404s, and the recovery path below
+cheerfully creates a duplicate calendar in the wrong place.
 
 ### Recover from a deleted calendar
 
@@ -190,7 +255,9 @@ UI reaches it — which is exactly the shape of a real capability gap.
 
 ---
 
-## 7. Phase 4 — true background sync (decide before building)
+## 7. Phase 4 — true background sync — REJECTED (Pepuldo, 2026-09-09)
+
+**Not being built.** Kept here so the reasoning is not re-derived later.
 
 The only phase that delivers "it shows up" with the tab closed. It needs a
 server-side job holding a refresh token per opted-in student, plus a Vercel Cron
@@ -210,13 +277,25 @@ in the root CLAUDE.md). If it ships:
 - a visible "disconnect" that revokes server-side;
 - rewrite the privacy summary honestly.
 
-Recommendation: **ship Phases 1–3, live with them for a few weeks, and only then
-decide whether the tab-closed case is worth this.** For a student who opens the
-planner daily, it may simply not be.
+Decision: sync-on-open only. For a student who opens the planner most days the
+difference is not worth a server that holds Google credentials for real people.
+Reopen this only if sync-on-open is measurably not enough in practice.
 
 ---
 
-## 8. Risks
+## 8. Blocked on the owner: Google Cloud Console
+
+Nothing in item 3 of §9 can work until `calendar.app.created` is added to the
+OAuth consent screen for the `classroom-knowledge-google` project. Google rejects
+an authorization request for a scope the project has not registered, before it
+reaches any of our code, so this is a hard prerequisite and not something the
+loop or a session can do.
+
+While in the console, check the publishing status: adding a scope to a project in
+"In production" may require verification, whereas "Testing" simply lists the
+account as a test user. At personal scale, Testing is the cheaper answer.
+
+## 9. Risks
 
 | Risk | Handling |
 |---|---|
@@ -228,16 +307,20 @@ planner daily, it may simply not be.
 
 ---
 
-## 9. Suggested ROADMAP items
+## 10. Suggested ROADMAP items
 
 Small enough for one loop tick each:
 
 1. `calendar-event.js` + tests: deterministic id, event body, all-day exclusivity, timezone conversion. No network.
 2. `calendarSyncPlan()` + tests: corpus × existing events → create/patch/delete/skip.
-3. Incremental-auth opt-in in Settings → Study, plus the privacy copy. No syncing yet.
+3. The Settings toggle + incremental-auth opt-in, plus the privacy copy and the
+   confirm dialog for OFF. No syncing yet.
 4. Create the secondary calendar on first opt-in; store its id; recreate on 404.
 5. Wire the plan to the API, on `kbAutoSyncModel`'s cadence. Phase 1 done.
-6. Phase 2: submitted/deleted handling, fingerprint guard, full reconcile.
+6. Phase 2: ✓-on-submit and its reversal, deleted-coursework handling, the
+   fingerprint guard, and full reconcile.
+6b. The OFF path: confirm dialog, `calendars.delete`, and a failure that retries
+   rather than silently flipping the switch back.
 7. Phase 3: `freebusy` + proposed work blocks.
 
 Add a `calendar` group to `scripts/test.sh` as soon as item 1 lands.
