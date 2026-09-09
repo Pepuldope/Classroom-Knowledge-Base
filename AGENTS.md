@@ -40,9 +40,18 @@ step the loop does not have. In an interactive session:
 - TDD still applies to LOGIC — a pure model gets a test. Do not add a browser
   e2e for something he is about to check on his own phone unless he asks, or
   unless it is the kind of rule a future refactor drops silently.
-- Run TARGETED gates while iterating: the model tests plus the one or two
-  browser scripts covering what changed. `bash scripts/test.sh` is a phase-end
-  command, run once. Say which gates you ran.
+- Run TARGETED gates while iterating. `scripts/test.sh` takes `--group`:
+  `models` (37 gates, no browser, ~5s), `panel`, `mobile`, `kb`, `theme`,
+  `settings`, `layout`, `api`, `auth`, `live`; `--list` prints them. Bare
+  `bash scripts/test.sh` runs everything and takes ~5 minutes — that is a
+  phase-end command, run once. Say which groups you ran.
+- Writing a new browser gate starts from `scripts/lib/harness.mjs`
+  (`openSignedInPage`, `mockBackend`, `seedKb`, and the geometry helpers), not
+  from copying another script's sign-in and Classroom stubs.
+- Measure, do not screenshot. `scripts/panel_audit.mjs` is the pattern: print
+  the geometry and assert a px budget. A screenshot says "messy"; a number says
+  "465px of furniture above a 776px sheet", which is the sentence that leads to
+  a fix.
 - Commit when a coherent change is done, not after every edit. `git push` alone
   deploys (Vercel is connected to this repo); scripts/deploy.sh is box-only.
 - Cost is a real constraint — a 5-hour subscription limit. If what he asked for

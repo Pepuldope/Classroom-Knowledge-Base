@@ -18,6 +18,7 @@
 // Usage: BASE_URL=http://localhost:4321 node scripts/mobile_place_test.mjs
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
+import { openSignedInPage, seedKb } from "./lib/harness.mjs";
 
 const BASE = process.env.BASE_URL || "http://localhost:4321";
 
@@ -47,17 +48,17 @@ const BUNDLE = {
 };
 
 const browser = await chromium.launch();
-const errors = [];
+// Reassigned once the shared harness hands over its own collector.
+let errors = [];
 
 const openStudy = async (page) => {
-  await page.evaluate(async (bundle) => {
-    const local = await import("/kb-local.js");
-    await local.saveKbBundle(bundle);
+  await seedKb(page, BUNDLE);
+  await page.evaluate(async () => {
     const kb = await import("/kb.js");
     document.getElementById("kbView").hidden = false;
     document.getElementById("plannerView").hidden = true;
     await kb.showKbView();
-  }, BUNDLE);
+  });
   await page.waitForTimeout(600);
 };
 
@@ -91,21 +92,15 @@ try {
   // Signed in, with Classroom stubbed out: the route and the scroll offset are
   // restored from `onSignedIn`, so a signed-out page never reaches that code.
   // hasTouch/isMobile so `(hover: none) and (pointer: coarse)` matches — the
-  // lift is deliberately touch-only, since nothing covers anything on a mouse.
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
-  page.on("pageerror", (e) => errors.push(String(e)));
-  await page.route("**/api/oauth-config", (r) => r.fulfill({ status: 200, contentType: "application/json", body: "{\"hasRefreshTokens\":false}" }));
-  await page.route("**/api/prefs**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: "{}" }));
-  await page.route("**/api/user**", (r) => r.fulfill({ status: 404, contentType: "application/json", body: "{}" }));
-  await page.route("https://www.googleapis.com/oauth2/v3/userinfo", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ sub: "place-user", email: "student@example.edu" }) }));
-  await page.route("https://classroom.googleapis.com/**", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ courses: [] }) }));
-  await page.goto(`${BASE}/index.html`, { waitUntil: "networkidle", timeout: 30000 });
-  await page.evaluate(async () => {
-    const { storeAuthSession } = await import("/auth-session.js");
-    await storeAuthSession("place-test-token", 3600);
+  // search-box lift is deliberately touch-only, since a mouse covers nothing.
+  const session = await openSignedInPage(browser, {
+    base: BASE,
+    viewport: { width: 390, height: 844 },
+    hasTouch: true,
+    isMobile: true,
   });
-  await page.reload({ waitUntil: "networkidle", timeout: 30000 });
-  await page.waitForFunction(() => document.getElementById("welcome")?.hidden === true, null, { timeout: 10000 });
+  const page = session.page;
+  errors = session.errors;
   await page.locator('.view-toggle-btn[data-view="kb"]').click({ force: true });
   await page.waitForFunction(() => !document.getElementById("kbView")?.hidden, null, { timeout: 10000 });
   await openStudy(page);
