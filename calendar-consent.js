@@ -159,3 +159,46 @@ export function newCalendarBody({ timeZone = "" } = {}) {
 export function calendarVisibilityPatch(visible) {
   return visible ? { hidden: false, selected: true } : { hidden: true, selected: false };
 }
+
+// ---------------------------------------------------------------------------
+// Storage. Kept here rather than in kb.js so that app.js — which owns the
+// assignments and therefore the sync — can read the switch without importing
+// the Study module and dragging its whole subtree onto the critical path. The
+// same reason route-transition.js exists.
+// ---------------------------------------------------------------------------
+
+export const CALENDAR_STATE_KEY = "cwa_kb_calendar";
+const GRANTED_SCOPES_KEY = "cwa_granted_scopes";
+const USER_PROFILE_KEY = "cwa_user_profile";
+
+function store() {
+  try { return typeof localStorage === "undefined" ? null : localStorage; } catch { return null; }
+}
+
+export function loadCalendarState() {
+  try { return calendarStateModel(JSON.parse(store()?.getItem(CALENDAR_STATE_KEY) || "null")); }
+  catch { return calendarStateModel(); }
+}
+
+export function saveCalendarState(state) {
+  const next = calendarStateModel(state);
+  try { store()?.setItem(CALENDAR_STATE_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  return next;
+}
+
+/** The signed-in Google account id — what the per-account state is keyed by. */
+export function currentAccountId() {
+  try { return JSON.parse(store()?.getItem(USER_PROFILE_KEY) || "null")?.sub || ""; }
+  catch { return ""; }
+}
+
+/** Scopes Google actually granted, as recorded by the auth redirect. */
+export function grantedScopes() {
+  try { return store()?.getItem(GRANTED_SCOPES_KEY) || ""; } catch { return ""; }
+}
+
+/** Is calendar sync switched on, granted, and for this account? */
+export function calendarSyncReady(accountId = currentAccountId()) {
+  if (!accountId || !hasCalendarScope(grantedScopes())) return false;
+  return calendarStateFor(loadCalendarState(), accountId).enabled === true;
+}

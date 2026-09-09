@@ -62,10 +62,20 @@ items 3 onward fail at Google without it.
   granted — a student can untick a permission on the consent screen, and
   without that the switch reads "on" while every write 403s. State is keyed by
   Google account id. Nothing syncs yet.
-- [ ] Calendar: create the secondary calendar on first opt-in, store its id,
-  recreate it on a 404 rather than wedging. (2026-09-09)
-- [ ] Calendar: wire the sync plan to the API on `kbAutoSyncModel`'s cadence, and
-  add a `calendar` group to `scripts/test.sh`. Phase 1 complete. (2026-09-09)
+- [x] Calendar: create the secondary calendar on first opt-in, store its id,
+  recreate it on a 404 rather than wedging. Shipped 2026-09-09 in
+  `calendar-api.js`. The network is injected, so the branches that matter — a
+  deleted calendar, a 409 on an event that already exists, paging, a revoked
+  grant — are covered by 14 tests in the fast `models` group rather than found
+  in production. A non-404 failure explicitly does NOT create a second
+  calendar: a bad token during a blip would otherwise litter the account.
+- [x] Calendar: wire the sync plan to the API, and add a `calendar` group to
+  `scripts/test.sh`. Shipped 2026-09-09. Runs in `app.js` (not kb.js) because
+  the calendar mirrors Classroom coursework, not the notes corpus, and fires
+  after `hydrateSignedInView` without being awaited so a slow Calendar API
+  never delays the planner. The switch hides/unhides via events rather than
+  kb.js importing the auth and API plumbing. **Phase 1 complete — assignments
+  now appear in Google Calendar.**
 - [ ] Calendar: ✓-on-submit and its reversal on unsubmit, deleted-coursework
   handling, the fingerprint guard that never clobbers a student's own edit, and
   full reconcile. (2026-09-09)

@@ -25,6 +25,12 @@ import { normalizeTaskKind } from "./task-kinds.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
 import { sheetDragModel, viewportBottomInset } from "./sheet-drag.js";
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
+import { calendarSyncPlan, syncableAssignments } from "./calendar-sync.js";
+import { createCalendarClient, googleCalendarRequest } from "./calendar-api.js";
+import {
+  calendarSyncReady, currentAccountId, loadCalendarState, saveCalendarState,
+  setCalendarStateFor, calendarStateFor,
+} from "./calendar-consent.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -1460,6 +1466,35 @@ window.addEventListener("cwa-request-calendar-scope", (event) => {
   void startRedirectSignIn(prompt || "consent", { scope, loginHint: loginHint || loadUserHint() });
 });
 
+// Flipping the switch hides or unhides the calendar. Never deletes: that is a
+// separate, deliberate button (ROADMAP 6b), because an irreversible action
+// behind a toggle is how someone loses a term of ✓-marked work by mis-tapping.
+window.addEventListener("cwa-calendar-visibility", (event) => {
+  const visible = event.detail?.visible === true;
+  void (async () => {
+    const account = currentAccountId();
+    const stored = calendarStateFor(loadCalendarState(), account);
+    if (!accessToken || !account) return;
+    try {
+      if (visible) {
+        // Turning it back on: unhide first if there is something to unhide,
+        // then let the sync repair whatever drifted while it was off.
+        if (stored.calendarId) {
+          const client = createCalendarClient({ request: googleCalendarRequest(() => accessToken) });
+          await client.setVisibility(stored.calendarId, true);
+        }
+        await syncCalendar(sessionEpoch);
+      } else if (stored.calendarId) {
+        const client = createCalendarClient({ request: googleCalendarRequest(() => accessToken) });
+        await client.setVisibility(stored.calendarId, false);
+      }
+    } catch (error) {
+      console.warn("[calendar] visibility change failed:", error?.status || "", error?.message || error);
+    }
+    window.dispatchEvent(new CustomEvent("cwa-calendar-synced"));
+  })();
+});
+
 window.addEventListener("cwa-classroom-auth-error", (event) => {
   if (classroomAuthRecoveryModel(event?.detail?.status).resetSession) handleWrongAccount();
 });
@@ -1490,6 +1525,9 @@ async function onSignedIn() {
   try {
     await hydrateSignedInView(epoch);
     if (epoch === sessionEpoch) restoreSessionPosition(epoch);
+    // After the report, so the assignments exist; not awaited, so a slow
+    // Calendar API never delays the page the student came for.
+    if (epoch === sessionEpoch) void syncCalendar(epoch);
   } catch (e) {
     if (epoch === sessionEpoch) setStatus(e?.message || "Sign-in failed.", true);
   } finally {
@@ -1538,6 +1576,56 @@ async function hydrateSignedInView(epoch) {
   }
   if (epoch === sessionEpoch) {
     import("./kb.js").then(({ maybeAutoBuildKb }) => maybeAutoBuildKb()).catch(() => {});
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar sync.
+//
+// Runs here rather than in kb.js because the assignments live here: the
+// calendar mirrors Classroom coursework, not the notes corpus. Only ever on
+// open, never in the background — decided 2026-09-09, and it is what lets this
+// feature exist with no server at all.
+// ---------------------------------------------------------------------------
+
+let calendarSyncInFlight = false;
+
+async function syncCalendar(epoch) {
+  const account = currentAccountId();
+  if (calendarSyncInFlight || !calendarSyncReady(account) || !accessToken) return null;
+  calendarSyncInFlight = true;
+  try {
+    const client = createCalendarClient({
+      request: googleCalendarRequest(() => accessToken),
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
+    });
+    const stored = calendarStateFor(loadCalendarState(), account);
+    const calendarId = await client.ensureCalendar(stored.calendarId, {
+      onCreate: (id) => saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { calendarId: id })),
+    });
+    if (epoch !== sessionEpoch) return null;
+
+    // Hidden courses are filtered OUT here, which is what makes hiding a class
+    // in Settings remove its events and un-hiding put them back — the plan
+    // treats anything absent from the corpus as something to delete.
+    const wanted = syncableAssignments(allAssignments, { hiddenCourseIds });
+    const existing = await client.listManagedEvents(calendarId);
+    if (epoch !== sessionEpoch) return null;
+
+    const { ops, counts } = calendarSyncPlan(wanted, existing);
+    const { done, failed } = await client.applyPlan(calendarId, ops);
+    saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { lastSyncAt: new Date().toISOString() }));
+    console.info("[calendar] sync", { ...counts, applied: done.length, failed: failed.length });
+    if (failed.length) console.warn("[calendar] failures", failed.slice(0, 5));
+    window.dispatchEvent(new CustomEvent("cwa-calendar-synced"));
+    return { counts, failed };
+  } catch (error) {
+    // Never let a calendar problem break the planner. The status line in
+    // Settings is where this surfaces, not an alert over someone's homework.
+    console.warn("[calendar] sync failed:", error?.status || "", error?.message || error);
+    return null;
+  } finally {
+    calendarSyncInFlight = false;
   }
 }
 

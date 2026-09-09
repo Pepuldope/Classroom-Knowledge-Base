@@ -32,8 +32,9 @@ import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
 import {
-  calendarStateFor, setCalendarStateFor, calendarStateModel, calendarStatusModel,
-  hasCalendarScope, calendarAuthRequest,
+  calendarStateFor, setCalendarStateFor, calendarStatusModel, hasCalendarScope,
+  calendarAuthRequest, loadCalendarState, saveCalendarState, currentAccountId,
+  grantedScopes,
 } from "./calendar-consent.js";
 
 const $ = (id) => document.getElementById(id);
@@ -199,7 +200,6 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
 }
 
 const KB_SETTINGS_KEY = "cwa_kb_settings";
-const KB_CALENDAR_STATE_KEY = "cwa_kb_calendar";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const KB_BROWSE_STATE_KEY = "cwa_kb_browse_state";
 const KB_COPY_HISTORY_KEY = "cwa_kb_copy_history";
@@ -513,28 +513,6 @@ export function relatedNotesLimit(value = {}) {
 // Google Calendar — the switch only. Nothing syncs yet; that is ROADMAP item 5.
 // ---------------------------------------------------------------------------
 
-export function loadCalendarState() {
-  try { return calendarStateModel(JSON.parse(localStorage.getItem(KB_CALENDAR_STATE_KEY) || "null")); }
-  catch { return calendarStateModel(); }
-}
-
-export function saveCalendarState(state) {
-  const next = calendarStateModel(state);
-  try { localStorage.setItem(KB_CALENDAR_STATE_KEY, JSON.stringify(next)); } catch { /* private mode */ }
-  return next;
-}
-
-/** The signed-in Google account id, which the per-account state is keyed by. */
-function currentAccountId() {
-  try { return JSON.parse(localStorage.getItem("cwa_user_profile") || "null")?.sub || ""; }
-  catch { return ""; }
-}
-
-/** Scopes Google actually granted, recorded by the auth flow. */
-function grantedScopes() {
-  try { return localStorage.getItem("cwa_granted_scopes") || ""; } catch { return ""; }
-}
-
 export function renderCalendarSettings() {
   const toggle = $("kbPrefCalendarEnabled");
   const status = $("kbCalendarStatus");
@@ -573,8 +551,13 @@ async function onCalendarToggle(enabled) {
     window.dispatchEvent(new CustomEvent("cwa-request-calendar-scope", {
       detail: calendarAuthRequest({ loginHint: localStorage.getItem("cwa_user_hint") || "" }),
     }));
+    return;
   }
+  // Already granted: OFF hides the calendar, ON unhides it and syncs. app.js
+  // owns both because it holds the access token and the assignments.
+  window.dispatchEvent(new CustomEvent("cwa-calendar-visibility", { detail: { visible: enabled } }));
 }
+
 
 export function loadKbSettings() {
   try { return kbSettingsModel(JSON.parse(localStorage.getItem(KB_SETTINGS_KEY) || "{}")); }
@@ -1533,6 +1516,10 @@ export function wireKbEvents() {
   // the two are never on screen together (onboarding shows only in the empty
   // state), so this is one build path and one import path with two entry points.
   $("kbPrefCalendarEnabled")?.addEventListener("change", (e) => { void onCalendarToggle(e.target.checked); });
+  // Inside wireKbEvents, not at module scope: kb.js is imported by node test
+  // scripts, where `window` does not exist and a top-level listener throws on
+  // import. Several model tests import this module purely for its pure exports.
+  window.addEventListener("cwa-calendar-synced", () => renderCalendarSettings());
   renderCalendarSettings();
 
   $("kbRebuildBtn")?.addEventListener("click", () => startScrape());
