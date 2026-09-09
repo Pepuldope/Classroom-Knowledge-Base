@@ -22,6 +22,8 @@ import { loadStoredAuthSession, storeAuthSession, clearAuthSession, sessionResum
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
+import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
+import { sheetDragModel, viewportBottomInset } from "./sheet-drag.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -845,6 +847,7 @@ function setView(view) {
     view = access.fallback;
   }
   currentView = view;
+  saveSessionPosition({ view });
   const plannerView = $("plannerView");
   const kbView = $("kbView");
   if (plannerView) plannerView.hidden = view === "kb";
@@ -938,6 +941,83 @@ function renderLibraryStrip(a) {
   }
   strip.appendChild(row);
   strip.hidden = false;
+}
+
+// ---------------------------------------------------------------------------
+// Where you were.
+//
+// Everything about which page you are on lives in module variables, so every
+// reload landed on the Planner, at the top. On a phone that is not a rare,
+// deliberate act: an over-scroll at the top of a long list IS pull-to-refresh,
+// and the reader was thrown back to the Planner for it several times a session.
+//
+// The browser's own scroll restoration cannot help here — the Planner's list
+// arrives after a Classroom round-trip and the Study corpus after IndexedDB, so
+// at the moment the browser tries, the page is a header and a spinner. We turn
+// it off and do it ourselves, once there is a page to scroll.
+// ---------------------------------------------------------------------------
+try { if ("scrollRestoration" in history) history.scrollRestoration = "manual"; } catch { /* not supported */ }
+
+let positionRestored = false;
+let restoringPosition = false;
+let scrollWriteQueued = false;
+
+window.addEventListener("scroll", () => {
+  // A flick down a long list fires hundreds of these; one write per frame.
+  if (scrollWriteQueued) return;
+  scrollWriteQueued = true;
+  requestAnimationFrame(() => {
+    scrollWriteQueued = false;
+    // Our own scrollTo is not the reader choosing a place.
+    if (restoringPosition) return;
+    saveSessionPosition({ scroll: window.scrollY });
+  });
+}, { passive: true });
+
+/**
+ * Put the reader back where they were, once the page is tall enough to hold it.
+ *
+ * Called after the signed-in view has hydrated. Study restores its own tab and
+ * query in `refreshKb`; this owns the route and the scroll offset.
+ */
+function restoreSessionPosition(epoch) {
+  if (positionRestored) return;
+  positionRestored = true;
+  const position = loadSessionPosition();
+  if (!positionNeedsRestore(position)) return;
+  if (position.view !== currentView) setView(position.view);
+  if (position.scroll <= 0) return;
+
+  restoringPosition = true;
+  const deadline = Date.now() + 4000;
+  const stop = () => {
+    restoringPosition = false;
+    window.removeEventListener("wheel", stop);
+    window.removeEventListener("touchstart", stop);
+    window.removeEventListener("keydown", stop);
+  };
+  // The reader gets the page back the instant they reach for it. Waiting out
+  // the deadline while someone is already scrolling would yank it from under
+  // them, which is the bug this exists to fix, in the other direction.
+  window.addEventListener("wheel", stop, { passive: true, once: true });
+  window.addEventListener("touchstart", stop, { passive: true, once: true });
+  window.addEventListener("keydown", stop, { once: true });
+
+  const attempt = () => {
+    if (!restoringPosition || epoch !== sessionEpoch) return stop();
+    const ready = canRestoreScroll(position.scroll, {
+      scrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+    });
+    if (ready) {
+      window.scrollTo(0, position.scroll);
+      // One more frame so our own scroll event is swallowed by the guard.
+      return requestAnimationFrame(stop);
+    }
+    if (Date.now() > deadline) return stop();
+    requestAnimationFrame(attempt);
+  };
+  requestAnimationFrame(attempt);
 }
 
 /** Route to Study and search for a topic. */
@@ -1384,6 +1464,7 @@ async function onSignedIn() {
   }, SIGNIN_WATCHDOG_MS);
   try {
     await hydrateSignedInView(epoch);
+    if (epoch === sessionEpoch) restoreSessionPosition(epoch);
   } catch (e) {
     if (epoch === sessionEpoch) setStatus(e?.message || "Sign-in failed.", true);
   } finally {
@@ -2436,12 +2517,128 @@ function closeAssignmentPanel() {
   const panel = $("ai");
   if (!panel || panel.hidden) return false;
   panel.hidden = true;
+  // Leave nothing behind from a drag: the open animation is a CSS keyframe on
+  // `transform`, and an inline one left over from a dismissal would win.
+  panel.style.transform = "";
+  panel.style.transition = "";
   activeAssignment = null;
   activeLibraryNotes = [];
   return true;
 }
 
 $("aiClose").addEventListener("click", closeAssignmentPanel);
+
+// ---------------------------------------------------------------------------
+// The bottom sheet's grab handle.
+//
+// It used to be `#ai::before` — a pseudo-element with `pointer-events: none`.
+// It looked exactly like the thing you pull a sheet down by, and pulling it
+// scrolled the list behind instead, because the touch never reached the sheet
+// at all. An affordance that lies is worse than no affordance.
+//
+// The handle is a real button now: drag it to move the sheet, let go past a
+// quarter of its height (or flick) to dismiss, tap it to close outright. It is
+// display:none above 640px, where the panel is a side rail with nothing to pull.
+// ---------------------------------------------------------------------------
+(() => {
+  const handle = $("aiSheetHandle");
+  const panel = $("ai");
+  if (!handle || !panel) return;
+
+  const SETTLE_MS = 200;
+  const SETTLE = `transform ${SETTLE_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`;
+  let startY = null;
+  let startedAt = 0;
+  let height = 0;
+  let travelled = 0;
+
+  const settle = () => {
+    panel.style.transition = "";
+    panel.style.transform = "";
+  };
+
+  handle.addEventListener("pointerdown", (event) => {
+    if (event.button > 0) return;
+    startY = event.clientY;
+    startedAt = event.timeStamp;
+    travelled = 0;
+    height = panel.getBoundingClientRect().height;
+    // While a finger is down the transform IS the finger; easing it would lag.
+    panel.style.transition = "none";
+    try { handle.setPointerCapture(event.pointerId); } catch { /* older engines */ }
+  });
+
+  handle.addEventListener("pointermove", (event) => {
+    if (startY === null) return;
+    const { offset } = sheetDragModel({ startY, currentY: event.clientY, height });
+    travelled = offset;
+    panel.style.transform = offset ? `translateY(${offset}px)` : "";
+  });
+
+  const release = (event) => {
+    if (startY === null) return;
+    const drag = sheetDragModel({
+      startY,
+      currentY: event.clientY ?? startY,
+      height,
+      elapsedMs: event.timeStamp - startedAt,
+    });
+    startY = null;
+    panel.style.transition = SETTLE;
+    if (!drag.dismiss) {
+      panel.style.transform = "";
+      setTimeout(settle, SETTLE_MS);
+      return;
+    }
+    // Finish the throw before the sheet disappears, rather than blinking out
+    // from wherever the finger happened to leave it.
+    panel.style.transform = "translateY(100%)";
+    setTimeout(() => { settle(); closeAssignmentPanel(); }, SETTLE_MS);
+  };
+  handle.addEventListener("pointerup", release);
+  handle.addEventListener("pointercancel", release);
+
+  // A tap is the gesture people try first. Only a tap: a drag that ended short
+  // of the threshold has already been answered by springing back.
+  handle.addEventListener("click", () => {
+    if (travelled <= 6) closeAssignmentPanel();
+    travelled = 0;
+  });
+})();
+
+// ---------------------------------------------------------------------------
+// How much of the bottom edge the browser is sitting on.
+//
+// On a phone the address/search bar is at the BOTTOM of the screen, and the
+// on-screen keyboard covers the same edge. Neither is part of the visual
+// viewport, but `position: fixed; bottom: 0` measures against the LAYOUT
+// viewport — so the sheet's last row (Send, Clear, the quick prompts) rendered
+// underneath the browser's own bar and could not be tapped. `visualViewport` is
+// the only thing that reports the difference; the sheet pads itself by it.
+// ---------------------------------------------------------------------------
+(() => {
+  const vv = window.visualViewport;
+  let queued = false;
+  const sync = () => {
+    const inset = viewportBottomInset({
+      innerHeight: window.innerHeight,
+      visualHeight: vv?.height ?? window.innerHeight,
+      visualOffsetTop: vv?.offsetTop ?? 0,
+    });
+    document.documentElement.style.setProperty("--viewport-bottom-inset", `${inset}px`);
+  };
+  const schedule = () => {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(() => { queued = false; sync(); });
+  };
+  sync();
+  window.addEventListener("resize", schedule, { passive: true });
+  // visualViewport `scroll` fires as the bar collapses and expands, which is
+  // exactly when the inset changes; `resize` alone misses it.
+  vv?.addEventListener("resize", schedule, { passive: true });
+  vv?.addEventListener("scroll", schedule, { passive: true });
+})();
 
 // Escape closes the panel too. It is a full-screen sheet on a phone and a rail
 // that covers the header on a desktop, so "how do I get out of this" needs more

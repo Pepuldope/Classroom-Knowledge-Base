@@ -73,6 +73,11 @@ node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.
 CHECKPOINT_OK=$?
 if [ "$CHECKPOINT_OK" -ne 0 ]; then echo "resumable Classroom checkpoint tests FAILED"; exit 1; fi
 
+echo "==> Session position + sheet drag model tests"
+node --test tests/session-position.test.js tests/sheet-drag.test.js
+PLACE_MODEL_OK=$?
+if [ "$PLACE_MODEL_OK" -ne 0 ]; then echo "session position / sheet drag tests FAILED"; exit 1; fi
+
 echo "==> Study streak model tests"
 node scripts/study_streak_test.mjs
 STREAK_OK=$?
@@ -239,6 +244,11 @@ echo "==> Mobile layout audit (390/360/320px, light + dark)"
 BASE_URL="http://localhost:$PORT" node scripts/mobile_audit_test.mjs
 MOBILE_AUDIT_OK=$?
 if [ "$MOBILE_AUDIT_OK" -ne 0 ]; then echo "mobile layout audit FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Mobile place/sheet e2e (reload position, filters, stat bar, drag handle)"
+BASE_URL="http://localhost:$PORT" node scripts/mobile_place_test.mjs
+MOBILE_PLACE_OK=$?
+if [ "$MOBILE_PLACE_OK" -ne 0 ]; then echo "mobile place/sheet e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
 echo "==> Assignment bottom-sheet e2e"
 BASE_URL="http://localhost:$PORT" node scripts/ai_sheet_test.mjs

@@ -33,6 +33,32 @@ approve it. Keep items concrete and student-facing.
 - [x] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
+## 🐛 Reported by Pepuldo (2026-09-09) — fix before new features
+Six phone defects, all shipped 2026-09-09. Gated by `scripts/mobile_place_test.mjs`
+plus model tests in `tests/session-position.test.js` and `tests/sheet-drag.test.js`.
+- [x] Phone: pull-to-refresh threw you back to the Planner instead of where you
+  were. The route, the Study tab, the query and the scroll offset now live in
+  `session-position.js` (sessionStorage, per-tab — the query is the reader's own
+  words and does not belong on disk) and are restored after sign-in hydration.
+  `history.scrollRestoration` is set to manual: the browser's own attempt always
+  ran while the page was still a header and a spinner.
+- [x] Phone: the Study stat bar wrapped to two lines. The unit words ("notes",
+  "courses") moved to the accessibility tree only — about 75px that the icon
+  beside each number already spends.
+- [x] Phone: focusing the search box parked it at the bottom of the screen, so
+  the answers appeared under the keyboard. It is lifted to just below the sticky
+  header instead, on focus and when the viewport loses height. Touch only.
+- [x] Phone: too much scrolling in the Search tab filters. ~60 chips on one
+  horizontally-scrolling row became a collapsed `Filters` disclosure — active
+  facets and Clear on the summary line, chips wrapping inside.
+- [x] Phone: the browser's own bottom bar covered the assignment sheet's
+  buttons. The sheet pads itself by `--viewport-bottom-inset`, measured from
+  `visualViewport` in `sheet-drag.js`; the keyboard is handled the same way.
+- [x] Phone: the sheet's "pull tab" did nothing — it was a `::before` with
+  `pointer-events: none`, so dragging it scrolled the page behind. It is a real
+  button now with `touch-action: none`: drag to move, past a quarter of the
+  sheet (or a flick) to dismiss, tap to close.
+
 ## 🐛 Reported by Pepuldo (2026-09-07) — fix before new features
 - [x] Merge Archive into the Knowledge Base so there are only two pages. Shipped
   2026-09-07: the nav is **Planner | Study**. The two views shared an IndexedDB

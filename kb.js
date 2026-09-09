@@ -30,6 +30,7 @@ import { kbBuildProgressStatusModel, kbBuildCheckpointModel, kbBuildResumeSummar
 import { buildTutorRetrievedNotes, tutorRequestNotesModel } from "./kb-tutor-context.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
+import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -770,6 +771,9 @@ let activeStudyTab = "search";
 export function setStudyTab(requested) {
   const model = studyTabModel(requested);
   activeStudyTab = model.active;
+  // A reload is a routine accident on a phone (an over-scroll at the top of a
+  // long list IS pull-to-refresh), and every tab but Search was lost to it.
+  saveSessionPosition({ tab: model.active });
   for (const { tab, hidden } of model.panels) {
     const panel = $(`studyPanel-${tab}`);
     if (panel) panel.hidden = hidden;
@@ -860,6 +864,8 @@ export function kbSearchTopic(topic) {
 
 let localKbBundle = null;
 let noteModalOrigin = null;
+/** The saved tab/query is applied once per page load, not on every refresh. */
+let kbPositionRestored = false;
 
 export async function refreshKb() {
   const onboarding = $("kbOnboarding");
@@ -925,9 +931,18 @@ export async function refreshKb() {
     // Browse is its own tab now, so this no longer force-shows it under the
     // search box — that was the page answering "find me a note" twice at once.
     // Restore whichever tab is active; each loads its own content.
-    setStudyTab(activeStudyTab);
     const search = $("kbSearchInput");
-    if (!search || !search.value.trim()) renderExamples();
+    if (!kbPositionRestored) {
+      kbPositionRestored = true;
+      const position = loadSessionPosition();
+      activeStudyTab = position.tab;
+      if (search && position.query && !search.value) search.value = position.query;
+    }
+    setStudyTab(activeStudyTab);
+    // Re-running the query is only right on Search: runKbSearch switches to
+    // that tab, so doing it while restoring Browse would undo the restore.
+    if (activeStudyTab === "search" && search?.value.trim()) runKbSearch(search.value);
+    else if (!search || !search.value.trim()) renderExamples();
   }
 }
 
@@ -987,7 +1002,16 @@ function renderKbMeta(meta) {
     const strong = document.createElement("strong");
     strong.textContent = value;
     span.append(`${icon} `, strong);
-    if (suffix) span.append(` ${suffix}`);
+    // The word goes in its own element so the phone rule can move it into the
+    // accessibility tree alone. Four spelled-out units ("notes", "courses") are
+    // the ~75px that pushed this bar onto a second line at 390px, and the icon
+    // beside each number already says which is which.
+    if (suffix) {
+      const word = document.createElement("span");
+      word.className = "stat-word";
+      word.textContent = ` ${suffix}`;
+      span.appendChild(word);
+    }
     bar.appendChild(span);
   }
   bar.title = `${meta.noteCount ?? 0} notes across ${meta.courses ?? 0} courses · updated ${meta.updatedAt || meta.generatedAt || "never"}`;
@@ -1456,6 +1480,41 @@ export function wireKbEvents() {
   const search = $("kbSearchInput");
   search?.addEventListener("input", debounce(() => { markStudyActivity(); runKbSearch(search.value); }, 200));
 
+  // Focusing the box raises the keyboard, and the browser's answer to that is
+  // to scroll the focused field just clear of it — which puts the box at the
+  // BOTTOM of what is left of the screen, with every result it is about to
+  // produce hidden underneath the keyboard. Lift it to the top instead, so the
+  // strip of screen the keyboard leaves is filled with answers.
+  //
+  // Touch only: on a pointer device nothing is covering anything, and yanking
+  // the page under a mouse user who clicked a search box would be its own bug.
+  const onTouchDevice = () => {
+    try { return window.matchMedia("(hover: none) and (pointer: coarse)").matches; }
+    catch { return false; }
+  };
+  const liftSearchIntoView = () => {
+    const box = $("kbSearchInput");
+    if (!box || document.activeElement !== box || !onTouchDevice()) return;
+    // Measured, not assumed: the header is two rows on a phone and grows a
+    // third when a route-transition status is announced, so any fixed
+    // scroll-margin is wrong at some width or some sign-in state.
+    const header = document.querySelector("body > header");
+    const clearance = (header?.getBoundingClientRect().height || 0) + 8;
+    const top = box.getBoundingClientRect().top + window.scrollY - clearance;
+    window.scrollTo({ top: Math.max(0, top), behavior: "smooth" });
+  };
+  // After the keyboard's own animation, or the browser scrolls it back down.
+  search?.addEventListener("focus", () => setTimeout(liftSearchIntoView, 350));
+  let lastVisualHeight = window.visualViewport?.height ?? 0;
+  window.visualViewport?.addEventListener("resize", () => {
+    const height = window.visualViewport.height;
+    const shrank = height < lastVisualHeight - 80;
+    lastVisualHeight = height;
+    // Only when the viewport just LOST height — that is the keyboard arriving.
+    // Reacting to it growing would fight the reader as they dismiss it.
+    if (shrank) setTimeout(liftSearchIntoView, 50);
+  });
+
   // Focus area 7: explicit sort order. Changing the dropdown re-runs the search
   // with the chosen sort (default relevance, which is omitted server-side).
   const sortSel = $("kbSort");
@@ -1763,6 +1822,10 @@ async function runKbSearch(query) {
   const results = $("kbResults");
   if (!results) return;
   query = (query || "").trim();
+  // Every way into a search ends up here — the box, Escape-to-clear, an example
+  // chip, "did you mean", the Planner bridge — so this is the one place that
+  // has to remember what is being asked.
+  saveSessionPosition({ query });
   const effectiveSort = kbSortForQuery(query, kbActiveSort, { explicit: kbSortExplicit });
   const scope = kbScopeFilters(loadKbSettings(), { course: kbActiveCourse }, {
     currentCourse: kbCurrentCourse,
@@ -1775,8 +1838,7 @@ async function runKbSearch(query) {
     results.innerHTML = "";
     const count = $("kbResultCount");
     if (count) { count.hidden = true; count.innerHTML = ""; }
-    const chips = $("kbFilterChips");
-    if (chips) chips.hidden = true;
+    hideFilterPanel();
     // No query → offer the example searches. Discovering by course lives on
     // the Browse tab, not stacked underneath this one.
     renderExamples();
@@ -2448,9 +2510,34 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
   }
 }
 
+/**
+ * Empty the summary line.
+ *
+ * The tags live in their own span and are replaced wholesale, but the Clear
+ * button is a direct child of the <summary> — deliberately, so a long course
+ * name in the tag strip cannot clip it out of reach — and so has to be removed
+ * by hand or one accumulates per render.
+ */
+function clearFilterSummary() {
+  const summary = $("kbFilterSummaryChips");
+  if (summary) summary.replaceChildren();
+  $("kbFilterPanel")?.querySelectorAll(".kb-clear-filters").forEach((button) => button.remove());
+}
+
+/** Hide the whole filter surface, panel and summary together. */
+function hideFilterPanel() {
+  const panel = $("kbFilterPanel");
+  if (panel) panel.hidden = true;
+  const chips = $("kbFilterChips");
+  if (chips) chips.innerHTML = "";
+  clearFilterSummary();
+}
+
 function renderFilterChips(filters) {
   const chips = $("kbFilterChips");
-  if (!chips) return;
+  const panel = $("kbFilterPanel");
+  const summaryChips = $("kbFilterSummaryChips");
+  if (!chips || !panel) return;
   // Pure model: returns ALL courses + years + kinds + families (no truncation)
   // and the active selection, so every facet is reachable as a filter
   // (owner request #2 + focus area 7).
@@ -2466,10 +2553,11 @@ function renderFilterChips(filters) {
   const kinds = model.kinds;
   const families = model.families;
   if (courses.length === 0 && years.length === 0 && kinds.length === 0 && families.length === 0) {
-    chips.hidden = true; chips.innerHTML = ""; return;
+    hideFilterPanel(); return;
   }
-  chips.hidden = false;
+  panel.hidden = false;
   chips.innerHTML = "";
+  clearFilterSummary();
 
   const makeChip = (label, kind, value, active) => {
     const b = document.createElement("button");
@@ -2501,8 +2589,10 @@ function renderFilterChips(filters) {
     lbl.className = "kb-chip-group-label";
     lbl.textContent = "Course:";
     chips.appendChild(lbl);
-    // Every course is rendered (no top-N cap) so none is unreachable.
-    // The .kb-filter-chips container scrolls horizontally if the row is long.
+    // Every course is rendered (no top-N cap) so none is unreachable. They
+    // wrap inside the collapsed panel rather than extending a one-line
+    // horizontal scroller, which at 43 courses was most of a screen of sideways
+    // dragging to reach the last one.
     for (const c of courses) chips.appendChild(makeChip(c, "course", c, model.activeCourse === c));
   }
   // Focus area 7: Type + Class-type facets join course + year.
@@ -2521,6 +2611,24 @@ function renderFilterChips(filters) {
     for (const f of families) chips.appendChild(makeChip(f, "family", f, model.activeFamily === f));
   }
 
+  // What is ON shows on the summary line, so a collapsed panel still answers
+  // "why am I only seeing these results?" without being opened.
+  const activeTags = [
+    [model.activeYear, "Year"],
+    [model.activeCourse, "Course"],
+    [model.activeKind, "Type"],
+    [model.activeFamily, "Class type"],
+  ].filter(([value]) => value);
+  if (summaryChips) {
+    for (const [value, group] of activeTags) {
+      const tag = document.createElement("span");
+      tag.className = "kb-filter-tag";
+      tag.textContent = value;
+      tag.title = `${group}: ${value}`;
+      summaryChips.appendChild(tag);
+    }
+  }
+
   // ROADMAP #55: a "Clear filters" control appears only when a facet is active,
   // so the student can reset the course/year selection without retyping.
   if (kbActiveCourse || kbActiveYear || kbActiveKind || kbActiveFamily || kbActiveSort !== "relevance") {
@@ -2529,6 +2637,9 @@ function renderFilterChips(filters) {
     clear.className = "kb-chip kb-clear-filters";
     clear.textContent = "✕ Clear filters";
     clear.title = "Remove the active filters and sort";
+    // It lives inside the <summary>, where a click would otherwise toggle the
+    // disclosure as well as clear the filters.
+    clear.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); });
     clear.addEventListener("click", () => {
       kbActiveCourse = "";
       kbActiveYear = "";
@@ -2544,7 +2655,7 @@ function renderFilterChips(filters) {
       const input = $("kbSearchInput");
       runKbSearch(input ? input.value : "");
     });
-    chips.appendChild(clear);
+    (panel.querySelector(".kb-filter-summary") || chips).appendChild(clear);
   }
 }
 

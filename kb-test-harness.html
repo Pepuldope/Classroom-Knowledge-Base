@@ -54,7 +54,14 @@
           <div id="kbExamples" class="kb-examples" hidden>
             <span class="kb-examples-label">Try:</span>
           </div>
-          <div id="kbFilterChips" class="kb-filter-chips" hidden></div>
+          <details id="kbFilterPanel" class="kb-filter-panel" hidden>
+            <summary class="kb-filter-summary">
+              <span class="kb-filter-summary-icon" aria-hidden="true">⚙</span>
+              <span class="kb-filter-summary-label">Filters</span>
+              <span id="kbFilterSummaryChips" class="kb-filter-summary-chips"></span>
+            </summary>
+            <div id="kbFilterChips" class="kb-filter-chips"></div>
+          </details>
           <div class="kb-sort-row">
             <label class="kb-sort-label" for="kbSort">Sort:</label>
             <select id="kbSort" class="kb-sort-select">

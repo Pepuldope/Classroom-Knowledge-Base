@@ -1347,6 +1347,11 @@ summary::-webkit-details-marker { color: var(--muted); }
   #ai { width: 100%; }
 }
 
+/* The sheet's grab handle is a phone control. Above 640px the panel is a side
+   rail with nothing to pull, so the handle takes no row of the flex column and
+   is out of the tab order and the accessibility tree entirely. */
+.ai-sheet-handle { display: none; }
+
 /* Phones: the assignment/material panel is a bottom sheet rather than a
    full-bleed slab. It covers most of the screen but stops short of the top, so
    the list stays visible behind it and the panel reads as something laid over
@@ -1370,27 +1375,53 @@ summary::-webkit-details-marker { color: var(--muted); }
     /* Runs on every open: the panel is toggled with the hidden attribute, and
        display:none -> flex restarts a CSS animation. */
     animation: ai-sheet-up 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+    /* The phone's address/search bar sits on the BOTTOM edge, and so does the
+       keyboard — neither is inside the visual viewport, but `bottom: 0` is
+       measured against the LAYOUT viewport, so the sheet's last row of buttons
+       rendered underneath the browser's own bar and could not be tapped.
+       app.js measures the difference with visualViewport; the home-indicator
+       inset is the floor for browsers that report no bar at all. */
+    padding-bottom: max(var(--viewport-bottom-inset, 0px), env(safe-area-inset-bottom));
   }
-  /* Grab-handle affordance, so the rounded top reads as a sheet. */
-  #ai::before {
-    content: "";
-    position: absolute;
-    top: 8px;
-    left: 50%;
-    transform: translateX(-50%);
+  /* The grab handle, on phones only — above 640px the panel is a side rail
+     with nothing to pull. */
+  .ai-sheet-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 100%;
+    /* 28px of target for a 4px grip: this is the control people reach for
+       first, and it was previously not a control at all. */
+    height: 28px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 18px 18px 0 0;
+    cursor: grab;
+    /* Without this the browser claims the vertical gesture for scrolling and
+       pointermove never arrives — which is exactly how the old pseudo-element
+       handle "worked". */
+    touch-action: none;
+  }
+  .ai-sheet-handle:active { cursor: grabbing; }
+  .ai-sheet-grip {
     width: 36px;
     height: 4px;
     border-radius: 2px;
     background: var(--border);
-    pointer-events: none;
   }
+  .ai-sheet-handle:hover .ai-sheet-grip,
+  .ai-sheet-handle:focus-visible .ai-sheet-grip { background: var(--muted); }
+  .ai-sheet-handle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   #ai header {
-    /* Clear the handle. No safe-area inset here — the sheet does not reach the
-       top of the screen, so the notch is not its problem. */
-    padding-top: 1.15rem;
-    border-radius: 18px 18px 0 0;
+    /* No safe-area inset here — the sheet does not reach the top of the
+       screen, so the notch is not its problem. */
+    padding-top: 0.6rem;
+    border-radius: 0;
   }
 }
+
 
 @keyframes ai-sheet-up {
   from { transform: translateY(100%); }
@@ -1569,6 +1600,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 @media (max-width: 380px) {
   body > header h1 { font-size: 0.95rem; }
   .stat-bar { gap: 0.4rem; padding: 0.45rem 0.55rem; }
+  #kbMetaBar { gap: 0.35rem; font-size: 0.72rem; }
   .stat-bar .stat strong { font-size: 0.9rem; }
   .stat-bar .stat .label { font-size: 0.65rem; }
   .dropdown-current { max-width: 70px; }
@@ -2388,10 +2420,22 @@ summary::-webkit-details-marker { color: var(--muted); }
 @media (max-width: 640px) {
   /* Above-the-tabs furniture, compacted. These four strips together used to
      take about a third of a 390px screen before the first result. */
-  /* The Planner stat bar sets `flex-wrap: nowrap` above, which works there
-     because its .stat cells shrink. The Study meta bar's cells are single-line
-     and non-shrinking, so nowrap ran "1h ago" straight off the screen. */
-  #kbMetaBar { flex-wrap: wrap; }
+  /* One line. It wrapped to two because four spelled-out units — "notes",
+     "courses" — cost about 75px that the icon beside each number already
+     spends. The words stay in the accessibility tree; only the pixels go.
+     The last cell is the one allowed to shrink: it carries the sync delta
+     ("just now · −1"), which is the least costly thing to lose at 320px, and
+     the bar's title attribute still has all of it. */
+  #kbMetaBar { flex-wrap: nowrap; }
+  #kbMetaBar .stat-word {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  #kbMetaBar > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .stat-bar { gap: 0.25rem 0.5rem; padding: 0.45rem 0.6rem; font-size: 0.78rem; margin-bottom: 0.5rem; border-radius: 7px; }
   .kb-study-stats { gap: 0.4rem; margin: 0.45rem 0 0.6rem; }
   .kb-study-streak,
@@ -2487,9 +2531,64 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-msg-assistant { background: var(--card); border: 1px solid var(--border); }
 .ai-messages { flex: 1; overflow-y: auto; padding: 0.5rem; }
 
-.kb-filter-chips { display: flex; flex-wrap: nowrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; overflow-x: auto; padding-bottom: 0.35rem; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
-.kb-filter-chips::-webkit-scrollbar { height: 6px; }
-.kb-filter-chips::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+/* Filters, closed by default.
+   Every facet is a chip and none is capped, which is right — but at 43 courses
+   plus four years plus twelve kinds that was ~60 chips on ONE nowrap row inside
+   a horizontal scroller, sitting between the search box and the results. On a
+   phone, reaching the last course meant most of a screen-width of sideways
+   dragging, every time. The row is a disclosure now: what is ON shows on the
+   summary line, and the chips wrap inside instead of scrolling. */
+.kb-filter-panel {
+  margin-bottom: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+}
+.kb-filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.82rem;
+  color: var(--muted);
+  border-radius: 10px;
+  min-height: 40px;
+}
+.kb-filter-summary::-webkit-details-marker { display: none; }
+.kb-filter-summary:hover { color: var(--accent); }
+.kb-filter-panel:focus-within > .kb-filter-summary { outline: 2px solid var(--accent); outline-offset: -2px; }
+.kb-filter-summary-label { font-weight: 600; }
+.kb-filter-summary-icon { font-size: 0.9rem; line-height: 1; }
+/* The native disclosure marker is suppressed above (it cannot be positioned
+   after the active-filter tags), so the summary draws its own. */
+.kb-filter-summary::after {
+  content: "\25BE";
+  flex: 0 0 auto;
+  margin-left: 0.15rem;
+  transition: transform 0.15s ease;
+}
+.kb-filter-panel[open] > .kb-filter-summary::after { transform: rotate(180deg); }
+@media (prefers-reduced-motion: reduce) {
+  .kb-filter-summary::after { transition: none; }
+}
+.kb-filter-panel[open] > .kb-filter-summary { border-bottom: 1px solid var(--border); border-radius: 10px 10px 0 0; }
+/* Active facets, on the closed line: a collapsed panel still has to answer
+   "why am I only seeing these results?". */
+.kb-filter-summary-chips { display: flex; align-items: center; gap: 0.35rem; min-width: 0; overflow: hidden; flex: 1 1 auto; }
+.kb-filter-tag {
+  font-size: 0.76rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 11rem;
+}
+.kb-filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; padding: 0.6rem 0.7rem; }
 .kb-chip-group-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.1rem; }
 .kb-chip {
   font: inherit; font-size: 0.82rem; cursor: pointer;
@@ -2499,7 +2598,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .kb-chip:hover { border-color: var(--accent); color: var(--accent); }
 .kb-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.kb-chip.kb-clear-filters { margin-left: auto; border-style: dashed; color: var(--muted); }
+.kb-chip.kb-clear-filters { margin-left: auto; flex: 0 0 auto; border-style: dashed; background: var(--card); color: var(--muted); }
 .kb-chip.kb-clear-filters:hover { border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
 .kb-result-count { font-size: 0.82rem; color: var(--muted); margin: 0.25rem 0 0.5rem; }
 

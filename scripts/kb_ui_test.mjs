@@ -22,6 +22,23 @@ import { mkdirSync } from "node:fs";
 import assert from "node:assert/strict";
 
 const BASE = process.env.BASE_URL || "http://localhost:4321";
+
+/**
+ * Open the Filters disclosure.
+ *
+ * The facet chips used to be a permanently-visible horizontal scroller; they
+ * are inside a collapsed <details> now, so anything that clicks one has to open
+ * it first — a reader does the same.
+ */
+const openFilterPanel = async (page) => {
+  await page.waitForSelector("#kbFilterPanel:not([hidden])", { timeout: 10000 });
+  await page.evaluate(() => {
+    const panel = document.getElementById("kbFilterPanel");
+    if (panel) panel.open = true;
+  });
+  await page.waitForSelector("#kbFilterChips .kb-chip", { state: "visible", timeout: 10000 });
+};
+
 const SHOTS = new URL("./screenshots/", import.meta.url).pathname;
 mkdirSync(SHOTS, { recursive: true });
 
@@ -309,7 +326,7 @@ try {
   });
 
   await check("arrow keys move focus through result cards and Enter opens one", async () => {
-    const clearFilters = page.locator("#kbFilterChips .kb-clear-filters");
+    const clearFilters = page.locator("#kbFilterPanel .kb-clear-filters");
     if (await clearFilters.count() && await clearFilters.isVisible()) await clearFilters.click();
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
@@ -358,7 +375,7 @@ try {
   });
 
   await check("filter chips render after search", async () => {
-    await page.waitForSelector("#kbFilterChips:not([hidden]) .kb-chip", { timeout: 10000 });
+    await openFilterPanel(page);
     const chips = await page.locator("#kbFilterChips .kb-chip").count();
     assert.ok(chips > 0, "expected at least one filter chip");
   });
@@ -368,6 +385,7 @@ try {
   // reorder results. These are reachable from the search response facets.
   await check("Type + Class-type filter facets and sort dropdown render", async () => {
     // Labels for the new facets must be present in the chip bar.
+    await openFilterPanel(page);
     const labels = await page.locator("#kbFilterChips .kb-chip-group-label").allTextContents();
     const joined = labels.join(" | ").toLowerCase();
     assert.ok(joined.includes("type"), "Type facet label present");
@@ -614,6 +632,7 @@ try {
 
   // --- Click a Year chip -> results narrow ---
   await check("clicking a Year filter chip re-runs search with the filter", async () => {
+    await openFilterPanel(page);
     const yearChip = page.locator("#kbFilterChips .kb-chip").first();
     await yearChip.click();
     await page.waitForTimeout(800); // allow re-fetch
@@ -767,20 +786,21 @@ try {
     await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 8000 });
     // Pick an inactive chip so clicking turns the filter ON.
+    await openFilterPanel(page);
     const inactive = page.locator("#kbFilterChips .kb-chip:not(.active)").first();
     assert.ok((await inactive.count()) >= 1, "an inactive filter chip should be present");
     await inactive.click();
     await page.waitForTimeout(700);
     // A "Clear filters" control must now be present.
-    const clear = page.locator("#kbFilterChips .kb-clear-filters");
+    const clear = page.locator("#kbFilterPanel .kb-clear-filters");
     assert.ok((await clear.count()) === 1, "clear-filters control should appear when a filter is active");
     // Clicking it clears the filter and the control disappears.
     await clear.click();
     await page.waitForFunction(
-      () => document.querySelectorAll("#kbFilterChips .kb-clear-filters").length === 0,
+      () => document.querySelectorAll("#kbFilterPanel .kb-clear-filters").length === 0,
       { timeout: 5000 }
     ).catch(() => {});
-    assert.equal(await page.locator("#kbFilterChips .kb-clear-filters").count(), 0,
+    assert.equal(await page.locator("#kbFilterPanel .kb-clear-filters").count(), 0,
       "clear-filters control should disappear after clearing");
     await page.screenshot({ path: SHOTS + "07-result-count.png", fullPage: true });
   });
