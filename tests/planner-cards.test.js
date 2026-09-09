@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dueChipModel, groupPlannerItems } from "../planner-cards.js";
+import { dueChipModel, groupPlannerItems, sortPendingFirst } from "../planner-cards.js";
 
 test("submitted work is never overdue, however late", () => {
   // The reported bug: the card's styling checked isPending but the TEXT did
@@ -53,4 +53,28 @@ test("empty and unrecognised input still render somewhere", () => {
   const odd = groupPlannerItems([{ kind: "quiz" }, { kind: "assignment" }]);
   assert.deepEqual(odd.groups.map((g) => g.label), ["Assignments", "Other"]);
   assert.equal(odd.groups.find((g) => g.label === "Other").items.length, 1);
+});
+
+test("new-today assignments list not-done before submitted", () => {
+  const pending = (a) => a.state === "todo";
+  const items = [
+    { kind: "assignment", id: "done1", state: "in" },
+    { kind: "assignment", id: "todo1", state: "todo" },
+    { kind: "assignment", id: "done2", state: "in" },
+    { kind: "assignment", id: "todo2", state: "todo" },
+  ];
+  assert.deepEqual(sortPendingFirst(items, pending).map((i) => i.id),
+    ["todo1", "todo2", "done1", "done2"]);
+  // Within each half the caller's order survives — this is a stable partition.
+  assert.deepEqual(sortPendingFirst(items.slice().reverse(), pending).map((i) => i.id),
+    ["todo2", "todo1", "done2", "done1"]);
+});
+
+test("only assignments are ranked by submission state", () => {
+  const pending = () => false;
+  // Materials have no submission; they must not be shuffled to the back.
+  const items = [{ kind: "material", id: "m" }, { kind: "assignment", id: "a" }];
+  assert.deepEqual(sortPendingFirst(items, pending).map((i) => i.id), ["m", "a"]);
+  assert.deepEqual(sortPendingFirst([], pending), []);
+  assert.deepEqual(sortPendingFirst(null, pending), []);
 });

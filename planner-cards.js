@@ -57,3 +57,24 @@ export function groupPlannerItems(items) {
   if (other.length) groups.push({ key: "other", label: "Other", items: other });
   return { groups, showLabels: groups.length > 1 };
 }
+
+/**
+ * Put work still to do above work already handed in, without disturbing the
+ * order within each half.
+ *
+ * "New since yesterday" sorted purely by the caller's sort, so a submitted
+ * assignment could sit above one the student still has to start. Whether it is
+ * done is the first thing you want to know; everything else is a tiebreak.
+ *
+ * `pending` is passed in because submission state lives in app.js — this module
+ * stays free of Classroom's data shape.
+ */
+export function sortPendingFirst(items, pending) {
+  const list = Array.isArray(items) ? items : [];
+  const rank = (item) => (item?.kind === "assignment" && !pending(item) ? 1 : 0);
+  // Index breaks ties so the sort is stable across engines.
+  return list
+    .map((item, i) => ({ item, i, rank: rank(item) }))
+    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map(({ item }) => item);
+}

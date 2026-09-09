@@ -12,7 +12,7 @@ import {
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { migrateArchiveBundle } from "./kb-merge.js";
 import { relatedNotes } from "./kb-client-search.js";
-import { dueChipModel, groupPlannerItems } from "./planner-cards.js";
+import { dueChipModel, groupPlannerItems, sortPendingFirst } from "./planner-cards.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
@@ -2250,7 +2250,11 @@ function renderWeek(inScope) {
 function renderTodayNew(all) {
   const list = $("todayList");
   list.innerHTML = "";
-  const items = applySort(all.filter((a) => a.kind !== "announcement" && isPostedSinceYesterday(a)));
+  // Not done first, submitted after; applySort decides the order within each.
+  const items = sortPendingFirst(
+    applySort(all.filter((a) => a.kind !== "announcement" && isPostedSinceYesterday(a))),
+    isPending,
+  );
   if (items.length === 0) {
     list.innerHTML = `<div class="empty">No new assignments posted since yesterday.</div>`;
     return;
