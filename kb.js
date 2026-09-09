@@ -1516,6 +1516,26 @@ export function wireKbEvents() {
   // the two are never on screen together (onboarding shows only in the empty
   // state), so this is one build path and one import path with two entry points.
   $("kbPrefCalendarEnabled")?.addEventListener("change", (e) => { void onCalendarToggle(e.target.checked); });
+  $("kbCalendarRemove")?.addEventListener("click", () => {
+    const account = currentAccountId();
+    const state = calendarStateFor(loadCalendarState(), account);
+    if (!state.calendarId) {
+      const status = $("kbCalendarStatus");
+      if (status) status.textContent = "There is no calendar to remove yet.";
+      return;
+    }
+    // The one destructive action in this feature, so it is a button with a
+    // confirm rather than a switch. The copy names what actually goes: the
+    // ✓-marked record of finished work is the part somebody would miss.
+    const ok = typeof window.confirm !== "function" || window.confirm(
+      "Delete the \u201cClassroom assignments\u201d calendar from Google?\n\n"
+      + "This removes every event in it, including the \u2713 record of work you have already handed in, "
+      + "and anything you moved or renamed yourself.\n\n"
+      + "Your Classroom data and your other calendars are not affected. This cannot be undone.",
+    );
+    if (!ok) return;
+    window.dispatchEvent(new CustomEvent("cwa-calendar-remove"));
+  });
   // Inside wireKbEvents, not at module scope: kb.js is imported by node test
   // scripts, where `window` does not exist and a top-level listener throws on
   // import. Several model tests import this module purely for its pure exports.

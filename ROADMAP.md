@@ -33,7 +33,7 @@ approve it. Keep items concrete and student-facing.
 - [x] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
-## 📅 Google Calendar (Pepuldo, 2026-09-09) — planned, not started
+## 📅 Google Calendar (Pepuldo, 2026-09-09) — Phase 1 + 2 shipped
 Full design: `docs/google-calendar-plan.md`. Read it before starting any item
 below; the scope choice and the deterministic-id decision are load-bearing.
 Decided by Pepuldo 2026-09-09: sync-on-open only (background sync REJECTED, so
@@ -76,12 +76,19 @@ items 3 onward fail at Google without it.
   never delays the planner. The switch hides/unhides via events rather than
   kb.js importing the auth and API plumbing. **Phase 1 complete — assignments
   now appear in Google Calendar.**
-- [ ] Calendar: ✓-on-submit and its reversal on unsubmit, deleted-coursework
+- [x] Calendar: ✓-on-submit and its reversal on unsubmit, deleted-coursework
   handling, the fingerprint guard that never clobbers a student's own edit, and
-  full reconcile. (2026-09-09)
-- [ ] Calendar: the OFF path — `calendarList.patch {hidden:true, selected:false}`
+  full reconcile. Shipped 2026-09-09. Reconcile is bounded by a horizon:
+  `shouldDropEarly` stops returning coursework due more than STALE_DAYS ago, so
+  past that point "missing from the corpus" no longer means "deleted in
+  Classroom", and deleting on it would have erased the ✓ record of everything
+  finished more than a fortnight ago. Dismissing a card now also removes its
+  event, reversibly, exactly as hiding its course does.
+- [x] Calendar: the OFF path — `calendarList.patch {hidden:true, selected:false}`
   and back again on re-enable, plus a separate confirm-dialogged "Remove the
-  calendar from Google" button calling `calendars.delete`. (2026-09-09)
+  calendar from Google" button calling `calendars.delete`. Shipped 2026-09-09.
+  Removing also switches sync off, because leaving it on would recreate the
+  calendar on the next page load.
 - [ ] Calendar: `freebusy` + proposed work blocks from `estimatedMinutes` —
   propose, never impose. (2026-09-09)
 

@@ -1,7 +1,9 @@
 // Corpus × calendar → what to do. Every rule Pepuldo settled lives here.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { calendarSyncPlan, syncableAssignments, isOurEvent } from "../calendar-sync.js";
+import {
+  calendarSyncPlan, syncableAssignments, isOurEvent, eventStartDate, isBeyondReconcileHorizon,
+} from "../calendar-sync.js";
 import { calendarEventBody, calendarEventId, APP_MARKER } from "../calendar-event.js";
 
 const work = (id, over = {}) => ({
@@ -169,4 +171,63 @@ test("a realistic mixed sync produces one op per assignment plus removals", () =
   assert.equal(opFor(plan, "w2").op, "patch");
   assert.equal(opFor(plan, "w9").op, "delete");
   assert.equal(opFor(plan, "w1").op, "skip");
+});
+
+// --- the reconcile horizon --------------------------------------------------
+
+test("work that merely aged out of the planner keeps its ✓ record", () => {
+  // shouldDropEarly stops returning coursework due more than ~2 weeks ago, so
+  // "absent from the corpus" means either deleted in Classroom OR simply old.
+  // Deleting on the second reading erases the record of everything finished
+  // more than a fortnight ago, which is the opposite of keeping it.
+  const old = work("w1", {
+    dueDate: { year: 2026, month: 8, day: 1 },
+    submission: { state: "TURNED_IN" },
+  });
+  const plan = calendarSyncPlan([], onCalendar([old]), { reconcileAfter: "2026-08-26" });
+  assert.deepEqual(plan.counts, { create: 0, patch: 0, delete: 0, skip: 1 });
+  assert.equal(plan.ops[0].reason, "older than the reconcile horizon");
+});
+
+test("recent work that really did disappear is still deleted", () => {
+  const recent = work("w1", { dueDate: { year: 2026, month: 9, day: 3 } });
+  const plan = calendarSyncPlan([], onCalendar([recent]), { reconcileAfter: "2026-08-26" });
+  assert.equal(plan.counts.delete, 1);
+});
+
+test("with no horizon given, reconcile is unrestricted", () => {
+  const plan = calendarSyncPlan([], onCalendar([work("w1")]));
+  assert.equal(plan.counts.delete, 1);
+});
+
+test("an event whose date cannot be read is never deleted by reconcile", () => {
+  // Deleting somebody's record because of a parse failure is the worse error.
+  const broken = { ...onCalendar([work("w1")])[0], start: {} };
+  const plan = calendarSyncPlan([], [broken], { reconcileAfter: "2026-08-26" });
+  assert.equal(plan.counts.delete, 0);
+  assert.equal(plan.counts.skip, 1);
+});
+
+test("the horizon reads both all-day and timed events", () => {
+  const timed = onCalendar([work("w1", { dueTime: { hours: 12, minutes: 0 } })])[0];
+  assert.equal(eventStartDate(timed).length, 10, "a dateTime yields a date");
+  assert.equal(eventStartDate(onCalendar([work("w2")])[0]), "2026-09-11");
+  assert.equal(eventStartDate({}), "");
+  assert.equal(isBeyondReconcileHorizon(timed, "2026-09-20"), true);
+  assert.equal(isBeyondReconcileHorizon(timed, "2026-09-01"), false);
+});
+
+// --- dismissing -------------------------------------------------------------
+
+test("dismissing a card takes its event with it, and un-dismissing puts it back", () => {
+  const a = work("w1");
+  const b = work("w2");
+  const calendar = onCalendar([a, b]);
+
+  const kept = syncableAssignments([a, b], { dismissedIds: new Set(["w2"]) });
+  assert.deepEqual(kept.map((x) => x.id), ["w1"]);
+  assert.equal(calendarSyncPlan(kept, calendar).counts.delete, 1);
+
+  const back = calendarSyncPlan(syncableAssignments([a, b]), calendar);
+  assert.equal(back.counts.delete, 0, "un-dismissing restores it");
 });

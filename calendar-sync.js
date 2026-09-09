@@ -46,6 +46,38 @@ export function isUserEdited(event, expectedSummary) {
  * Returns `{ ops, counts }`; every op is `{ op, id, body?, event?, reason }` so
  * a caller can log exactly why each decision was made.
  */
+/**
+ * The date an event starts, as `YYYY-MM-DD`, for either shape of event.
+ */
+export function eventStartDate(event) {
+  const start = event?.start || {};
+  if (typeof start.date === "string") return start.date;
+  if (typeof start.dateTime === "string") return start.dateTime.slice(0, 10);
+  return "";
+}
+
+/**
+ * Is this event old enough that its absence proves nothing?
+ *
+ * The planner deliberately stops returning coursework due more than a couple of
+ * weeks ago (`shouldDropEarly`), so "not in the corpus" means two very different
+ * things: deleted in Classroom, or simply aged out of the window we can see.
+ * Deleting on the second reading would quietly erase the ✓ record of everything
+ * finished more than a fortnight ago — the opposite of keeping it.
+ *
+ * So reconcile only removes events recent enough that we would still expect to
+ * be shown their assignment. Anything older is history and is left alone.
+ */
+export function isBeyondReconcileHorizon(event, reconcileAfter) {
+  const cutoff = String(reconcileAfter || "");
+  if (!cutoff) return false;
+  const start = eventStartDate(event);
+  // An event with no readable date cannot be judged; leaving it is the safe
+  // failure, since the alternative deletes somebody's record on a parse error.
+  if (!start) return true;
+  return start < cutoff;
+}
+
 export function calendarSyncPlan(assignments = [], existingEvents = [], options = {}) {
   const ops = [];
   const byId = new Map();
@@ -95,9 +127,15 @@ export function calendarSyncPlan(assignments = [], existingEvents = [], options 
   }
 
   // Anything of ours the corpus no longer contains: coursework deleted or
-  // unpublished in Classroom, or its course hidden in Settings.
+  // unpublished in Classroom, its course hidden in Settings, or the card
+  // dismissed. Except when it is simply too old for us to still be shown it.
   for (const [id, event] of byId) {
-    if (!wanted.has(id)) ops.push({ op: "delete", id, event, reason: "no longer in the corpus" });
+    if (wanted.has(id)) continue;
+    if (isBeyondReconcileHorizon(event, options.reconcileAfter)) {
+      ops.push({ op: "skip", id, event, reason: "older than the reconcile horizon" });
+      continue;
+    }
+    ops.push({ op: "delete", id, event, reason: "no longer in the corpus" });
   }
 
   const counts = { create: 0, patch: 0, delete: 0, skip: 0 };
@@ -128,9 +166,18 @@ function existingSummaryFor(event, assignment) {
   return prefix + title;
 }
 
-/** Only the assignments that belong on a calendar at all. */
-export function syncableAssignments(assignments = [], { hiddenCourseIds = new Set() } = {}) {
+/**
+ * Only the assignments that belong on a calendar at all.
+ *
+ * Dismissing a card is the student saying "stop showing me this", so it takes
+ * the event with it, exactly as hiding its course does. Both are reversible:
+ * un-dismissing or un-hiding puts the event back on the next sync.
+ */
+export function syncableAssignments(assignments = [], { hiddenCourseIds = new Set(), dismissedIds = new Set() } = {}) {
   const hidden = hiddenCourseIds instanceof Set ? hiddenCourseIds : new Set(hiddenCourseIds || []);
+  const dismissed = dismissedIds instanceof Set ? dismissedIds : new Set(dismissedIds || []);
   return (Array.isArray(assignments) ? assignments : []).filter((a) =>
-    a && a.kind === "assignment" && a.dueDate && !hidden.has(String(a.courseId)));
+    a && a.kind === "assignment" && a.dueDate
+    && !hidden.has(String(a.courseId))
+    && !dismissed.has(a.id));
 }

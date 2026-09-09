@@ -1495,6 +1495,26 @@ window.addEventListener("cwa-calendar-visibility", (event) => {
   })();
 });
 
+// The only destructive path, and deliberately not the switch. kb.js has
+// already confirmed with the student by the time this fires.
+window.addEventListener("cwa-calendar-remove", () => {
+  void (async () => {
+    const account = currentAccountId();
+    const stored = calendarStateFor(loadCalendarState(), account);
+    if (!accessToken || !account || !stored.calendarId) return;
+    try {
+      const client = createCalendarClient({ request: googleCalendarRequest(() => accessToken) });
+      await client.deleteCalendar(stored.calendarId);
+      // Forget the id AND switch sync off: leaving it on would recreate the
+      // calendar on the next page load, which is not what "remove" means.
+      saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { calendarId: "", enabled: false, lastSyncAt: "" }));
+    } catch (error) {
+      console.warn("[calendar] remove failed:", error?.status || "", error?.message || error);
+    }
+    window.dispatchEvent(new CustomEvent("cwa-calendar-synced"));
+  })();
+});
+
 window.addEventListener("cwa-classroom-auth-error", (event) => {
   if (classroomAuthRecoveryModel(event?.detail?.status).resetSession) handleWrongAccount();
 });
@@ -1608,11 +1628,16 @@ async function syncCalendar(epoch) {
     // Hidden courses are filtered OUT here, which is what makes hiding a class
     // in Settings remove its events and un-hiding put them back — the plan
     // treats anything absent from the corpus as something to delete.
-    const wanted = syncableAssignments(allAssignments, { hiddenCourseIds });
+    const wanted = syncableAssignments(allAssignments, { hiddenCourseIds, dismissedIds });
     const existing = await client.listManagedEvents(calendarId);
     if (epoch !== sessionEpoch) return null;
 
-    const { ops, counts } = calendarSyncPlan(wanted, existing);
+    // `shouldDropEarly` stops returning coursework due more than STALE_DAYS ago,
+    // so beyond that point "missing from the corpus" stops meaning "deleted in
+    // Classroom". Reconcile is bounded to the window we can actually see, or it
+    // would erase the ✓ record of everything finished more than a fortnight ago.
+    const horizon = new Date(Date.now() - (STALE_DAYS + 1) * 86400000).toISOString().slice(0, 10);
+    const { ops, counts } = calendarSyncPlan(wanted, existing, { reconcileAfter: horizon });
     const { done, failed } = await client.applyPlan(calendarId, ops);
     saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { lastSyncAt: new Date().toISOString() }));
     console.info("[calendar] sync", { ...counts, applied: done.length, failed: failed.length });

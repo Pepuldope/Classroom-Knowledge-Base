@@ -417,6 +417,10 @@
           <p class="settings-hint">Puts your unsubmitted assignments in a calendar of their own, updated whenever you open this site. It asks for permission the first time you turn it on, and can only touch the calendar it creates — never the rest of yours.</p>
           <label class="settings-row settings-row-toggle"><span>Sync assignments to Google Calendar</span><input type="checkbox" id="kbPrefCalendarEnabled" /></label>
           <p class="settings-hint" id="kbCalendarStatus" role="status" aria-live="polite"></p>
+          <div class="settings-row">
+            <button id="kbCalendarRemove" type="button" class="ghost-btn">Remove the calendar from Google</button>
+          </div>
+          <p class="settings-hint">Switching sync off only hides the calendar — nothing is lost, and turning it back on restores it. Use this button to delete it outright.</p>
         </fieldset>
         <div class="settings-row"><button id="kbPrefExport" type="button">Download my KB</button><button id="kbPrefExportBook" type="button">Download study book</button><button id="kbPrefClear" type="button">Clear local KB</button></div>
         <p class="settings-hint" id="kbPrefStatus" role="status" aria-live="polite" aria-atomic="true"></p>
