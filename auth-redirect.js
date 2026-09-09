@@ -86,16 +86,11 @@ export function parseAuthRedirectResponse(search, hash, expectedState) {
 
   if (!expectedState || state !== expectedState) return { error: "state_mismatch" };
   if (error) return { error };
-  // Google reports what it ACTUALLY granted, which is not always what was
-  // asked for — a user can untick a permission on the consent screen. Callers
-  // that assume the request succeeded because the redirect came back end up
-  // with a switch showing "on" and every write returning 403.
-  const grantedScope = pick("scope") || "";
-  if (code) return { code, scope: grantedScope };
+  if (code) return { code };
   if (!token) return { error: "no_token" };
 
   const expiresIn = Number(fragment.get("expires_in") ?? query.get("expires_in"));
-  return { token, expiresIn: Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600, scope: grantedScope };
+  return { token, expiresIn: Number.isFinite(expiresIn) && expiresIn > 0 ? expiresIn : 3600 };
 }
 
 /** Cryptographically random state value, hex encoded. */

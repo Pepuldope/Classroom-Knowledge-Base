@@ -34,7 +34,7 @@ test("parseAuthRedirectResponse returns null for an ordinary page load", () => {
 
 test("parseAuthRedirectResponse extracts the token on success", () => {
   const hash = "#access_token=ya29.tok&token_type=Bearer&expires_in=3599&state=abc123";
-  assert.deepEqual(parseAuthRedirectResponse("", hash, "abc123"), { token: "ya29.tok", expiresIn: 3599, scope: "" });
+  assert.deepEqual(parseAuthRedirectResponse("", hash, "abc123"), { token: "ya29.tok", expiresIn: 3599 });
 });
 
 test("parseAuthRedirectResponse defaults a missing or bogus expires_in", () => {
@@ -117,7 +117,7 @@ test("buildAuthRedirectUrl leaves token mode free of offline params", () => {
 });
 
 test("parseAuthRedirectResponse reads a code from the query string", () => {
-  assert.deepEqual(parseAuthRedirectResponse("?code=4/abc&state=abc123", "", "abc123"), { code: "4/abc", scope: "" });
+  assert.deepEqual(parseAuthRedirectResponse("?code=4/abc&state=abc123", "", "abc123"), { code: "4/abc" });
 });
 
 test("parseAuthRedirectResponse rejects a code whose state does not match", () => {
@@ -156,19 +156,4 @@ test("oauth exchange rejects a cross-origin redirect before contacting Google", 
     if (previousSecret === undefined) delete process.env.GOOGLE_CLIENT_SECRET;
     else process.env.GOOGLE_CLIENT_SECRET = previousSecret;
   }
-});
-
-test("the granted scope comes back, so an incremental grant can be verified", () => {
-  // Google reports what it ACTUALLY granted. A user can untick a permission on
-  // the consent screen, and a caller that treats "the redirect returned" as
-  // success ends up with a switch showing on and every write returning 403.
-  const granted = "openid https://www.googleapis.com/auth/calendar.app.created";
-  const implicit = parseAuthRedirectResponse("", `#access_token=t&state=s&scope=${encodeURIComponent(granted)}`, "s");
-  assert.equal(implicit.scope, granted);
-
-  const code = parseAuthRedirectResponse(`?code=4/abc&state=s&scope=${encodeURIComponent(granted)}`, "", "s");
-  assert.equal(code.scope, granted);
-
-  // Absent is empty, never undefined — callers split it.
-  assert.equal(parseAuthRedirectResponse("?code=4/abc&state=s", "", "s").scope, "");
 });

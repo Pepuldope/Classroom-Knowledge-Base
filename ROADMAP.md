@@ -33,64 +33,23 @@ approve it. Keep items concrete and student-facing.
 - [x] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
-## 📅 Google Calendar (Pepuldo, 2026-09-09) — Phase 1 + 2 shipped
-Full design: `docs/google-calendar-plan.md`. Read it before starting any item
-below; the scope choice and the deterministic-id decision are load-bearing.
-Decided by Pepuldo 2026-09-09: sync-on-open only (background sync REJECTED, so
-this needs no backend); a Settings toggle that **hides** the calendar
-when switched off (`calendarList.patch {hidden, selected}` — nothing is deleted,
-so no confirm dialog), with deleting it offered separately as a deliberate
-button; pending work with any due date, no history backfill, hidden courses
-excluded; submitted work kept and marked ✓, reversed on unsubmit.
-**Blocked until `calendar.app.created` is added to the OAuth consent screen of
-the `classroom-knowledge-google` Cloud project** — only Pepuldo can do that, and
-items 3 onward fail at Google without it.
-- [x] Calendar: `calendar-event.js` + tests — deterministic base32hex event id,
-  event body, all-day end-exclusivity, Classroom-UTC to local timezone. Pure, no
-  network. Shipped 2026-09-09; 15 tests. Ids are length-prefixed
-  (`len:courseId` + `courseWorkId`) because a plain `:` separator collides —
-  ("1","2:3") and ("1:2","3") both spell "1:2:3" — which a test caught.
-- [x] Calendar: `calendarSyncPlan()` + tests — corpus x existing events to a list
-  of create/patch/delete/skip operations. Pure. Shipped 2026-09-09; 16 tests
-  covering every rule: start-when-you-turn-it-on, ✓-on-submit and its reversal
-  on unsubmit, hidden-course removal, and never overwriting an event a student
-  renamed. `--group calendar` runs both in ~1s.
-- [x] Calendar: the Settings toggle (off by default) + incremental auth
-  requesting ONLY `calendar.app.created` with `include_granted_scopes=true`,
-  and the updated privacy summary. Shipped 2026-09-09 in `calendar-consent.js`
-  (11 tests). `parseAuthRedirectResponse` now returns the scope Google actually
-  granted — a student can untick a permission on the consent screen, and
-  without that the switch reads "on" while every write 403s. State is keyed by
-  Google account id. Nothing syncs yet.
-- [x] Calendar: create the secondary calendar on first opt-in, store its id,
-  recreate it on a 404 rather than wedging. Shipped 2026-09-09 in
-  `calendar-api.js`. The network is injected, so the branches that matter — a
-  deleted calendar, a 409 on an event that already exists, paging, a revoked
-  grant — are covered by 14 tests in the fast `models` group rather than found
-  in production. A non-404 failure explicitly does NOT create a second
-  calendar: a bad token during a blip would otherwise litter the account.
-- [x] Calendar: wire the sync plan to the API, and add a `calendar` group to
-  `scripts/test.sh`. Shipped 2026-09-09. Runs in `app.js` (not kb.js) because
-  the calendar mirrors Classroom coursework, not the notes corpus, and fires
-  after `hydrateSignedInView` without being awaited so a slow Calendar API
-  never delays the planner. The switch hides/unhides via events rather than
-  kb.js importing the auth and API plumbing. **Phase 1 complete — assignments
-  now appear in Google Calendar.**
-- [x] Calendar: ✓-on-submit and its reversal on unsubmit, deleted-coursework
-  handling, the fingerprint guard that never clobbers a student's own edit, and
-  full reconcile. Shipped 2026-09-09. Reconcile is bounded by a horizon:
-  `shouldDropEarly` stops returning coursework due more than STALE_DAYS ago, so
-  past that point "missing from the corpus" no longer means "deleted in
-  Classroom", and deleting on it would have erased the ✓ record of everything
-  finished more than a fortnight ago. Dismissing a card now also removes its
-  event, reversibly, exactly as hiding its course does.
-- [x] Calendar: the OFF path — `calendarList.patch {hidden:true, selected:false}`
-  and back again on re-enable, plus a separate confirm-dialogged "Remove the
-  calendar from Google" button calling `calendars.delete`. Shipped 2026-09-09.
-  Removing also switches sync off, because leaving it on would recreate the
-  calendar on the next page load.
-- [ ] Calendar: `freebusy` + proposed work blocks from `estimatedMinutes` —
-  propose, never impose. (2026-09-09)
+## 🚫 Not doing: Google Calendar sync (Pepuldo, 2026-09-09)
+
+Built, then reverted the same day — **Google Classroom already does this.**
+Classroom creates a calendar per class and puts coursework with a due date into
+Google Calendar by itself, so the whole feature was a worse copy of something
+the student already has for free, bought with an extra OAuth scope.
+
+Do not propose it again, and do not propose "improved" versions of it (colour
+per course, custom reminders, a combined calendar) without first checking what
+Classroom's own calendar integration already provides. The design that was
+written and thrown away is in git history at `6b38db5..3510657` if the question
+ever genuinely reopens.
+
+The one idea in it that Classroom does **not** cover is scheduling *work blocks*
+from the AI's `estimatedMinutes` — finding free time and proposing when to
+actually do the work, rather than only marking when it is due. That is a
+different feature from mirroring deadlines, and it is not queued.
 
 ## 🐛 Reported by Pepuldo (2026-09-09) — fix before new features
 Six phone defects, all shipped 2026-09-09. Gated by `scripts/mobile_place_test.mjs`

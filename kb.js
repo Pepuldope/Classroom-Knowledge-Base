@@ -31,11 +31,6 @@ import { buildTutorRetrievedNotes, tutorRequestNotesModel } from "./kb-tutor-con
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
-import {
-  calendarStateFor, setCalendarStateFor, calendarStatusModel, hasCalendarScope,
-  calendarAuthRequest, loadCalendarState, saveCalendarState, currentAccountId,
-  grantedScopes,
-} from "./calendar-consent.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -508,56 +503,6 @@ export function applyKbDensity(value = loadKbSettings()) {
 export function relatedNotesLimit(value = {}) {
   return kbSettingsModel(value).relatedCount;
 }
-
-// ---------------------------------------------------------------------------
-// Google Calendar — the switch only. Nothing syncs yet; that is ROADMAP item 5.
-// ---------------------------------------------------------------------------
-
-export function renderCalendarSettings() {
-  const toggle = $("kbPrefCalendarEnabled");
-  const status = $("kbCalendarStatus");
-  if (!toggle || !status) return;
-  const account = currentAccountId();
-  const state = calendarStateFor(loadCalendarState(), account);
-  const model = calendarStatusModel({
-    enabled: state.enabled,
-    granted: hasCalendarScope(grantedScopes()),
-    calendarId: state.calendarId,
-    lastSyncAt: state.lastSyncAt,
-  });
-  toggle.checked = state.enabled;
-  // No account means no sign-in, and a switch you cannot honour should not
-  // pretend otherwise.
-  toggle.disabled = !account;
-  status.textContent = account ? model.label : "Sign in with Google to use calendar sync.";
-  status.dataset.state = account ? model.state : "signed-out";
-}
-
-/**
- * Turning the switch on is what triggers the Calendar consent — never sign-in.
- *
- * Requesting it at sign-in would force calendar access on everybody just to use
- * the planner, and re-prompt every existing user. `include_granted_scopes` (set
- * inside buildAuthRedirectUrl) keeps the Classroom grant alive across this.
- */
-async function onCalendarToggle(enabled) {
-  const account = currentAccountId();
-  if (!account) return;
-  saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { enabled }));
-  renderCalendarSettings();
-  if (enabled && !hasCalendarScope(grantedScopes())) {
-    const status = $("kbCalendarStatus");
-    if (status) status.textContent = "Sending you to Google for permission…";
-    window.dispatchEvent(new CustomEvent("cwa-request-calendar-scope", {
-      detail: calendarAuthRequest({ loginHint: localStorage.getItem("cwa_user_hint") || "" }),
-    }));
-    return;
-  }
-  // Already granted: OFF hides the calendar, ON unhides it and syncs. app.js
-  // owns both because it holds the access token and the assignments.
-  window.dispatchEvent(new CustomEvent("cwa-calendar-visibility", { detail: { visible: enabled } }));
-}
-
 
 export function loadKbSettings() {
   try { return kbSettingsModel(JSON.parse(localStorage.getItem(KB_SETTINGS_KEY) || "{}")); }
@@ -1515,33 +1460,6 @@ export function wireKbEvents() {
   // Manage reuses the onboarding controls rather than duplicating their logic:
   // the two are never on screen together (onboarding shows only in the empty
   // state), so this is one build path and one import path with two entry points.
-  $("kbPrefCalendarEnabled")?.addEventListener("change", (e) => { void onCalendarToggle(e.target.checked); });
-  $("kbCalendarRemove")?.addEventListener("click", () => {
-    const account = currentAccountId();
-    const state = calendarStateFor(loadCalendarState(), account);
-    if (!state.calendarId) {
-      const status = $("kbCalendarStatus");
-      if (status) status.textContent = "There is no calendar to remove yet.";
-      return;
-    }
-    // The one destructive action in this feature, so it is a button with a
-    // confirm rather than a switch. The copy names what actually goes: the
-    // ✓-marked record of finished work is the part somebody would miss.
-    const ok = typeof window.confirm !== "function" || window.confirm(
-      "Delete the \u201cClassroom assignments\u201d calendar from Google?\n\n"
-      + "This removes every event in it, including the \u2713 record of work you have already handed in, "
-      + "and anything you moved or renamed yourself.\n\n"
-      + "Your Classroom data and your other calendars are not affected. This cannot be undone.",
-    );
-    if (!ok) return;
-    window.dispatchEvent(new CustomEvent("cwa-calendar-remove"));
-  });
-  // Inside wireKbEvents, not at module scope: kb.js is imported by node test
-  // scripts, where `window` does not exist and a top-level listener throws on
-  // import. Several model tests import this module purely for its pure exports.
-  window.addEventListener("cwa-calendar-synced", () => renderCalendarSettings());
-  renderCalendarSettings();
-
   $("kbRebuildBtn")?.addEventListener("click", () => startScrape());
   $("kbManageLoadFileLink")?.addEventListener("click", () => fileInput?.click());
   $("kbBuildCancelBtn")?.addEventListener("click", () => cancelKbBuild());

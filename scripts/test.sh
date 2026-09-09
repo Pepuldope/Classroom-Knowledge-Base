@@ -63,10 +63,6 @@ GATES=(
 "models|-|Resumable Classroom build checkpoint tests|node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.js"
 "models,panel|-|Assignment panel model tests|node --test tests/assignment-panel.test.js"
 "models,api|-|Enrichment model chain fall-through tests|node --test tests/enrich-chain.test.js"
-"models,calendar|-|Calendar event model tests|node --test tests/calendar-event.test.js"
-"models,calendar|-|Calendar sync plan tests|node --test tests/calendar-sync.test.js"
-"models,calendar|-|Calendar consent + per-account state tests|node --test tests/calendar-consent.test.js"
-"models,calendar|-|Calendar API client tests (faked network)|node --test tests/calendar-api.test.js"
 "models,mobile|-|Session position + sheet drag model tests|node --test tests/session-position.test.js tests/sheet-drag.test.js"
 "models|-|Study streak model tests|node scripts/study_streak_test.mjs"
 "models|-|Study progress model tests|node scripts/study_progress_test.mjs"
@@ -133,7 +129,7 @@ GATES=(
 "kb|seed|Warm local KB note round-trip e2e|node scripts/kb_note_roundtrip_test.mjs"
 )
 
-ALL_GROUPS="models api auth theme kb panel mobile settings layout calendar live"
+ALL_GROUPS="models api auth theme kb panel mobile settings layout live"
 
 # ---------------------------------------------------------------------------
 # Arguments

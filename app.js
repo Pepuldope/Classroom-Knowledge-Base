@@ -25,12 +25,6 @@ import { normalizeTaskKind } from "./task-kinds.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
 import { sheetDragModel, viewportBottomInset } from "./sheet-drag.js";
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
-import { calendarSyncPlan, syncableAssignments } from "./calendar-sync.js";
-import { createCalendarClient, googleCalendarRequest } from "./calendar-api.js";
-import {
-  calendarSyncReady, currentAccountId, loadCalendarState, saveCalendarState,
-  setCalendarStateFor, calendarStateFor,
-} from "./calendar-consent.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -650,20 +644,7 @@ function authRedirectUri() {
   return location.origin;
 }
 
-/** Remember what Google granted, so the Calendar switch can tell truth from hope. */
-function storeGrantedScopes(scope) {
-  const value = String(scope || "").trim();
-  if (!value) return;
-  try {
-    // A union: an incremental grant returns the new scope alongside the old
-    // ones, but a flow that returns only the new one must not erase the rest.
-    const merged = new Set([...(localStorage.getItem("cwa_granted_scopes") || "").split(/\s+/), ...value.split(/\s+/)]);
-    merged.delete("");
-    localStorage.setItem("cwa_granted_scopes", [...merged].join(" "));
-  } catch { /* private mode */ }
-}
-
-async function startRedirectSignIn(prompt = "select_account", { scope = SCOPES, loginHint = null } = {}) {
+async function startRedirectSignIn(prompt = "select_account") {
   let state = "";
   try {
     state = randomState();
@@ -692,14 +673,14 @@ async function startRedirectSignIn(prompt = "select_account", { scope = SCOPES, 
   setStatus("Redirecting to Google…");
   location.assign(buildAuthRedirectUrl({
     clientId: CLIENT_ID,
-    scope,
+    scope: SCOPES,
     redirectUri: authRedirectUri(),
     state,
     responseType,
     prompt,
     forceConsent,
     // Only hint on a plain re-auth; never when the user asked to switch.
-    loginHint: loginHint ?? (prompt === "select_account" ? "" : loadUserHint()),
+    loginHint: prompt === "select_account" ? "" : loadUserHint(),
   }));
 }
 
@@ -735,7 +716,6 @@ async function consumeAuthRedirect() {
   // Implicit flow: the token is already here.
   if (result.token) {
     accessToken = result.token;
-    storeGrantedScopes(result.scope);
     storeToken(accessToken, result.expiresIn);
     setServerSessionFlag(false);
     onSignedIn();
@@ -757,7 +737,6 @@ async function consumeAuthRedirect() {
     }
     const data = await r.json();
     accessToken = data.access_token;
-    storeGrantedScopes(result.scope || data.scope);
     storeToken(accessToken, Number(data.expires_in) || 3600);
     if (data.email) storeUserHint(data.email);
     // A sign-in that skipped consent gets no refresh token back, because the
@@ -1457,64 +1436,6 @@ function handleWrongAccount() {
   updateViewToggle();
 }
 
-// The Calendar scope is requested ONLY when someone turns the Settings switch
-// on — never at sign-in. kb.js raises this rather than importing the auth
-// plumbing, which would drag app.js's whole subtree into the Study module.
-window.addEventListener("cwa-request-calendar-scope", (event) => {
-  const { scope, prompt, loginHint } = event.detail || {};
-  if (!scope) return;
-  void startRedirectSignIn(prompt || "consent", { scope, loginHint: loginHint || loadUserHint() });
-});
-
-// Flipping the switch hides or unhides the calendar. Never deletes: that is a
-// separate, deliberate button (ROADMAP 6b), because an irreversible action
-// behind a toggle is how someone loses a term of ✓-marked work by mis-tapping.
-window.addEventListener("cwa-calendar-visibility", (event) => {
-  const visible = event.detail?.visible === true;
-  void (async () => {
-    const account = currentAccountId();
-    const stored = calendarStateFor(loadCalendarState(), account);
-    if (!accessToken || !account) return;
-    try {
-      if (visible) {
-        // Turning it back on: unhide first if there is something to unhide,
-        // then let the sync repair whatever drifted while it was off.
-        if (stored.calendarId) {
-          const client = createCalendarClient({ request: googleCalendarRequest(() => accessToken) });
-          await client.setVisibility(stored.calendarId, true);
-        }
-        await syncCalendar(sessionEpoch);
-      } else if (stored.calendarId) {
-        const client = createCalendarClient({ request: googleCalendarRequest(() => accessToken) });
-        await client.setVisibility(stored.calendarId, false);
-      }
-    } catch (error) {
-      console.warn("[calendar] visibility change failed:", error?.status || "", error?.message || error);
-    }
-    window.dispatchEvent(new CustomEvent("cwa-calendar-synced"));
-  })();
-});
-
-// The only destructive path, and deliberately not the switch. kb.js has
-// already confirmed with the student by the time this fires.
-window.addEventListener("cwa-calendar-remove", () => {
-  void (async () => {
-    const account = currentAccountId();
-    const stored = calendarStateFor(loadCalendarState(), account);
-    if (!accessToken || !account || !stored.calendarId) return;
-    try {
-      const client = createCalendarClient({ request: googleCalendarRequest(() => accessToken) });
-      await client.deleteCalendar(stored.calendarId);
-      // Forget the id AND switch sync off: leaving it on would recreate the
-      // calendar on the next page load, which is not what "remove" means.
-      saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { calendarId: "", enabled: false, lastSyncAt: "" }));
-    } catch (error) {
-      console.warn("[calendar] remove failed:", error?.status || "", error?.message || error);
-    }
-    window.dispatchEvent(new CustomEvent("cwa-calendar-synced"));
-  })();
-});
-
 window.addEventListener("cwa-classroom-auth-error", (event) => {
   if (classroomAuthRecoveryModel(event?.detail?.status).resetSession) handleWrongAccount();
 });
@@ -1545,9 +1466,6 @@ async function onSignedIn() {
   try {
     await hydrateSignedInView(epoch);
     if (epoch === sessionEpoch) restoreSessionPosition(epoch);
-    // After the report, so the assignments exist; not awaited, so a slow
-    // Calendar API never delays the page the student came for.
-    if (epoch === sessionEpoch) void syncCalendar(epoch);
   } catch (e) {
     if (epoch === sessionEpoch) setStatus(e?.message || "Sign-in failed.", true);
   } finally {
@@ -1596,61 +1514,6 @@ async function hydrateSignedInView(epoch) {
   }
   if (epoch === sessionEpoch) {
     import("./kb.js").then(({ maybeAutoBuildKb }) => maybeAutoBuildKb()).catch(() => {});
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Google Calendar sync.
-//
-// Runs here rather than in kb.js because the assignments live here: the
-// calendar mirrors Classroom coursework, not the notes corpus. Only ever on
-// open, never in the background — decided 2026-09-09, and it is what lets this
-// feature exist with no server at all.
-// ---------------------------------------------------------------------------
-
-let calendarSyncInFlight = false;
-
-async function syncCalendar(epoch) {
-  const account = currentAccountId();
-  if (calendarSyncInFlight || !calendarSyncReady(account) || !accessToken) return null;
-  calendarSyncInFlight = true;
-  try {
-    const client = createCalendarClient({
-      request: googleCalendarRequest(() => accessToken),
-      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-    });
-    const stored = calendarStateFor(loadCalendarState(), account);
-    const calendarId = await client.ensureCalendar(stored.calendarId, {
-      onCreate: (id) => saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { calendarId: id })),
-    });
-    if (epoch !== sessionEpoch) return null;
-
-    // Hidden courses are filtered OUT here, which is what makes hiding a class
-    // in Settings remove its events and un-hiding put them back — the plan
-    // treats anything absent from the corpus as something to delete.
-    const wanted = syncableAssignments(allAssignments, { hiddenCourseIds, dismissedIds });
-    const existing = await client.listManagedEvents(calendarId);
-    if (epoch !== sessionEpoch) return null;
-
-    // `shouldDropEarly` stops returning coursework due more than STALE_DAYS ago,
-    // so beyond that point "missing from the corpus" stops meaning "deleted in
-    // Classroom". Reconcile is bounded to the window we can actually see, or it
-    // would erase the ✓ record of everything finished more than a fortnight ago.
-    const horizon = new Date(Date.now() - (STALE_DAYS + 1) * 86400000).toISOString().slice(0, 10);
-    const { ops, counts } = calendarSyncPlan(wanted, existing, { reconcileAfter: horizon });
-    const { done, failed } = await client.applyPlan(calendarId, ops);
-    saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { lastSyncAt: new Date().toISOString() }));
-    console.info("[calendar] sync", { ...counts, applied: done.length, failed: failed.length });
-    if (failed.length) console.warn("[calendar] failures", failed.slice(0, 5));
-    window.dispatchEvent(new CustomEvent("cwa-calendar-synced"));
-    return { counts, failed };
-  } catch (error) {
-    // Never let a calendar problem break the planner. The status line in
-    // Settings is where this surfaces, not an alert over someone's homework.
-    console.warn("[calendar] sync failed:", error?.status || "", error?.message || error);
-    return null;
-  } finally {
-    calendarSyncInFlight = false;
   }
 }
 
