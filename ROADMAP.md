@@ -45,11 +45,16 @@ excluded; submitted work kept and marked ✓, reversed on unsubmit.
 **Blocked until `calendar.app.created` is added to the OAuth consent screen of
 the `classroom-knowledge-google` Cloud project** — only Pepuldo can do that, and
 items 3 onward fail at Google without it.
-- [ ] Calendar: `calendar-event.js` + tests — deterministic base32hex event id,
+- [x] Calendar: `calendar-event.js` + tests — deterministic base32hex event id,
   event body, all-day end-exclusivity, Classroom-UTC to local timezone. Pure, no
-  network. (2026-09-09)
-- [ ] Calendar: `calendarSyncPlan()` + tests — corpus x existing events to a list
-  of create/patch/delete/skip operations. Pure. (2026-09-09)
+  network. Shipped 2026-09-09; 15 tests. Ids are length-prefixed
+  (`len:courseId` + `courseWorkId`) because a plain `:` separator collides —
+  ("1","2:3") and ("1:2","3") both spell "1:2:3" — which a test caught.
+- [x] Calendar: `calendarSyncPlan()` + tests — corpus x existing events to a list
+  of create/patch/delete/skip operations. Pure. Shipped 2026-09-09; 16 tests
+  covering every rule: start-when-you-turn-it-on, ✓-on-submit and its reversal
+  on unsubmit, hidden-course removal, and never overwriting an event a student
+  renamed. `--group calendar` runs both in ~1s.
 - [ ] Calendar: the Settings toggle (off by default) + incremental auth
   requesting ONLY `calendar.app.created` with `include_granted_scopes=true`,
   and the updated privacy summary. No syncing yet. (2026-09-09)
