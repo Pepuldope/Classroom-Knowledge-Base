@@ -395,6 +395,7 @@
             <li>Your notes and settings stay in this browser by default.</li>
             <li>The tutor receives only the notes needed to answer your question.</li>
             <li>Your read-only Google Classroom connection is used only to build your local notes; a short-lived access token is stored only in this browser's IndexedDB and cleared when you sign out.</li>
+            <li>Google Calendar sync is off unless you turn it on. When it is on, assignment titles and due dates are written to a calendar this app creates — nothing leaves Google, and no other calendar of yours can be read or changed.</li>
           </ul>
         </div>
         <label class="settings-row settings-row-toggle"><span>Enable AI tutor</span><input type="checkbox" id="kbPrefTutorEnabled" checked /></label>
@@ -411,6 +412,12 @@
         <label class="settings-row"><span>Copied search context</span><select class="settings-select" id="kbPrefCopyFormat"><option value="lines">Titles and snippets on separate lines</option><option value="compact">One line per result</option></select></label>
         <label class="settings-row"><span>Read-aloud speed <output id="kbPrefSpeechRateValue">1×</output></span><input id="kbPrefSpeechRate" type="range" min="0.5" max="2" step="0.25" value="1" /></label>
         <label class="settings-row settings-row-toggle"><span>Build automatically after Classroom sign-in</span><input type="checkbox" id="kbPrefAutoBuild" /></label>
+        <fieldset class="settings-fieldset" id="kbCalendarFieldset">
+          <legend>Google Calendar</legend>
+          <p class="settings-hint">Puts your unsubmitted assignments in a calendar of their own, updated whenever you open this site. It asks for permission the first time you turn it on, and can only touch the calendar it creates — never the rest of yours.</p>
+          <label class="settings-row settings-row-toggle"><span>Sync assignments to Google Calendar</span><input type="checkbox" id="kbPrefCalendarEnabled" /></label>
+          <p class="settings-hint" id="kbCalendarStatus" role="status" aria-live="polite"></p>
+        </fieldset>
         <div class="settings-row"><button id="kbPrefExport" type="button">Download my KB</button><button id="kbPrefExportBook" type="button">Download study book</button><button id="kbPrefClear" type="button">Clear local KB</button></div>
         <p class="settings-hint" id="kbPrefStatus" role="status" aria-live="polite" aria-atomic="true"></p>
       </section>

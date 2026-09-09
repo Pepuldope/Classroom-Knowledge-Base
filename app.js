@@ -644,7 +644,20 @@ function authRedirectUri() {
   return location.origin;
 }
 
-async function startRedirectSignIn(prompt = "select_account") {
+/** Remember what Google granted, so the Calendar switch can tell truth from hope. */
+function storeGrantedScopes(scope) {
+  const value = String(scope || "").trim();
+  if (!value) return;
+  try {
+    // A union: an incremental grant returns the new scope alongside the old
+    // ones, but a flow that returns only the new one must not erase the rest.
+    const merged = new Set([...(localStorage.getItem("cwa_granted_scopes") || "").split(/\s+/), ...value.split(/\s+/)]);
+    merged.delete("");
+    localStorage.setItem("cwa_granted_scopes", [...merged].join(" "));
+  } catch { /* private mode */ }
+}
+
+async function startRedirectSignIn(prompt = "select_account", { scope = SCOPES, loginHint = null } = {}) {
   let state = "";
   try {
     state = randomState();
@@ -673,14 +686,14 @@ async function startRedirectSignIn(prompt = "select_account") {
   setStatus("Redirecting to Google…");
   location.assign(buildAuthRedirectUrl({
     clientId: CLIENT_ID,
-    scope: SCOPES,
+    scope,
     redirectUri: authRedirectUri(),
     state,
     responseType,
     prompt,
     forceConsent,
     // Only hint on a plain re-auth; never when the user asked to switch.
-    loginHint: prompt === "select_account" ? "" : loadUserHint(),
+    loginHint: loginHint ?? (prompt === "select_account" ? "" : loadUserHint()),
   }));
 }
 
@@ -716,6 +729,7 @@ async function consumeAuthRedirect() {
   // Implicit flow: the token is already here.
   if (result.token) {
     accessToken = result.token;
+    storeGrantedScopes(result.scope);
     storeToken(accessToken, result.expiresIn);
     setServerSessionFlag(false);
     onSignedIn();
@@ -737,6 +751,7 @@ async function consumeAuthRedirect() {
     }
     const data = await r.json();
     accessToken = data.access_token;
+    storeGrantedScopes(result.scope || data.scope);
     storeToken(accessToken, Number(data.expires_in) || 3600);
     if (data.email) storeUserHint(data.email);
     // A sign-in that skipped consent gets no refresh token back, because the
@@ -1435,6 +1450,15 @@ function handleWrongAccount() {
   setStatus("That Google account isn't a Classroom account. Sign in with your school Google account to continue.", true);
   updateViewToggle();
 }
+
+// The Calendar scope is requested ONLY when someone turns the Settings switch
+// on — never at sign-in. kb.js raises this rather than importing the auth
+// plumbing, which would drag app.js's whole subtree into the Study module.
+window.addEventListener("cwa-request-calendar-scope", (event) => {
+  const { scope, prompt, loginHint } = event.detail || {};
+  if (!scope) return;
+  void startRedirectSignIn(prompt || "consent", { scope, loginHint: loginHint || loadUserHint() });
+});
 
 window.addEventListener("cwa-classroom-auth-error", (event) => {
   if (classroomAuthRecoveryModel(event?.detail?.status).resetSession) handleWrongAccount();

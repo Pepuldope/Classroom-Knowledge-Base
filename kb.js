@@ -31,6 +31,10 @@ import { buildTutorRetrievedNotes, tutorRequestNotesModel } from "./kb-tutor-con
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
+import {
+  calendarStateFor, setCalendarStateFor, calendarStateModel, calendarStatusModel,
+  hasCalendarScope, calendarAuthRequest,
+} from "./calendar-consent.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -195,6 +199,7 @@ export function localRelatedFromBundle(bundle, index, opts = {}) {
 }
 
 const KB_SETTINGS_KEY = "cwa_kb_settings";
+const KB_CALENDAR_STATE_KEY = "cwa_kb_calendar";
 const KB_SEARCH_STATE_KEY = "cwa_kb_search_state";
 const KB_BROWSE_STATE_KEY = "cwa_kb_browse_state";
 const KB_COPY_HISTORY_KEY = "cwa_kb_copy_history";
@@ -502,6 +507,73 @@ export function applyKbDensity(value = loadKbSettings()) {
 
 export function relatedNotesLimit(value = {}) {
   return kbSettingsModel(value).relatedCount;
+}
+
+// ---------------------------------------------------------------------------
+// Google Calendar — the switch only. Nothing syncs yet; that is ROADMAP item 5.
+// ---------------------------------------------------------------------------
+
+export function loadCalendarState() {
+  try { return calendarStateModel(JSON.parse(localStorage.getItem(KB_CALENDAR_STATE_KEY) || "null")); }
+  catch { return calendarStateModel(); }
+}
+
+export function saveCalendarState(state) {
+  const next = calendarStateModel(state);
+  try { localStorage.setItem(KB_CALENDAR_STATE_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  return next;
+}
+
+/** The signed-in Google account id, which the per-account state is keyed by. */
+function currentAccountId() {
+  try { return JSON.parse(localStorage.getItem("cwa_user_profile") || "null")?.sub || ""; }
+  catch { return ""; }
+}
+
+/** Scopes Google actually granted, recorded by the auth flow. */
+function grantedScopes() {
+  try { return localStorage.getItem("cwa_granted_scopes") || ""; } catch { return ""; }
+}
+
+export function renderCalendarSettings() {
+  const toggle = $("kbPrefCalendarEnabled");
+  const status = $("kbCalendarStatus");
+  if (!toggle || !status) return;
+  const account = currentAccountId();
+  const state = calendarStateFor(loadCalendarState(), account);
+  const model = calendarStatusModel({
+    enabled: state.enabled,
+    granted: hasCalendarScope(grantedScopes()),
+    calendarId: state.calendarId,
+    lastSyncAt: state.lastSyncAt,
+  });
+  toggle.checked = state.enabled;
+  // No account means no sign-in, and a switch you cannot honour should not
+  // pretend otherwise.
+  toggle.disabled = !account;
+  status.textContent = account ? model.label : "Sign in with Google to use calendar sync.";
+  status.dataset.state = account ? model.state : "signed-out";
+}
+
+/**
+ * Turning the switch on is what triggers the Calendar consent — never sign-in.
+ *
+ * Requesting it at sign-in would force calendar access on everybody just to use
+ * the planner, and re-prompt every existing user. `include_granted_scopes` (set
+ * inside buildAuthRedirectUrl) keeps the Classroom grant alive across this.
+ */
+async function onCalendarToggle(enabled) {
+  const account = currentAccountId();
+  if (!account) return;
+  saveCalendarState(setCalendarStateFor(loadCalendarState(), account, { enabled }));
+  renderCalendarSettings();
+  if (enabled && !hasCalendarScope(grantedScopes())) {
+    const status = $("kbCalendarStatus");
+    if (status) status.textContent = "Sending you to Google for permission…";
+    window.dispatchEvent(new CustomEvent("cwa-request-calendar-scope", {
+      detail: calendarAuthRequest({ loginHint: localStorage.getItem("cwa_user_hint") || "" }),
+    }));
+  }
 }
 
 export function loadKbSettings() {
@@ -1460,6 +1532,9 @@ export function wireKbEvents() {
   // Manage reuses the onboarding controls rather than duplicating their logic:
   // the two are never on screen together (onboarding shows only in the empty
   // state), so this is one build path and one import path with two entry points.
+  $("kbPrefCalendarEnabled")?.addEventListener("change", (e) => { void onCalendarToggle(e.target.checked); });
+  renderCalendarSettings();
+
   $("kbRebuildBtn")?.addEventListener("click", () => startScrape());
   $("kbManageLoadFileLink")?.addEventListener("click", () => fileInput?.click());
   $("kbBuildCancelBtn")?.addEventListener("click", () => cancelKbBuild());

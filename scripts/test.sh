@@ -65,6 +65,7 @@ GATES=(
 "models,api|-|Enrichment model chain fall-through tests|node --test tests/enrich-chain.test.js"
 "models,calendar|-|Calendar event model tests|node --test tests/calendar-event.test.js"
 "models,calendar|-|Calendar sync plan tests|node --test tests/calendar-sync.test.js"
+"models,calendar|-|Calendar consent + per-account state tests|node --test tests/calendar-consent.test.js"
 "models,mobile|-|Session position + sheet drag model tests|node --test tests/session-position.test.js tests/sheet-drag.test.js"
 "models|-|Study streak model tests|node scripts/study_streak_test.mjs"
 "models|-|Study progress model tests|node scripts/study_progress_test.mjs"

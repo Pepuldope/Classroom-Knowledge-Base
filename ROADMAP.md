@@ -55,9 +55,13 @@ items 3 onward fail at Google without it.
   covering every rule: start-when-you-turn-it-on, ✓-on-submit and its reversal
   on unsubmit, hidden-course removal, and never overwriting an event a student
   renamed. `--group calendar` runs both in ~1s.
-- [ ] Calendar: the Settings toggle (off by default) + incremental auth
+- [x] Calendar: the Settings toggle (off by default) + incremental auth
   requesting ONLY `calendar.app.created` with `include_granted_scopes=true`,
-  and the updated privacy summary. No syncing yet. (2026-09-09)
+  and the updated privacy summary. Shipped 2026-09-09 in `calendar-consent.js`
+  (11 tests). `parseAuthRedirectResponse` now returns the scope Google actually
+  granted — a student can untick a permission on the consent screen, and
+  without that the switch reads "on" while every write 403s. State is keyed by
+  Google account id. Nothing syncs yet.
 - [ ] Calendar: create the secondary calendar on first opt-in, store its id,
   recreate it on a 404 rather than wedging. (2026-09-09)
 - [ ] Calendar: wire the sync plan to the API on `kbAutoSyncModel`'s cadence, and
