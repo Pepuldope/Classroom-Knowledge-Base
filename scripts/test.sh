@@ -78,6 +78,11 @@ node scripts/enrich_models_test.mjs
 ENRICH_MODELS_OK=$?
 if [ "$ENRICH_MODELS_OK" -ne 0 ]; then echo "enrichment model chain FAILED"; exit 1; fi
 
+echo "==> Assignment panel model tests"
+node --test tests/assignment-panel.test.js
+PANEL_MODEL_OK=$?
+if [ "$PANEL_MODEL_OK" -ne 0 ]; then echo "assignment panel model tests FAILED"; exit 1; fi
+
 echo "==> Session position + sheet drag model tests"
 node --test tests/session-position.test.js tests/sheet-drag.test.js
 PLACE_MODEL_OK=$?
@@ -254,6 +259,11 @@ echo "==> Mobile place/sheet e2e (reload position, filters, stat bar, drag handl
 BASE_URL="http://localhost:$PORT" node scripts/mobile_place_test.mjs
 MOBILE_PLACE_OK=$?
 if [ "$MOBILE_PLACE_OK" -ne 0 ]; then echo "mobile place/sheet e2e FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
+
+echo "==> Assignment panel layout budget (desktop + phone)"
+BASE_URL="http://localhost:$PORT" node scripts/panel_audit.mjs
+PANEL_LAYOUT_OK=$?
+if [ "$PANEL_LAYOUT_OK" -ne 0 ]; then echo "assignment panel layout FAILED"; kill "$SRV" 2>/dev/null; exit 1; fi
 
 echo "==> Assignment bottom-sheet e2e"
 BASE_URL="http://localhost:$PORT" node scripts/ai_sheet_test.mjs

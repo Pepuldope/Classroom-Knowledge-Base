@@ -24,6 +24,7 @@ import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
 import { sheetDragModel, viewportBottomInset } from "./sheet-drag.js";
+import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -2448,27 +2449,48 @@ async function openAi(a) {
   $("aiTitle").textContent = a.title || "Assignment";
   const due = dueDateObj(a);
   const dueTxt = due ? due.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) : "No due date";
-  const e = a.enrichment;
-  const ctxParts = [
-    `<strong>${escapeHtml(a.courseName)}</strong>`,
-    `Due: ${escapeHtml(dueTxt)}`,
-  ];
-  if (a.alternateLink) {
-    ctxParts.push(`<a href="${escapeHtml(withAuthUser(a.alternateLink))}" target="_blank" rel="noopener" class="classroom-link">Open in Google Classroom →</a>`);
-  }
-  if (e?.oneLineSummary) ctxParts.push(escapeHtml(e.oneLineSummary));
-  if (e?.actionType === "in_person") ctxParts.push("<em>In-person task — no upload needed</em>");
   activeMaterials = loadMaterialsFor(a);
-  ctxParts.push(renderMaterialsList(activeMaterials));
-  if (a.description) {
+  const panel = assignmentPanelModel({
+    courseName: a.courseName,
+    dueLabel: dueTxt,
+    submitted: isSubmittedState(a.submission?.state),
+    enrichment: a.enrichment,
+    materials: activeMaterials,
+    description: a.description,
+    link: a.alternateLink ? withAuthUser(a.alternateLink) : "",
+  });
+
+  // Structure, not a <br>-joined string. The old block ran seven kinds of fact
+  // together inside a 200px scroller its own content always overflowed, and
+  // between it and the grounding box below there was 461px of furniture before
+  // the conversation started — 465px of a 776px phone sheet, leaving 139px of
+  // actual chat.
+  const ctxParts = [];
+  if (panel.facts.length || panel.link) {
+    const chips = panel.facts.map((fact) =>
+      `<span class="ai-fact"><span class="ai-fact-label">${escapeHtml(fact.label)}</span>${escapeHtml(fact.value)}</span>`).join("");
+    const link = panel.link
+      ? `<a href="${escapeHtml(panel.link)}" target="_blank" rel="noopener" class="classroom-link ai-fact-link">Classroom ↗</a>`
+      : "";
+    ctxParts.push(`<div class="ai-facts">${chips}${link}</div>`);
+  }
+  if (panel.summary) ctxParts.push(`<p class="ai-summary">${escapeHtml(panel.summary)}</p>`);
+  if (panel.note) ctxParts.push(`<p class="ai-note">${escapeHtml(panel.note)}</p>`);
+  if (panel.materialCount) ctxParts.push(renderMaterialsList(panel.materials));
+  if (panel.hasDescription) {
     ctxParts.push(`<details class="original-desc"><summary>Original from Classroom</summary><div class="original-desc-body">${renderAssignmentDescription(a.description)}</div></details>`);
   }
-  $("aiContext").innerHTML = ctxParts.join("<br>");
+  $("aiContext").innerHTML = ctxParts.join("");
+
   const tutorContext = plannerTutorContextModel({ ...a, materials: activeMaterials });
   const grounding = $("aiGroundingBadge");
   if (grounding) {
     grounding.hidden = false;
-    grounding.querySelector(".ai-grounding-label").textContent = tutorContext.badge;
+    // One quiet line. The label used to head a tinted box that restated the
+    // panel title, the course and every attachment — directly beneath all
+    // three. The full source list stays in the DOM for the copy button and for
+    // screen readers; it just no longer costs 171px to say it twice.
+    grounding.querySelector(".ai-grounding-label").textContent = groundingLineModel(panel);
     grounding.querySelector(".ai-grounding-summary").textContent = tutorContext.summary;
     grounding.querySelector(".ai-grounding-sources").textContent = `Sources: ${tutorContext.sources.join(" · ")}`;
   }

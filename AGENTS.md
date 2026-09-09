@@ -26,6 +26,30 @@ believe this file is wrong, incomplete, or is blocking real work, say so in your
 status report and append one line to the Proposed section. Never edit this file,
 and never attribute anything to the owner that the owner did not write.
 
+## WHO THIS FILE IS FOR (owner, 2026-09-09)
+
+Everything below is written for the AUTONOMOUS CRON LOOP: a fresh, memoryless
+agent ticking unattended, committing to a live site with nobody reading the diff.
+
+An interactive session Pepuldo is driving is NOT that agent — he is the review
+step the loop does not have. In an interactive session:
+
+- WHERE WORK COMES FROM does not apply. The work is what he asked for. Do not
+  consult the charter, C1-C6, the daily ceiling or the attestation, and never
+  report NO AVAILABLE WORK to a person who just gave you work.
+- TDD still applies to LOGIC — a pure model gets a test. Do not add a browser
+  e2e for something he is about to check on his own phone unless he asks, or
+  unless it is the kind of rule a future refactor drops silently.
+- Run TARGETED gates while iterating: the model tests plus the one or two
+  browser scripts covering what changed. `bash scripts/test.sh` is a phase-end
+  command, run once. Say which gates you ran.
+- Commit when a coherent change is done, not after every edit. `git push` alone
+  deploys (Vercel is connected to this repo); scripts/deploy.sh is box-only.
+- Cost is a real constraint — a 5-hour subscription limit. If what he asked for
+  is going to be expensive, say so BEFORE starting, not afterwards.
+
+Everything from "WHAT THE KB IS" down is the loop's charter, unchanged.
+
 ## WHAT THE KB IS (vs the archive)
 - **Archive** = raw Classroom export (full dump, planner/archive views). Source data.
 - **Knowledge Base** = a CURATED, SEARCHABLE study layer built FROM Classroom

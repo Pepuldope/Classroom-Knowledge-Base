@@ -703,14 +703,51 @@ summary::-webkit-details-marker { color: var(--muted); }
   flex: 0 0 auto;
 }
 .ai-context {
-  padding: 0.65rem 1rem;
+  padding: 0.6rem 1rem 0.7rem;
   background: var(--accent-bg);
   border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
   color: var(--context-fg);
-  max-height: 200px;
-  overflow-y: auto;
   flex-shrink: 0;
+}
+/* No `max-height` here any more. A 200px scroller holding 210px of content
+   meant the block ALWAYS cut mid-line, and the collapsible original
+   description was a scroller inside a scroller inside a fixed panel. Nothing
+   in here is unbounded now — the facts are one wrapping row, the summary is a
+   sentence, and `.original-desc-body` keeps its own 320px cap when opened. */
+
+/* Course · Due · Est. · Type, as labelled chips on one wrapping row. These
+   were four of the seven fragments the old block joined with <br>. */
+.ai-facts { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.4rem; }
+.ai-fact {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ai-fact-label {
+  color: var(--muted);
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+}
+.ai-fact-link { margin-left: auto; flex: 0 0 auto; font-size: 0.8rem; white-space: nowrap; }
+.ai-summary { margin: 0.5rem 0 0; font-size: 0.85rem; line-height: 1.45; }
+.ai-note {
+  margin: 0.4rem 0 0;
+  font-size: 0.78rem;
+  color: var(--accent);
+  font-weight: 600;
 }
 .ai-messages {
   flex: 1;
@@ -1321,22 +1358,25 @@ summary::-webkit-details-marker { color: var(--muted); }
   border: 2px solid var(--desc-border);
   border-radius: 8px;
   padding: 0.75rem 0.9rem;
-  box-shadow: 0 1px 0 rgba(30,58,138,0.06);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 60%, transparent);
 }
 .original-desc summary {
   cursor: pointer;
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #1e3a8a;
+  /* Was #1e3a8a, and the body below was #0f172a. --desc-bg themes to #111827
+     in dark mode, so both were near-black on near-black — the "Original from
+     Classroom" block was effectively invisible with the dark theme on. */
+  color: var(--accent);
   font-weight: 700;
   padding: 0.15rem 0;
 }
-.original-desc summary::-webkit-details-marker { color: #1e3a8a; }
-.original-desc[open] summary { border-bottom: 1px solid rgba(30,58,138,0.15); padding-bottom: 0.45rem; margin-bottom: 0.55rem; }
+.original-desc summary::-webkit-details-marker { color: var(--accent); }
+.original-desc[open] summary { border-bottom: 1px solid var(--border); padding-bottom: 0.45rem; margin-bottom: 0.55rem; }
 .original-desc-body {
   font-size: 0.92rem;
-  color: #0f172a;
+  color: var(--fg);
   white-space: pre-wrap;
   max-height: 320px;
   overflow-y: auto;
@@ -1560,7 +1600,13 @@ summary::-webkit-details-marker { color: var(--muted); }
      row on a busy card; the link keeps an explicit aria-label. */
   .open-link-label { display: none; }
 
-  .ai-context { max-height: 160px; padding: 0.55rem 0.85rem; }
+  .ai-context { padding: 0.55rem 0.85rem; }
+  .ai-fact { font-size: 0.74rem; padding: 0.18rem 0.45rem; }
+  /* The link is the only thing here that has somewhere else to be, and pushing
+     it to its own line is cheaper than letting it split the fact row. */
+  .ai-fact-link { margin-left: 0; }
+  .ai-grounding-badge { padding: 0.3rem 0.85rem; font-size: 0.72rem; }
+  .ai-grounding-copy { min-height: 34px; }
   .ai-messages { padding: 0.75rem; gap: 0.6rem; }
   .ai-msg { font-size: 0.92rem; }
 
@@ -2266,13 +2312,23 @@ summary::-webkit-details-marker { color: var(--muted); }
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
+  /* The bare `button` rule sets border-radius: 6px, which rounded the ends of
+     this 2px underline — so the active tab's rule curved up at both ends
+     instead of reading as a straight line under the label. */
+  border-radius: 0;
   padding: 0.55rem 0.2rem;
+  /* Sit the underline ON the strip's own 1px rule rather than 1px above it.
+     Two nearly-touching horizontal lines is the other half of what made this
+     look bent. */
+  margin-bottom: -1px;
   margin-right: 1rem;
   font-size: 0.9rem;
   color: var(--muted);
   cursor: pointer;
 }
-".study-tab-btn:hover,
+/* A stray leading quote here made this an invalid selector, so neither tab
+   strip had a hover state at all. */
+.study-tab-btn:hover,
 .archive-tab-btn:hover { color: var(--fg); }
 .study-tab-btn.active,
 .archive-tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
@@ -2648,16 +2704,52 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-chip-sub { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
 
 /* Assignment tutor grounding is visible before a student sends a question. */
+/* One quiet line saying what the tutor can see, not a second tinted panel
+   under the first. It used to be a bordered box restating the panel's title,
+   its course and every attachment — all three already on screen immediately
+   above it — for 171px of a phone sheet that only has 776. The summary and the
+   full source list stay in the DOM (the copy button and screen readers both
+   need them); they are just no longer the loudest thing in the panel. */
 .ai-grounding-badge {
-  display: grid; gap: 0.15rem; margin: 0.55rem 0; padding: 0.6rem 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
-  border-radius: 10px; background: color-mix(in srgb, var(--accent) 8%, transparent);
-  font-size: 0.8rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.4rem 1rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.76rem;
+  color: var(--muted);
 }
-.ai-grounding-label { color: var(--accent); }
-.ai-grounding-summary { color: var(--fg); }
-.ai-grounding-sources { color: var(--muted); overflow-wrap: anywhere; white-space: normal; }
-.ai-grounding-copy { justify-self: start; padding: 0.25rem 0.55rem; font: inherit; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 7px; background: transparent; color: var(--fg); cursor: pointer; }
+.ai-grounding-label { color: var(--muted); flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Already said by the panel header and the fact row directly above. Kept for
+   assistive tech and the copy action, which is why it is not `display: none`. */
+.ai-grounding-summary,
+.ai-grounding-sources {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Quiet, but still a real target — the whole reason the full source list is
+   rendered at all is that this button copies it. 24px was too small to hit. */
+.ai-grounding-copy {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0.15rem 0.6rem;
+  font: inherit;
+  font-size: 0.72rem;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.ai-grounding-copy:hover { color: var(--accent); border-color: var(--accent); }
 .ai-grounding-copy:hover, .ai-grounding-copy:focus-visible { border-color: var(--accent); color: var(--accent); }
 
 @media (max-width: 640px) {
