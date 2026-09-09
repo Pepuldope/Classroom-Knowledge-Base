@@ -33,6 +33,29 @@ approve it. Keep items concrete and student-facing.
 - [x] Tutor: "explain like I'm 12" and "give me a practice problem" quick actions.
 - [x] Planner→KB bridge: on each assignment, a "Search the knowledge base for this topic" button.
 
+## 📅 Google Calendar (Pepuldo, 2026-09-09) — planned, not started
+Full design: `docs/google-calendar-plan.md`. Read it before starting any item
+below; the scope choice and the deterministic-id decision are load-bearing.
+Phases 1-3 are sync-on-open and cost nothing new. **Phase 4 (true background
+sync) is a decision for Pepuldo, not a task** — it means holding refresh tokens
+on a shared server, which the privacy copy currently promises we do not.
+- [ ] Calendar: `calendar-event.js` + tests — deterministic base32hex event id,
+  event body, all-day end-exclusivity, Classroom-UTC to local timezone. Pure, no
+  network. (2026-09-09)
+- [ ] Calendar: `calendarSyncPlan()` + tests — corpus x existing events to a list
+  of create/patch/delete/skip operations. Pure. (2026-09-09)
+- [ ] Calendar: incremental-auth opt-in in Settings, requesting ONLY
+  `calendar.app.created` with `include_granted_scopes=true`, plus the updated
+  privacy summary. No syncing yet. (2026-09-09)
+- [ ] Calendar: create the secondary calendar on first opt-in, store its id,
+  recreate it on a 404 rather than wedging. (2026-09-09)
+- [ ] Calendar: wire the sync plan to the API on `kbAutoSyncModel`'s cadence, and
+  add a `calendar` group to `scripts/test.sh`. Phase 1 complete. (2026-09-09)
+- [ ] Calendar: submitted/deleted handling, the fingerprint guard that never
+  clobbers a student's own edit, and full reconcile. (2026-09-09)
+- [ ] Calendar: `freebusy` + proposed work blocks from `estimatedMinutes` —
+  propose, never impose. (2026-09-09)
+
 ## 🐛 Reported by Pepuldo (2026-09-09) — fix before new features
 Six phone defects, all shipped 2026-09-09. Gated by `scripts/mobile_place_test.mjs`
 plus model tests in `tests/session-position.test.js` and `tests/sheet-drag.test.js`.
