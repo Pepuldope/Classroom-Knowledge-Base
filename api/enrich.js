@@ -17,12 +17,29 @@ export const config = { runtime: "edge" };
 // Ordered cheapest-to-reach first, and deliberately mixing vendors so a chain
 // of 429s is unlikely to be correlated. The less-trafficked entries at the
 // end are the ones that tend to answer when the well-known ones will not.
+// Every entry is verified against https://openrouter.ai/api/v1/models by
+// `scripts/enrich_models_test.mjs`: the id must still exist AND must advertise
+// `response_format`, because the request below sends
+// `provider: { require_parameters: true }` — a model that does not implement
+// structured output is not merely worse here, it is unroutable.
+//
+// Two links failed that check on 2026-09-09 and are gone:
+//   minimax/minimax-m2.7:free        retired from OpenRouter — can only 404
+//   nvidia/nemotron-3.5-lightning    does not advertise response_format
+//
+// Ordered most-capable first, because the reported failure was the opposite.
+// With the capable models rate-limited, the chain fell through to
+// `liquid/lfm-2.5-2.6b:free` — 2.6B parameters, asked for a JSON object — which
+// returned nothing, and "liquid/lfm-2.5-2.6b:free: empty completion" became the
+// only thing the user ever saw. A last resort that cannot do the job is not a
+// last resort; free slugs are retired often, so re-run that script when this
+// chain starts failing.
 const MODEL_CHAIN = [
+  "nvidia/nemotron-3-super-120b-a12b:free",
   "google/gemma-4-31b-it:free",
-  "nvidia/nemotron-3.5-lightning:free",
+  "nex-agi/nex-n2.5-pro:free",
   "google/gemma-4-26b-a4b-it:free",
-  "minimax/minimax-m2.7:free",
-  "liquid/lfm-2.5-2.6b:free",
+  "dots-studio/dots-3-note-preview:free",
 ];
 
 /**
@@ -172,6 +189,17 @@ export default async function handler(req) {
 
     const userMsg = `Course: ${a.courseName}\nTitle: ${a.title}\nWork type: ${a.workType || "ASSIGNMENT"}\nDescription: ${(a.description || "").slice(0, 250)}`;
 
+    // Every link's reason, not just the last one's. Reporting only the last
+    // was actively misleading: when three capable models were rate-limited and
+    // the chain fell through, the message a user saw named the smallest model
+    // in the list and said "empty completion" — which pointed the reader at the
+    // one link that was never going to work anyway, and hid the quota.
+    const failures = [];
+    const noteFailure = (detail) => {
+      failures.push(detail);
+      lastFailure = failures.join(" | ");
+    };
+
     const callModel = async (model) => {
       try {
         const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -207,16 +235,16 @@ export default async function handler(req) {
           // Keep why. Throwing this away is what made a dead model, an empty
           // quota and a malformed key all look like the same silent nothing.
           const body = await r.text().catch(() => "");
-          lastFailure = `${model}: HTTP ${r.status} ${body.slice(0, 200)}`;
+          noteFailure(`${model}: HTTP ${r.status} ${body.slice(0, 200)}`);
           if (isAccountRateLimited(r.status, body)) quotaExhausted = true;
           return null;
         }
         const data = await r.json().catch(() => null);
         const content = data?.choices?.[0]?.message?.content || null;
-        if (!content) lastFailure = `${model}: empty completion`;
+        if (!content) noteFailure(`${model}: empty completion`);
         return content;
       } catch (e) {
-        lastFailure = `${model}: ${e.name || "fetch failed"}`;
+        noteFailure(`${model}: ${e.name || "fetch failed"}`);
         return null;
       }
     };

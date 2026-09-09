@@ -73,6 +73,11 @@ node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.
 CHECKPOINT_OK=$?
 if [ "$CHECKPOINT_OK" -ne 0 ]; then echo "resumable Classroom checkpoint tests FAILED"; exit 1; fi
 
+echo "==> Enrichment model chain still exists on OpenRouter"
+node scripts/enrich_models_test.mjs
+ENRICH_MODELS_OK=$?
+if [ "$ENRICH_MODELS_OK" -ne 0 ]; then echo "enrichment model chain FAILED"; exit 1; fi
+
 echo "==> Session position + sheet drag model tests"
 node --test tests/session-position.test.js tests/sheet-drag.test.js
 PLACE_MODEL_OK=$?
