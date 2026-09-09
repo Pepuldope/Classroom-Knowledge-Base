@@ -62,6 +62,7 @@ GATES=(
 "models|-|Interrupted Classroom build privacy tests|node --test tests/archive-builder-abort.test.js"
 "models|-|Resumable Classroom build checkpoint tests|node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.js"
 "models,panel|-|Assignment panel model tests|node --test tests/assignment-panel.test.js"
+"models,api|-|Enrichment model chain fall-through tests|node --test tests/enrich-chain.test.js"
 "models,mobile|-|Session position + sheet drag model tests|node --test tests/session-position.test.js tests/sheet-drag.test.js"
 "models|-|Study streak model tests|node scripts/study_streak_test.mjs"
 "models|-|Study progress model tests|node scripts/study_progress_test.mjs"

@@ -27,18 +27,27 @@ export const config = { runtime: "edge" };
 //   minimax/minimax-m2.7:free        retired from OpenRouter — can only 404
 //   nvidia/nemotron-3.5-lightning    does not advertise response_format
 //
-// Ordered most-capable first, because the reported failure was the opposite.
-// With the capable models rate-limited, the chain fell through to
-// `liquid/lfm-2.5-2.6b:free` — 2.6B parameters, asked for a JSON object — which
-// returned nothing, and "liquid/lfm-2.5-2.6b:free: empty completion" became the
-// only thing the user ever saw. A last resort that cannot do the job is not a
-// last resort; free slugs are retired often, so re-run that script when this
-// chain starts failing.
+// Ordered INSTRUCT-first, not most-capable-first. Leading with the 120B
+// reasoning model was a mistake made on 2026-09-09 and reported the same day:
+// it ignores `reasoning: { exclude: true }` on its free provider and thinks in
+// the content channel, so it answered with "We need to output JSON with fields
+// weight, actionType, …" and spent the token budget before reaching an object.
+// Raw capability is worth nothing here if the reply is not parseable; an
+// instruct model that reliably emits the object beats a cleverer one that
+// narrates. The reasoner stays as a mid-chain fallback.
+//
+// The tail matters too. It used to end on `liquid/lfm-2.5-2.6b:free` — 2.6B
+// parameters, asked for a JSON object — which returned nothing whenever the
+// chain reached it, so "liquid/lfm-2.5-2.6b:free: empty completion" was the
+// only thing a user ever saw. A last resort that cannot do the job is not a
+// last resort.
+//
+// Free slugs are retired often; re-run that script when this chain misbehaves.
 const MODEL_CHAIN = [
-  "nvidia/nemotron-3-super-120b-a12b:free",
   "google/gemma-4-31b-it:free",
   "nex-agi/nex-n2.5-pro:free",
   "google/gemma-4-26b-a4b-it:free",
+  "nvidia/nemotron-3-super-120b-a12b:free",
   "dots-studio/dots-3-note-preview:free",
 ];
 
@@ -64,6 +73,30 @@ const ACTION_TYPES = ["submit_online", "in_person", "study_only", "read_only"];
  * balanced objects instead and take the last one that parses — the answer
  * comes after the reasoning, not before it.
  */
+/**
+ * Walk a model chain and return the first answer that actually parses.
+ *
+ * Separated out and exported because the bug it fixes is a control-flow bug,
+ * and control flow buried inside a fetch handler can only be tested by having
+ * a live OpenRouter key and a model that misbehaves on the day you run it.
+ *
+ * `call` returns raw text or null; `parse` returns an object or null; `stop`
+ * says when to abandon the chain entirely (an account-level quota closes every
+ * door, whereas one busy provider says nothing about the next model).
+ */
+export async function firstParsableAnswer(chain, { call, parse, onUnparsable = () => {}, stop = () => false } = {}) {
+  for (const model of Array.isArray(chain) ? chain : []) {
+    const raw = await call(model);
+    if (raw) {
+      const value = parse(raw);
+      if (value && typeof value === "object" && !Array.isArray(value)) return { model, value, raw };
+      onUnparsable(model, raw);
+    }
+    if (stop()) break;
+  }
+  return null;
+}
+
 export function parseModelJson(raw) {
   if (typeof raw !== "string") return null;
   const text = raw.replace(/```(?:json)?/gi, "");
@@ -227,7 +260,11 @@ export default async function handler(req) {
             // 400 tokens was consumed entirely by a thinking preamble, so
             // the response was cut off before any object was produced.
             reasoning: { exclude: true },
-            max_tokens: 1200,
+            // 1200 was enough for the object but not for a thinking preamble
+            // plus the object, and some free providers ignore the `reasoning`
+            // flag above. The chain falls through on prose either way now;
+            // this just means fewer models need to.
+            max_tokens: 2000,
             temperature: 0.2,
           }),
         });
@@ -249,28 +286,21 @@ export default async function handler(req) {
       }
     };
 
-    let raw = null;
-    let usedModel = "";
-    for (const model of MODEL_CHAIN) {
-      raw = await callModel(model);
-      if (raw) { usedModel = model; break; }
-      // Only an account-level limit closes every door; a busy provider for
-      // one model says nothing about the next one in the chain.
-      if (quotaExhausted) break;
-    }
-    if (!raw) return { id: a.id, error: "ai_failed", detail: lastFailure };
-
-    const parsed = parseModelJson(raw);
-    if (!parsed || typeof parsed !== "object") {
-      // Carry what came back, and which model said it — otherwise this branch
-      // reports only that something went wrong, and there is no way to tell
-      // which entry in the chain needs replacing.
-      return {
-        id: a.id,
-        error: "parse_failed",
-        detail: `${usedModel} did not return JSON: ${String(raw).slice(0, 200)}`,
-      };
-    }
+    // Parse INSIDE the loop. This used to break on the first model that
+    // answered at all, then parse once, and give up if that answer was prose —
+    // so a reasoning model that thinks out loud in the content channel ended
+    // the chain on behalf of four models that were never asked.
+    // (Reported 2026-09-09: "nvidia/nemotron-3-super-120b-a12b:free did not
+    // return JSON: We need to output JSON with fields weight, actionType…".)
+    // A link only counts when it produces something usable.
+    const attempt = await firstParsableAnswer(MODEL_CHAIN, {
+      call: callModel,
+      parse: parseModelJson,
+      onUnparsable: (model, raw) => noteFailure(`${model}: prose, not JSON: ${String(raw).slice(0, 120)}`),
+      stop: () => quotaExhausted,
+    });
+    if (!attempt) return { id: a.id, error: "ai_failed", detail: lastFailure };
+    const { model: usedModel, value: parsed } = attempt;
 
     const minutes = Number(parsed.estimatedMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) parsed.estimatedMinutes = 20;

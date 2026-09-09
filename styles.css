@@ -1355,24 +1355,47 @@ summary::-webkit-details-marker { color: var(--muted); }
 .original-desc {
   margin-top: 0.85rem;
   background: var(--desc-bg);
-  border: 2px solid var(--desc-border);
+  /* Was a 2px --desc-border (#3b82f6 in dark): a bright blue frame that was
+     the loudest thing in the box, competing with the label it surrounds. */
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 0.75rem 0.9rem;
   box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 60%, transparent);
 }
+/* Legibility, not just contrast.
+   First pass (2026-09-09) fixed a genuine invisibility — this was #1e3a8a on a
+   --desc-bg that themes to #111827, near-black on near-black — by moving it to
+   --accent. That measures 6.98:1 in dark mode, which passes AA, and it was
+   still reported as hard to see. Contrast was not the whole problem: 12.5px,
+   uppercase, 700 weight and 0.06em letter-spacing is the least legible
+   treatment there is, and it was the only thing you could click.
+   Sentence case at a readable size, in --fg (16.98:1), with the caret doing
+   the work the shouting was doing. */
 .original-desc summary {
   cursor: pointer;
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  /* Was #1e3a8a, and the body below was #0f172a. --desc-bg themes to #111827
-     in dark mode, so both were near-black on near-black — the "Original from
-     Classroom" block was effectively invisible with the dark theme on. */
-  color: var(--accent);
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  letter-spacing: 0;
+  color: var(--fg);
+  font-weight: 600;
   padding: 0.15rem 0;
+  list-style: none;
 }
-.original-desc summary::-webkit-details-marker { color: var(--accent); }
+.original-desc summary::-webkit-details-marker { display: none; }
+.original-desc summary::before {
+  content: "\25B8";
+  color: var(--muted);
+  font-size: 0.8em;
+  transition: transform 0.15s ease;
+}
+.original-desc[open] summary::before { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .original-desc summary::before { transition: none; }
+}
+.original-desc summary:hover { color: var(--accent); }
+.original-desc summary:hover::before { color: var(--accent); }
 .original-desc[open] summary { border-bottom: 1px solid var(--border); padding-bottom: 0.45rem; margin-bottom: 0.55rem; }
 .original-desc-body {
   font-size: 0.92rem;
