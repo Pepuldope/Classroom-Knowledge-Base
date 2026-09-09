@@ -37,9 +37,11 @@ approve it. Keep items concrete and student-facing.
 Full design: `docs/google-calendar-plan.md`. Read it before starting any item
 below; the scope choice and the deterministic-id decision are load-bearing.
 Decided by Pepuldo 2026-09-09: sync-on-open only (background sync REJECTED, so
-this needs no backend); a Settings toggle that **deletes the whole calendar**
-when switched off, behind a confirm dialog; pending work with any due date, no
-history backfill, hidden courses excluded; submitted work kept and marked ✓.
+this needs no backend); a Settings toggle that **hides** the calendar
+when switched off (`calendarList.patch {hidden, selected}` — nothing is deleted,
+so no confirm dialog), with deleting it offered separately as a deliberate
+button; pending work with any due date, no history backfill, hidden courses
+excluded; submitted work kept and marked ✓, reversed on unsubmit.
 **Blocked until `calendar.app.created` is added to the OAuth consent screen of
 the `classroom-knowledge-google` Cloud project** — only Pepuldo can do that, and
 items 3 onward fail at Google without it.
@@ -50,18 +52,17 @@ items 3 onward fail at Google without it.
   of create/patch/delete/skip operations. Pure. (2026-09-09)
 - [ ] Calendar: the Settings toggle (off by default) + incremental auth
   requesting ONLY `calendar.app.created` with `include_granted_scopes=true`,
-  the updated privacy summary, and the confirm dialog for switching it off.
-  No syncing yet. (2026-09-09)
+  and the updated privacy summary. No syncing yet. (2026-09-09)
 - [ ] Calendar: create the secondary calendar on first opt-in, store its id,
   recreate it on a 404 rather than wedging. (2026-09-09)
 - [ ] Calendar: wire the sync plan to the API on `kbAutoSyncModel`'s cadence, and
   add a `calendar` group to `scripts/test.sh`. Phase 1 complete. (2026-09-09)
-- [ ] Calendar: ✓-on-submit and its reversal when work is handed back,
-  deleted-coursework handling, the fingerprint guard that never clobbers a
-  student's own edit, and full reconcile. (2026-09-09)
-- [ ] Calendar: the OFF path — confirm dialog naming what is lost, then
-  `calendars.delete`; a failed delete retries rather than silently flipping the
-  switch back. (2026-09-09)
+- [ ] Calendar: ✓-on-submit and its reversal on unsubmit, deleted-coursework
+  handling, the fingerprint guard that never clobbers a student's own edit, and
+  full reconcile. (2026-09-09)
+- [ ] Calendar: the OFF path — `calendarList.patch {hidden:true, selected:false}`
+  and back again on re-enable, plus a separate confirm-dialogged "Remove the
+  calendar from Google" button calling `calendars.delete`. (2026-09-09)
 - [ ] Calendar: `freebusy` + proposed work blocks from `estimatedMinutes` —
   propose, never impose. (2026-09-09)
 

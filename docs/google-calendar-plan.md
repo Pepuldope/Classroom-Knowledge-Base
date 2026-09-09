@@ -84,21 +84,40 @@ feature turns on, and turning it on is what triggers the incremental consent.
 secondary calendar, store its id, run a full sync.
 **ON (subsequently)** — resume; the next sync repairs any drift.
 
-**OFF — deletes the calendar (decided by Pepuldo, 2026-09-09).** Not just the
-events: the whole secondary calendar goes, via `calendars.delete`. Verified
-2026-09-09 that `calendar.app.created` is an accepted scope for that call — and
-because that scope only ever grants access to calendars this app created, this
-can never delete a calendar the student made themselves.
+**OFF — hides the calendar, keeps the data (decided by Pepuldo, 2026-09-09).**
 
-This is destructive and irreversible, so:
+```
+calendarList.patch { hidden: true, selected: false }
+```
 
-- it is behind a **confirm dialog**, not a bare switch;
-- the confirm copy must say what is actually lost, including the ✓-marked record
-  of completed work (§5) and any study blocks the student moved by hand — those
-  are the things they would miss, and "turn sync off" does not sound like
-  "delete my term's history";
-- if the delete fails, do not silently flip the switch back: report it, keep the
-  stored calendar id, and let the next attempt retry.
+`hidden` takes it out of the calendar list; `selected` takes its events off the
+grid. Both are writable, and `calendarList.patch` accepts `calendar.app.created`
+— verified 2026-09-09 — so hiding costs no extra scope. The state lives on the
+Google account, so it applies on every device the student uses.
+
+Turning it back on is `{ hidden: false, selected: true }` plus a resync, which
+repairs whatever drifted while it was off.
+
+This replaced an earlier decision to delete the calendar outright. Deletion put
+an irreversible action behind a switch, and the thing it destroyed — the ✓ record
+of a term's completed work, plus any study blocks moved by hand — is precisely
+what a student would miss. Hiding gets the same "it's gone from my calendar"
+result with nothing lost, and needs **no confirm dialog**, because there is
+nothing to confirm.
+
+**Do not rename the calendar to mark it paused.** It is tempting (an unhidden,
+frozen calendar looks broken), but the field for it, `summaryOverride`, is
+literally the name the *student* gave it — writing to it is the clobber-a-user-
+edit mistake that §5 forbids everywhere else. A stale hidden calendar is a small
+confusion; silently renaming something they named is a worse one.
+
+**Deleting stays available, just not behind the switch.** A separate
+`Remove the calendar from Google` button in the same Settings block, with a
+confirm dialog, calling `calendars.delete` (also accepts `calendar.app.created`,
+verified 2026-09-09; and because that scope only reaches calendars this app
+created, it can never delete one the student made). That keeps the tidy end
+state reachable for anyone who wants it, as a deliberate act rather than a side
+effect of a toggle.
 
 Turning it off does **not** revoke the OAuth grant — Google owns that screen, and
 silently revoking would make re-enabling a full consent round-trip every time.
@@ -205,8 +224,9 @@ A mirror that only ever adds is worse than no mirror.
   - These accumulate — nothing else ever removes them. That is the intent, and
     the reconcile below is still the backstop: if the coursework disappears from
     Classroom, its ✓ event goes with it.
-  - Re-opening a submission (`RECLAIMED_BY_STUDENT`) must reverse this: drop the
-    `✓`, restore the reminders. Handing work back in is not rare.
+  - **Unsubmitting** must reverse this: drop the `✓`, restore the reminders.
+    The API calls that state `RECLAIMED_BY_STUDENT`, but the button in Classroom
+    says *Unsubmit* — use the student's word in any UI copy, not the API's.
 - **Coursework deleted or unpublished → delete the event.**
 - **Due date or title changed → patch.**
 - **Full reconcile:** list events on our calendar carrying our
@@ -317,10 +337,10 @@ Small enough for one loop tick each:
    confirm dialog for OFF. No syncing yet.
 4. Create the secondary calendar on first opt-in; store its id; recreate on 404.
 5. Wire the plan to the API, on `kbAutoSyncModel`'s cadence. Phase 1 done.
-6. Phase 2: ✓-on-submit and its reversal, deleted-coursework handling, the
-   fingerprint guard, and full reconcile.
-6b. The OFF path: confirm dialog, `calendars.delete`, and a failure that retries
-   rather than silently flipping the switch back.
+6. Phase 2: ✓-on-submit and its reversal on unsubmit, deleted-coursework
+   handling, the fingerprint guard, and full reconcile.
+6b. The OFF path: `calendarList.patch { hidden, selected }` both ways, plus the
+   separate confirm-dialogged "Remove the calendar from Google" button.
 7. Phase 3: `freebusy` + proposed work blocks.
 
 Add a `calendar` group to `scripts/test.sh` as soon as item 1 lands.
