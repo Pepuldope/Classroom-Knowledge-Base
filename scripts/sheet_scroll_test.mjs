@@ -46,7 +46,7 @@ const WORK = (i) => ({
 const WORKS = Array.from({ length: 12 }, (_, i) => WORK(i + 1));
 
 /** A real, cancelable touch drag — the kind the page is allowed to prevent. */
-async function touchDrag(page, { x, fromY, toY, steps = 12, stepMs = 16 }) {
+async function touchDrag(page, { x, fromY, toY, steps = 12, stepMs = 16, onMove = null }) {
   const cdp = await page.context().newCDPSession(page);
   const point = (y) => [{ x, y, radiusX: 2, radiusY: 2, force: 1, id: 1 }];
   await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: point(fromY) });
@@ -55,10 +55,43 @@ async function touchDrag(page, { x, fromY, toY, steps = 12, stepMs = 16 }) {
       type: "touchMove", touchPoints: point(fromY + ((toY - fromY) * i) / steps),
     });
     await page.waitForTimeout(stepMs);
+    if (onMove) await onMove(i / steps);
   }
   await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await cdp.detach();
 }
+
+/** How far down the sheet is currently drawn, in px. */
+const sheetOffset = (page) => page.evaluate(() => {
+  const t = getComputedStyle(document.getElementById("ai")).transform;
+  if (!t || t === "none") return 0;
+  const m = new DOMMatrixReadOnly(t);
+  return Math.round(m.m42);
+});
+
+/**
+ * Two invariants that only an EXPANDED original description exercises.
+ *
+ * `spill`: a box that clips nothing must not be given a height that clips.
+ * A `max-height` left standing under `overflow: visible` is not a scroller, it
+ * is text running out of its own box and over whatever is underneath.
+ *
+ * `askBoxAtBottom`: the ask box and the quick prompts sit on the panel's floor.
+ * They ride up under the content the moment the sheet's body stops being the
+ * element that takes the slack.
+ */
+const panelInvariants = (page) => page.evaluate(() => {
+  const panel = document.getElementById("ai");
+  const quick = document.querySelector("#ai .ai-quick");
+  const style = getComputedStyle(panel);
+  const clipped = [...panel.querySelectorAll("*")].filter((el) => {
+    const s = getComputedStyle(el);
+    if (s.overflowY !== "visible" || s.maxHeight === "none") return false;
+    return el.scrollHeight > el.clientHeight + 1;
+  }).map((el) => `${el.className || el.tagName}: ${el.scrollHeight}px in a ${el.clientHeight}px box`);
+  const floor = panel.getBoundingClientRect().bottom - parseFloat(style.paddingBottom || "0");
+  return { clipped, gapBelowQuickPrompts: Math.round(floor - quick.getBoundingClientRect().bottom) };
+});
 
 const openSheet = async (page) => {
   await page.locator(".assignment").first().click();
@@ -112,6 +145,12 @@ const check = (condition, message) => {
       bodyLocked: document.body.classList.contains("sheet-open"),
     };
   });
+  const phoneInvariants = await panelInvariants(page);
+  check(phoneInvariants.clipped.length === 0,
+    `nothing spills out of its own box with the description expanded${phoneInvariants.clipped.length ? ": " + phoneInvariants.clipped.join("; ") : ""}`);
+  check(Math.abs(phoneInvariants.gapBelowQuickPrompts) <= 2,
+    `the ask box and quick prompts sit on the sheet's floor (${phoneInvariants.gapBelowQuickPrompts}px gap below them)`);
+
   check(geometry.scrollerOverflows,
     `the sheet body scrolls: ${geometry.scrollerContent}px of content in a ${geometry.scrollerHeight}px box`);
   check(!geometry.messagesScrolls, "the conversation is not a scroller inside a scroller");
@@ -145,11 +184,18 @@ const check = (condition, message) => {
   check(await page.evaluate(() => document.getElementById("ai").hidden) === false,
     "scrolling back up mid-content does not dismiss the sheet");
 
-  // Back at the top, the same pull is a dismissal.
+  // Back at the top, the same pull is a dismissal — and it has to be VISIBLE
+  // on the way. Requested 2026-09-10: "I would like it to follow with your
+  // finger as you pull down so you have that feedback."
   await page.evaluate(() => { document.getElementById("aiScroll").scrollTop = 0; });
   await page.waitForTimeout(200);
   const sheetHeight = await page.evaluate(() => document.getElementById("ai").getBoundingClientRect().height);
-  await touchDrag(page, { x: mid.x, fromY: 300, toY: 300 + sheetHeight * 0.45, steps: 14, stepMs: 20 });
+  let followed = 0;
+  await touchDrag(page, {
+    x: mid.x, fromY: 300, toY: 300 + sheetHeight * 0.45, steps: 14, stepMs: 20,
+    onMove: async () => { followed = Math.max(followed, await sheetOffset(page)); },
+  });
+  check(followed > 40, `the sheet follows the finger down (${followed}px at its furthest)`);
   await page.waitForTimeout(500);
   check(await page.evaluate(() => document.getElementById("ai").hidden) === true,
     `pulling down from the top of the content closes the sheet (${Math.round(sheetHeight * 0.45)}px)`);
@@ -161,6 +207,26 @@ const check = (condition, message) => {
   check(restored.position === "static", "the page is scrollable again once the sheet is gone");
   check(lockedAt > 0 && Math.abs(restored.scrollY - lockedAt) <= 2,
     `the list is back where it was left (${Math.round(restored.scrollY)}px, locked at ${lockedAt}px)`);
+
+  // The handle is the other way in, and it was pinned by the same fill mode.
+  await page.locator(".assignment").first().click();
+  await page.waitForSelector("#ai:not([hidden])", { timeout: 5000 });
+  await page.waitForTimeout(500);
+  const handle = await page.evaluate(() => {
+    const r = document.getElementById("aiSheetHandle").getBoundingClientRect();
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+  });
+  await page.mouse.move(handle.x, handle.y);
+  await page.mouse.down();
+  let handleFollowed = 0;
+  for (let y = handle.y; y <= handle.y + 120; y += 20) {
+    await page.mouse.move(handle.x, y);
+    await page.waitForTimeout(30);
+    handleFollowed = Math.max(handleFollowed, await sheetOffset(page));
+  }
+  await page.mouse.up();
+  await page.waitForTimeout(400);
+  check(handleFollowed > 40, `the handle drags the sheet with it (${handleFollowed}px at its furthest)`);
 
   check(errors.length === 0, `no uncaught page errors${errors.length ? ": " + errors.join(" | ") : ""}`);
   await page.close();
@@ -188,7 +254,12 @@ const check = (condition, message) => {
     bodyPosition: getComputedStyle(document.body).position,
     scrollY: window.scrollY,
   }));
-  check(desktop.wrapper === "contents", `the wrapper is not in the desktop layout at all (display: ${desktop.wrapper})`);
+  const desktopInvariants = await panelInvariants(page);
+  check(desktopInvariants.clipped.length === 0,
+    `nothing spills out of its own box on desktop either${desktopInvariants.clipped.length ? ": " + desktopInvariants.clipped.join("; ") : ""}`);
+  check(Math.abs(desktopInvariants.gapBelowQuickPrompts) <= 2,
+    `the ask box sits at the bottom of the desktop rail, not under the content (${desktopInvariants.gapBelowQuickPrompts}px gap below it)`);
+  check(desktop.wrapper === "flex", `the sheet body carries its own flex, rather than relying on display: contents (display: ${desktop.wrapper})`);
   check(desktop.messagesScrolls === "auto", "the conversation is still the scroller on desktop");
   check(desktop.bodyPosition === "static" && desktop.scrollY === 200,
     `the desktop page behind the rail still scrolls (scrollY ${desktop.scrollY}px, body ${desktop.bodyPosition})`);

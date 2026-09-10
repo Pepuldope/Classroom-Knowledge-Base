@@ -749,12 +749,26 @@ summary::-webkit-details-marker { color: var(--muted); }
   color: var(--accent);
   font-weight: 600;
 }
-/* The sheet's body. `display: contents` above 640px means this element is not
-   in the layout at all — #ai's flex column still sees .ai-context, the
-   grounding line, the strip and .ai-messages as its own children, so the
-   desktop rail is byte-for-byte what it was. The phone rule below turns it
-   into the single scroller. */
-.ai-scroll { display: contents; }
+/* The sheet's body: the facts, the grounding line, the library strip and the
+   conversation, as one column taking whatever the header, the ask box and the
+   quick prompts leave.
+   This was `display: contents` — invisible to layout, so #ai's flex column saw
+   the four children directly and nothing about the desktop rail changed. It is
+   a real flex item instead because `display: contents` has to be honoured for
+   the layout to hold at all: the moment it is not, the wrapper is an ordinary
+   block that does not grow, and the ask box rides up to sit directly under the
+   content instead of at the bottom of the panel. Pepuldo saw exactly that,
+   once, on desktop. A wrapper that carries its own `flex: 1` cannot fail that
+   way, and the geometry is identical when it works. */
+.ai-scroll {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+/* The conversation takes the slack; everything above it is its own height. */
+.ai-scroll > * { flex: 0 0 auto; }
+.ai-scroll > .ai-messages { flex: 1 1 auto; min-height: 0; }
 
 .ai-messages {
   flex: 1;
@@ -1443,8 +1457,16 @@ summary::-webkit-details-marker { color: var(--muted); }
     box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.28);
     overflow: hidden;
     /* Runs on every open: the panel is toggled with the hidden attribute, and
-       display:none -> flex restarts a CSS animation. */
-    animation: ai-sheet-up 260ms cubic-bezier(0.32, 0.72, 0, 1) both;
+       display:none -> flex restarts a CSS animation.
+       `backwards`, NOT `both`. A forwards fill keeps the last keyframe —
+       `transform: translateY(0)` — applied for the life of the element, and an
+       animation beats an inline style in the cascade. So every `style.transform`
+       the drag wrote was silently discarded: the sheet never followed the
+       finger, on the handle or on the content, and only jumped when the JS
+       finally hid it. Reported 2026-09-10 ("I would like it to follow with your
+       finger as you pull down"). There is no delay on this animation, so the
+       fill mode buys nothing here anyway. */
+    animation: ai-sheet-up 260ms cubic-bezier(0.32, 0.72, 0, 1) backwards;
     /* The phone's address/search bar sits on the BOTTOM edge, and so does the
        keyboard — neither is inside the visual viewport, but `bottom: 0` is
        measured against the LAYOUT viewport, so the sheet's last row of buttons
@@ -1484,16 +1506,16 @@ summary::-webkit-details-marker { color: var(--muted); }
      Now the whole body scrolls as one, and `overscroll-behavior: contain`
      stops the page behind from taking over when it reaches either end. */
   .ai-scroll {
-    display: block;
-    flex: 1 1 auto;
-    min-height: 0;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
   /* Inside the one scroller these are ordinary blocks; a scroller within a
      scroller is what the sheet had too much of already. */
-  .ai-scroll .ai-messages { flex: none; overflow: visible; }
+  .ai-scroll > .ai-messages { flex: 0 0 auto; overflow: visible; }
+  /* The desktop rail caps this at 320px and scrolls it; inside the sheet's
+     one scroller that would be a scroller inside a scroller, which is what the
+     panel already had too much of. */
   .original-desc-body { max-height: none; overflow: visible; }
   /* Belt and braces for the sheet's own edges (the handle, the form, the
      quick prompts): a drag that starts on furniture must not scroll the page. */
@@ -1688,7 +1710,13 @@ summary::-webkit-details-marker { color: var(--muted); }
   .ai-quick button { padding: 0.6rem 0.35rem; }
 
   .original-desc { padding: 0.7rem 0.8rem; }
-  .original-desc-body { font-size: 0.9rem; max-height: 260px; }
+  /* No cap. This rule and the one above it used to disagree: the sheet's own
+     scroller made `overflow: visible` correct here, but this 260px max-height
+     survived — a clipped height with nothing clipping it, so an expanded
+     description ran straight out of its box and over the grounding line and
+     the conversation underneath. Reported 2026-09-10. The whole sheet scrolls
+     now; the description is as long as it is. */
+  .original-desc-body { font-size: 0.9rem; }
 }
 
 @media (max-width: 360px) {
