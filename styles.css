@@ -749,6 +749,13 @@ summary::-webkit-details-marker { color: var(--muted); }
   color: var(--accent);
   font-weight: 600;
 }
+/* The sheet's body. `display: contents` above 640px means this element is not
+   in the layout at all — #ai's flex column still sees .ai-context, the
+   grounding line, the strip and .ai-messages as its own children, so the
+   desktop rail is byte-for-byte what it was. The phone rule below turns it
+   into the single scroller. */
+.ai-scroll { display: contents; }
+
 .ai-messages {
   flex: 1;
   overflow-y: auto;
@@ -1467,6 +1474,31 @@ summary::-webkit-details-marker { color: var(--muted); }
        handle "worked". */
     touch-action: none;
   }
+  /* THE fix for "you scroll the page behind instead of the popup". Only
+     .ai-messages was ever scrollable, and it is the LAST thing in the sheet:
+     a finger landing on the facts, the summary or the original description —
+     most of the sheet — found nothing that scrolled, so the touch fell through
+     to the document and the list behind moved instead. Worse, .ai-context is
+     flex-shrink: 0, so a long description simply overflowed the sheet's
+     `overflow: hidden` and could not be reached at all.
+     Now the whole body scrolls as one, and `overscroll-behavior: contain`
+     stops the page behind from taking over when it reaches either end. */
+  .ai-scroll {
+    display: block;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+  /* Inside the one scroller these are ordinary blocks; a scroller within a
+     scroller is what the sheet had too much of already. */
+  .ai-scroll .ai-messages { flex: none; overflow: visible; }
+  .original-desc-body { max-height: none; overflow: visible; }
+  /* Belt and braces for the sheet's own edges (the handle, the form, the
+     quick prompts): a drag that starts on furniture must not scroll the page. */
+  #ai { overscroll-behavior: contain; }
+
   .ai-sheet-handle:active { cursor: grabbing; }
   .ai-sheet-grip {
     width: 36px;
@@ -2777,4 +2809,83 @@ summary::-webkit-details-marker { color: var(--muted); }
 
 @media (max-width: 640px) {
   .kb-copy-shortcut-hint { display: none; }
+}
+
+
+/* ---------------------------------------------------------------------------
+   The page, held still while the sheet is open.
+   `overscroll-behavior: contain` keeps a scroll gesture inside the sheet, but
+   iOS still hands a touch that starts on the sheet's non-scrolling furniture
+   to the document. Taking the body out of flow is the only thing that stops
+   it. app.js stores the scroll offset in --sheet-scroll-y and puts it back on
+   close, so the list is exactly where it was left.
+   Phones only: on desktop the panel is a side rail and the page behind it is
+   still legitimately scrollable.
+--------------------------------------------------------------------------- */
+@media (max-width: 640px) {
+  body.sheet-open {
+    position: fixed;
+    top: var(--sheet-scroll-y, 0px);
+    left: 0;
+    right: 0;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   Pull-to-refresh, for the window that has no browser chrome to provide it.
+--------------------------------------------------------------------------- */
+.pull-refresh {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  z-index: 95;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-left: -17px;
+  border-radius: 50%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.14);
+  /* Off-screen until a pull moves it. The transform is written by app.js. */
+  transform: translateY(-52px);
+  opacity: 0;
+  pointer-events: none;
+}
+/* While the finger is down the indicator IS the finger — easing it would lag.
+   The class is dropped for the spring back and the settle after a refresh. */
+.pull-refresh.settling {
+  transition: transform 220ms cubic-bezier(0.32, 0.72, 0, 1), opacity 220ms ease;
+}
+.pull-refresh-spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  /* Static until armed: a spinner that spins before it will do anything is a
+     lie about what letting go now would achieve. */
+}
+.pull-refresh.armed .pull-refresh-spinner { border-top-color: var(--accent); border-width: 2.5px; }
+.pull-refresh.refreshing .pull-refresh-spinner { animation: pull-refresh-spin 700ms linear infinite; }
+@keyframes pull-refresh-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .pull-refresh.refreshing .pull-refresh-spinner { animation-duration: 1600ms; }
+}
+
+/* When it was posted. Small, quiet, under the fact chips — it is context for
+   a decision ("have I seen this?"), not one of the facts you came for. */
+.ai-posted {
+  /* One tight line. Everything in this block is measured against a 340px
+     furniture budget (scripts/panel_audit.mjs) that exists because the panel
+     once left 139px of a 776px phone sheet for the actual conversation — so a
+     new line here pays for itself in leading, not in 1.5x body line-height. */
+  margin: 0.2rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  color: var(--muted);
 }

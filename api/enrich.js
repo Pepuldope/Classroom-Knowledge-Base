@@ -2,6 +2,14 @@ import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
 // Shared with the client so the two cannot drift — the prompt, the server
 // validation and the client fallback previously each carried their own list.
 import { TASK_KINDS, normalizeTaskKind } from "../task-kinds.js";
+// The rest of the site's AI already rotates across NVIDIA / Gemini / Groq /
+// Mistral / Cerebras / GitHub / Qwen / FreeLLMAPI / OpenRouter with circuit
+// breakers and RPM caps. Enrichment was the one flow that never used it: it
+// was pinned to OpenRouter's free tier, so a bad afternoon on shared free
+// capacity was a total outage for it, however healthy the other eight keys
+// were. The chain below is still tried first — it is free and its answers are
+// cached — and the router now catches what falls through it.
+import { completeChat } from "./ai-router.js";
 
 export const config = { runtime: "edge" };
 
@@ -176,6 +184,36 @@ async function kvSet(key, value) {
   } catch {}
 }
 
+/**
+ * Last resort: the shared multi-provider router.
+ *
+ * `requires: ["json"]` is not decoration — routeChat drops every provider
+ * without that capability rather than silently routing to one that will answer
+ * in prose, which is the failure mode this whole file is built around. `quick`
+ * keeps it on the cheap tier and lets the router escalate a tier if that band
+ * is exhausted. Any throw here means every provider is down, which is a
+ * genuine failure and belongs in the reported detail alongside the chain's.
+ */
+async function routerAttempt(userMsg, noteFailure) {
+  try {
+    const r = await completeChat(
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userMsg },
+      ],
+      { task: "quick", requires: ["json"], max_tokens: 2000, temperature: 0.2 },
+    );
+    const value = parseModelJson(r?.text || "");
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      return { model: `${r.meta?.provider || "router"}:${r.meta?.model || ""}`, value, raw: r.text };
+    }
+    noteFailure(`router(${r?.meta?.provider || "?"}): prose, not JSON: ${String(r?.text || "").slice(0, 120)}`);
+  } catch (e) {
+    noteFailure(`router: ${e?.message || "all providers failed"}`);
+  }
+  return null;
+}
+
 export default async function handler(req) {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
@@ -293,14 +331,17 @@ export default async function handler(req) {
     // (Reported 2026-09-09: "nvidia/nemotron-3-super-120b-a12b:free did not
     // return JSON: We need to output JSON with fields weight, actionType…".)
     // A link only counts when it produces something usable.
-    const attempt = await firstParsableAnswer(MODEL_CHAIN, {
+    let attempt = await firstParsableAnswer(MODEL_CHAIN, {
       call: callModel,
       parse: parseModelJson,
       onUnparsable: (model, raw) => noteFailure(`${model}: prose, not JSON: ${String(raw).slice(0, 120)}`),
       stop: () => quotaExhausted,
     });
+    // Every free OpenRouter link is spent. Before telling the user the AI
+    // could not analyze their assignment, ask the eight other providers.
+    if (!attempt) attempt = await routerAttempt(userMsg, noteFailure);
     if (!attempt) return { id: a.id, error: "ai_failed", detail: lastFailure };
-    const { model: usedModel, value: parsed } = attempt;
+    const { value: parsed } = attempt;
 
     const minutes = Number(parsed.estimatedMinutes);
     if (!Number.isFinite(minutes) || minutes <= 0) parsed.estimatedMinutes = 20;

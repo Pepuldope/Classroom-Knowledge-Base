@@ -15,6 +15,11 @@
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
+<!-- Standalone windows have no browser chrome, and pull-to-refresh went with
+     it. This is that gesture, given back. Hidden until a pull starts. -->
+<div id="pullRefresh" class="pull-refresh" aria-hidden="true">
+  <span class="pull-refresh-spinner"></span>
+</div>
 <header>
   <h1>Classroom Analyzer</h1>
   <div id="viewToggle" class="view-toggle" aria-label="Switch between Planner and Study" hidden>
@@ -300,16 +305,22 @@
     <h3 id="aiTitle">AI Assistant</h3>
     <button id="aiClose" aria-label="Close">×</button>
   </header>
-  <div id="aiContext" class="ai-context"></div>
-  <div id="aiGroundingBadge" class="ai-grounding-badge" hidden role="status" aria-live="polite">
-    <strong class="ai-grounding-label"></strong>
-    <span class="ai-grounding-summary"></span>
-    <span class="ai-grounding-sources"></span>
-    <button id="aiGroundingCopy" class="ai-grounding-copy" type="button" title="Copy assignment grounding sources">Copy sources</button>
-    <span id="aiGroundingCopyStatus" class="sr-only" role="status" aria-live="assertive" aria-atomic="true"></span>
+  <!-- One scroller, not four. On a phone the facts, the grounding line, the
+       library strip and the conversation scroll together as the sheet's body;
+       above 640px this is `display: contents` and the panel is laid out
+       exactly as it always was. -->
+  <div id="aiScroll" class="ai-scroll">
+    <div id="aiContext" class="ai-context"></div>
+    <div id="aiGroundingBadge" class="ai-grounding-badge" hidden role="status" aria-live="polite">
+      <strong class="ai-grounding-label"></strong>
+      <span class="ai-grounding-summary"></span>
+      <span class="ai-grounding-sources"></span>
+      <button id="aiGroundingCopy" class="ai-grounding-copy" type="button" title="Copy assignment grounding sources">Copy sources</button>
+      <span id="aiGroundingCopyStatus" class="sr-only" role="status" aria-live="assertive" aria-atomic="true"></span>
+    </div>
+    <div id="aiArchiveStrip" class="archive-strip" hidden></div>
+    <div id="aiMessages" class="ai-messages"></div>
   </div>
-  <div id="aiArchiveStrip" class="archive-strip" hidden></div>
-  <div id="aiMessages" class="ai-messages"></div>
   <form id="aiForm" class="ai-form">
     <input id="aiInput" type="text" placeholder="Ask about this assignment…" autocomplete="off" />
     <button type="submit">Send</button>

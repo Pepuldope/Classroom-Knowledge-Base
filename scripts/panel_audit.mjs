@@ -71,13 +71,14 @@ const report = async (label, viewport) => {
       contextScrolls: ctx.scrollHeight > ctx.clientHeight + 1
         ? `${ctx.scrollHeight}px of content in a ${ctx.clientHeight}px box` : "fits",
       contextBrTags: ctx.querySelectorAll("br").length,
+      postedText: (ctx.querySelector(".ai-posted")?.textContent || "").trim(),
     };
   });
 
   console.log(`\n=== ${label} (${viewport.width}x${viewport.height}) ===`);
   console.log(`panel ${detail.panelHeight}px; ${furniture}px of furniture before the conversation`);
   console.log("bands:", bands.map((b) => `${b.name}: ${b.height}px`).join(", "));
-  console.log("context:", detail.contextScrolls, `| ${detail.contextBrTags} <br> separators`);
+  console.log("context:", detail.contextScrolls, `| ${detail.contextBrTags} <br> separators | ${detail.postedText || "NO POSTED LINE"}`);
   console.log("overlapping controls:", clashes.length ? "\n  " + clashes.join("\n  ") : "none");
   console.log("overflowing boxes:", overflow.length ? "\n  " + overflow.join("\n  ") : "none");
 
@@ -87,6 +88,13 @@ const report = async (label, viewport) => {
   check(detail.groundingHeight <= GROUNDING_BUDGET,
     `grounding line is ${detail.groundingHeight}px (budget ${GROUNDING_BUDGET}px) — it is a line, not a panel`);
   check(detail.contextScrolls === "fits", `the context block scrolls inside itself: ${detail.contextScrolls}`);
+  // Requested 2026-09-10: the panel never said when the thing went up, which
+  // is the fact you want when deciding whether you have already seen it.
+  // Loose on purpose: the date itself is the reader's locale ("10 Sep 2026",
+  // "Sep 10, 2026"), and pinning the format here would fail on a machine set
+  // to anything but the CI's locale.
+  check(/^Posted .*\d{4}/.test(detail.postedText),
+    `the panel does not say when this was posted (got "${detail.postedText}")`);
   check(detail.contextBrTags === 0,
     `${detail.contextBrTags} <br> separators — facts belong in elements, not line breaks`);
   check(clashes.length === 0, `overlapping controls: ${clashes.join("; ")}`);

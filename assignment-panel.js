@@ -35,6 +35,8 @@ export function assignmentPanelModel({
   materials = [],
   description = "",
   link = "",
+  creationTime = "",
+  updateTime = "",
 } = {}) {
   const e = enrichment && typeof enrichment === "object" ? enrichment : {};
   const facts = [];
@@ -59,7 +61,38 @@ export function assignmentPanelModel({
     materialCount: list.length,
     hasDescription: Boolean(String(description || "").trim()),
     link: String(link || "").trim(),
+    posted: postedModel({ creationTime, updateTime }),
   };
+}
+
+/** A day apart is a real edit; minutes apart is Classroom saving the same post. */
+const POSTED_EDIT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * When this was put up, and whether it has been changed since.
+ *
+ * The panel said what the assignment is and when it is due but never when it
+ * appeared, which is the fact you want when you are deciding whether you have
+ * already seen something — and the fact you need to tell "this is genuinely
+ * new" from "this has been sitting there for a week". Dates, not strings: the
+ * renderer owns the reader's locale.
+ *
+ * `updated` only survives when the edit is at least a day after the post.
+ * Classroom stamps `updateTime` on its own saves, so without that floor almost
+ * every item would claim to have been "updated" a minute after it was posted.
+ */
+export function postedModel({ creationTime = "", updateTime = "" } = {}) {
+  const postedAt = toDate(creationTime);
+  if (!postedAt) return { postedAt: null, updatedAt: null, showUpdated: false };
+  const updatedAt = toDate(updateTime);
+  const showUpdated = Boolean(updatedAt) && updatedAt - postedAt >= POSTED_EDIT_MS;
+  return { postedAt, updatedAt: showUpdated ? updatedAt : null, showUpdated };
+}
+
+function toDate(value) {
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /**

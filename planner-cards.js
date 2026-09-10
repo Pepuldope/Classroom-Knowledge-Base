@@ -78,3 +78,27 @@ export function sortPendingFirst(items, pending) {
     .sort((a, b) => a.rank - b.rank || a.i - b.i)
     .map(({ item }) => item);
 }
+
+/**
+ * Is this the kind of "new" that "New since yesterday" means?
+ *
+ * The window is calendar-based, not a rolling 24 hours: everything posted since
+ * midnight at the START of yesterday. Something posted yesterday morning is
+ * still new this morning, which is the point of the section — but it drops out
+ * when the date rolls over again, and never lasts a third day.
+ *
+ * `now` is a parameter because the bug this section actually had was about
+ * time, not about filtering: nothing recomputed the list while the app stayed
+ * open, so a standalone window left running for days showed whatever was new
+ * on the day it was opened. The predicate below was always right; it just was
+ * not asked again. `reportIsStale` in report-freshness.js is the other half.
+ */
+export function postedSinceYesterday(creationTime, now = new Date()) {
+  if (!creationTime) return false;
+  const created = new Date(creationTime);
+  if (Number.isNaN(created.getTime())) return false;
+  const since = new Date(now);
+  since.setHours(0, 0, 0, 0);
+  since.setDate(since.getDate() - 1);
+  return created >= since;
+}

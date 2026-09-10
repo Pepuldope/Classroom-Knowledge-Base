@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dueChipModel, groupPlannerItems, sortPendingFirst } from "../planner-cards.js";
+import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday } from "../planner-cards.js";
 
 test("submitted work is never overdue, however late", () => {
   // The reported bug: the card's styling checked isPending but the TEXT did
@@ -77,4 +77,33 @@ test("only assignments are ranked by submission state", () => {
   assert.deepEqual(sortPendingFirst(items, pending).map((i) => i.id), ["m", "a"]);
   assert.deepEqual(sortPendingFirst([], pending), []);
   assert.deepEqual(sortPendingFirst(null, pending), []);
+});
+
+
+// --- "New since yesterday" ------------------------------------------------
+// Reported 2026-09-10: the same item sat in this section for three days. The
+// predicate below is not what was wrong — nothing ever re-ran it while the
+// installed app stayed open. These pin the window it is supposed to have.
+
+const AT = (iso) => new Date(iso);
+
+test("the window starts at midnight at the beginning of yesterday", () => {
+  const now = AT("2026-09-10T09:00:00");
+  assert.equal(postedSinceYesterday("2026-09-10T08:00:00", now), true, "this morning");
+  assert.equal(postedSinceYesterday("2026-09-09T00:00:00", now), true, "yesterday, on the stroke");
+  assert.equal(postedSinceYesterday("2026-09-08T23:59:59", now), false, "a second before it");
+});
+
+test("nothing survives into a third day", () => {
+  const posted = "2026-09-08T10:00:00";
+  assert.equal(postedSinceYesterday(posted, AT("2026-09-08T18:00:00")), true, "day it was posted");
+  assert.equal(postedSinceYesterday(posted, AT("2026-09-09T18:00:00")), true, "the day after");
+  assert.equal(postedSinceYesterday(posted, AT("2026-09-10T00:00:01")), false, "the day after that");
+});
+
+test("a missing or unparseable timestamp is not new", () => {
+  const now = AT("2026-09-10T09:00:00");
+  assert.equal(postedSinceYesterday("", now), false);
+  assert.equal(postedSinceYesterday(undefined, now), false);
+  assert.equal(postedSinceYesterday("not a date", now), false);
 });

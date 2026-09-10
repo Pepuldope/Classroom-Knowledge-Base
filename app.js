@@ -12,7 +12,7 @@ import {
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { migrateArchiveBundle } from "./kb-merge.js";
 import { relatedNotes } from "./kb-client-search.js";
-import { dueChipModel, groupPlannerItems, sortPendingFirst } from "./planner-cards.js";
+import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday } from "./planner-cards.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
@@ -23,8 +23,10 @@ import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STAT
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
-import { sheetDragModel, viewportBottomInset } from "./sheet-drag.js";
+import { sheetDragModel, sheetContentDragModel, viewportBottomInset } from "./sheet-drag.js";
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
+import { pullRefreshModel, pullRefreshEnabled, isStandaloneDisplay } from "./pull-refresh.js";
+import { reportIsStale } from "./report-freshness.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -189,6 +191,8 @@ let accessToken = null;
 // module-local variable at every assignment site.
 Object.defineProperty(window, "__cwaAccessToken", { get: () => accessToken, configurable: true });
 let sessionEpoch = 0;
+/** When the Planner's current list was built. 0 means there isn't one. */
+let reportLoadedAt = 0;
 let activeAssignment = null;
 let aiHistory = [];
 let allAssignments = [];
@@ -1529,13 +1533,12 @@ function isPending(a) {
   return !s || s === "NEW" || s === "CREATED" || s === "RECLAIMED_BY_STUDENT";
 }
 
+// Moved to planner-cards.js and given `now` as a parameter, because the bug
+// reported against "New since yesterday" (2026-09-10: the same item stuck
+// there for three days) was never in this test — it was that nothing asked it
+// again. See `scheduleFreshnessChecks` at the bottom of this file.
 function isPostedSinceYesterday(a) {
-  if (!a.creationTime) return false;
-  const created = new Date(a.creationTime);
-  const since = new Date();
-  since.setHours(0, 0, 0, 0);
-  since.setDate(since.getDate() - 1);
-  return created >= since;
+  return postedSinceYesterday(a.creationTime);
 }
 
 function daysUntil(d) {
@@ -1635,6 +1638,9 @@ async function loadReport(epoch) {
   window.__renderAll = renderAll;
   renderAll();
   $("report").hidden = false;
+  // Stamped so `reportIsStale` can tell that this list was built on a day
+  // that has since ended — the thing that made "New since yesterday" wrong.
+  reportLoadedAt = Date.now();
   setStatus("");
 
   pruneChats(inScope.map((a) => a.id));
@@ -1698,6 +1704,8 @@ let lastEnrichFailure = "";
 // accepts the connection and never answers hangs forever, and the only thing
 // the user sees is "Analyzing N more…" that never finishes.
 const ENRICH_TIMEOUT_MS = 45_000;
+/** Breathing room before the one silent retry of a failed enrichment. */
+const ENRICH_RETRY_DELAY_MS = 2_500;
 
 async function enrichBatch(batch) {
   try {
@@ -1744,11 +1752,9 @@ function enrichFailureMessage(failed) {
   return `AI couldn't analyze ${n}${why}. Reload to retry.`;
 }
 
-/** Returns the number of assignments the AI could not analyze. */
-async function fetchEnrichments(need, onProgress) {
-  if (need.length === 0) return 0;
-  let failed = 0;
-  for (const a of need) enrichPendingIds.add(a.id);
+/** One pass over a list of assignments. Returns the ones still not analyzed. */
+async function enrichPass(need, onProgress) {
+  const stillFailed = [];
   for (let i = 0; i < need.length; i += BATCH_SIZE) {
     const batch = need.slice(i, i + BATCH_SIZE);
     const enrichments = await enrichBatch(batch);
@@ -1771,13 +1777,42 @@ async function fetchEnrichments(need, onProgress) {
         // message always names something. parse_failed used to carry no
         // detail at all, which left the reason blank.
         lastEnrichFailure = e?.detail || e?.error || "server returned no result for this assignment";
-        failed += 1;
+        stillFailed.push(a);
       }
     }
     saveEnrichCache(cache);
     if (onProgress) onProgress(batch.length);
   }
-  return failed;
+  return stillFailed;
+}
+
+/**
+ * Returns the number of assignments the AI could not analyze.
+ *
+ * Reported 2026-09-10: "AI couldn't analyze 1 assignment … Reload to retry",
+ * which fixed itself later with no change at anyone's end — i.e. an upstream
+ * model was briefly unavailable and the user was told to do by hand the one
+ * thing the page could obviously do itself. It does it itself now: one silent
+ * second pass over just the failures, a moment later, and the banner only
+ * appears if that fails too. The server exhausts every provider it has before
+ * a single one of these attempts comes back failed (see api/enrich.js), so by
+ * the time this retry runs, something is properly wrong rather than busy.
+ */
+async function fetchEnrichments(need, onProgress) {
+  if (need.length === 0) return 0;
+  for (const a of need) enrichPendingIds.add(a.id);
+  let failed = await enrichPass(need, onProgress);
+  if (failed.length) {
+    // Long enough for a congested free-tier provider to come back, short
+    // enough that the reader has not gone anywhere.
+    await new Promise((resolve) => setTimeout(resolve, ENRICH_RETRY_DELAY_MS));
+    for (const a of failed) enrichPendingIds.add(a.id);
+    // No onProgress on the retry: the status line already counted these once,
+    // and counting them again would run it past the total.
+    failed = await enrichPass(failed, null);
+    if (window.__renderAll) window.__renderAll();
+  }
+  return failed.length;
 }
 
 function renderStatBar(all, inScope) {
@@ -2462,6 +2497,8 @@ async function openAi(a) {
     materials: activeMaterials,
     description: a.description,
     link: a.alternateLink ? withAuthUser(a.alternateLink) : "",
+    creationTime: a.creationTime,
+    updateTime: a.updateTime,
   });
 
   // Structure, not a <br>-joined string. The old block ran seven kinds of fact
@@ -2478,6 +2515,11 @@ async function openAi(a) {
       : "";
     ctxParts.push(`<div class="ai-facts">${chips}${link}</div>`);
   }
+  // When it went up. Quiet, under the chips: it is not one of the facts you
+  // opened the panel for, it is the one that answers "have I seen this?" —
+  // and the one that makes "New since yesterday" checkable by eye.
+  const postedText = postedLine(panel.posted);
+  if (postedText) ctxParts.push(`<p class="ai-posted">${escapeHtml(postedText)}</p>`);
   if (panel.summary) ctxParts.push(`<p class="ai-summary">${escapeHtml(panel.summary)}</p>`);
   if (panel.note) ctxParts.push(`<p class="ai-note">${escapeHtml(panel.note)}</p>`);
   if (panel.materialCount) ctxParts.push(renderMaterialsList(panel.materials));
@@ -2503,9 +2545,14 @@ async function openAi(a) {
   $("aiInput").placeholder = a.kind === "material" ? "Ask about this material…" : "Ask about this assignment…";
   renderQuickPrompts(DEFAULT_QUICK_PROMPTS);
 
+  // A sheet opened from the middle of the last one's conversation is
+  // disorienting; every open starts at the top of its own content.
+  const scroller = $("aiScroll");
+  if (scroller) scroller.scrollTop = 0;
   // Visible now, in the same task as the tap, so the sheet animates from the
   // start rather than after a round-trip.
   $("ai").hidden = false;
+  lockBackgroundScroll();
   // Not on a touch device: raising the keyboard covers half the sheet before
   // the reader has seen any of it. A pointer user gets the caret for free.
   if (!prefersNoAutoFocus()) $("aiInput").focus();
@@ -2539,6 +2586,57 @@ function prefersNoAutoFocus() {
   }
 }
 
+/**
+ * "Posted 8 Sep · updated 9 Sep", in the reader's own date format.
+ *
+ * The dates come out of `assignmentPanelModel` as Dates precisely so this —
+ * the one part that depends on where the reader is — stays here, next to the
+ * other `toLocaleDateString` calls, and out of the tested model.
+ */
+function postedLine(posted) {
+  if (!posted?.postedAt) return "";
+  const fmt = (d) => d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const parts = [`Posted ${fmt(posted.postedAt)}`];
+  if (posted.showUpdated && posted.updatedAt) parts.push(`updated ${fmt(posted.updatedAt)}`);
+  return parts.join(" · ");
+}
+
+// ---------------------------------------------------------------------------
+// Holding the page still behind the sheet.
+//
+// Reported 2026-09-10: on a phone, dragging inside the popup scrolled the LIST
+// BEHIND it. `overscroll-behavior: contain` on the sheet's scroller is half the
+// answer; the other half is that most of the sheet is not the scroller — the
+// handle, the header, the ask box and the quick prompts are furniture, and a
+// touch that starts on furniture is handed to the document. Taking the body
+// out of flow is the only thing iOS respects. The offset is preserved so
+// closing the sheet does not also lose the reader's place in the list.
+// ---------------------------------------------------------------------------
+let lockedScrollY = null;
+
+function isPhoneLayout() {
+  try { return window.matchMedia("(max-width: 640px)").matches; } catch { return false; }
+}
+
+function lockBackgroundScroll() {
+  // Desktop keeps a scrollable page: the panel is a side rail, not a cover.
+  if (!isPhoneLayout() || lockedScrollY !== null) return;
+  lockedScrollY = window.scrollY || 0;
+  document.documentElement.style.setProperty("--sheet-scroll-y", `${-lockedScrollY}px`);
+  document.body.classList.add("sheet-open");
+}
+
+function unlockBackgroundScroll() {
+  if (lockedScrollY === null) return;
+  const y = lockedScrollY;
+  lockedScrollY = null;
+  document.body.classList.remove("sheet-open");
+  document.documentElement.style.removeProperty("--sheet-scroll-y");
+  // `position: fixed` threw the document to the top; put it back before a
+  // paint, or the list flashes at 0 on the way out.
+  window.scrollTo(0, y);
+}
+
 function closeAssignmentPanel() {
   const panel = $("ai");
   if (!panel || panel.hidden) return false;
@@ -2547,6 +2645,7 @@ function closeAssignmentPanel() {
   // `transform`, and an inline one left over from a dismissal would win.
   panel.style.transform = "";
   panel.style.transition = "";
+  unlockBackgroundScroll();
   activeAssignment = null;
   activeLibraryNotes = [];
   return true;
@@ -2630,6 +2729,118 @@ $("aiClose").addEventListener("click", closeAssignmentPanel);
     if (travelled <= 6) closeAssignmentPanel();
     travelled = 0;
   });
+})();
+
+/**
+ * Put the newest message in view, whichever element is doing the scrolling.
+ *
+ * On a phone the whole sheet body is one scroller and `.ai-messages` is an
+ * ordinary block inside it, so scrolling `.ai-messages` moves nothing.
+ */
+function scrollChatToBottom() {
+  const messages = $("aiMessages");
+  const scroller = $("aiScroll");
+  if (!messages) return;
+  const el = scroller && scroller.scrollHeight > scroller.clientHeight ? scroller : messages;
+  el.scrollTop = el.scrollHeight;
+}
+
+// ---------------------------------------------------------------------------
+// Pulling the sheet itself, not its handle.
+//
+// The handle is 28px of a 776px sheet, and it is not where a thumb lands.
+// Pepuldo, 2026-09-10: "scrolling down does nothing, just reaches the bottom;
+// scrolling up too far closes it" — the native sheet contract. So: a downward
+// drag that starts with the content already at its top dismisses; the same
+// drag anywhere else is an ordinary scroll; the bottom of the content is just
+// the bottom of the content.
+//
+// Touch events rather than pointer events, because the deciding action is
+// `preventDefault()` on a move — and that has to be conditional, so the
+// listener cannot be passive and cannot be `touch-action: none` either (that
+// would kill the scrolling this exists to protect).
+// ---------------------------------------------------------------------------
+(() => {
+  const scroller = $("aiScroll");
+  const panel = $("ai");
+  if (!scroller || !panel) return;
+
+  const SETTLE_MS = 200;
+  const SETTLE = `transform ${SETTLE_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`;
+  let startY = null;
+  let startedAt = 0;
+  let startedAtTop = false;
+  let height = 0;
+  let dragging = false;
+
+  const reset = () => {
+    startY = null;
+    dragging = false;
+    panel.style.transition = "";
+    panel.style.transform = "";
+  };
+
+  scroller.addEventListener("touchstart", (event) => {
+    if (!isPhoneLayout() || event.touches.length !== 1) { startY = null; return; }
+    startY = event.touches[0].clientY;
+    startedAt = event.timeStamp;
+    // Sampled once, on the way down: a drag that scrolls to the top and keeps
+    // going must stay a scroll, not become a dismissal halfway through.
+    startedAtTop = scroller.scrollTop <= 0;
+    height = panel.getBoundingClientRect().height;
+    dragging = false;
+  }, { passive: true });
+
+  scroller.addEventListener("touchmove", (event) => {
+    if (startY === null || event.touches.length !== 1) return;
+    // Live check as well as the sampled one: after an up-then-down flick
+    // within a single gesture the content is scrolled in, and scrolling back
+    // is what the finger means.
+    const atTop = startedAtTop && scroller.scrollTop <= 0;
+    const { offset } = sheetContentDragModel({
+      startedAtTop: atTop, startY, currentY: event.touches[0].clientY, height,
+    });
+    if (offset <= 0) {
+      // Let go of the sheet if the finger changed its mind mid-gesture.
+      if (dragging) { dragging = false; panel.style.transform = ""; }
+      return;
+    }
+    if (!dragging) {
+      dragging = true;
+      // While a finger is down the transform IS the finger; easing it lags.
+      panel.style.transition = "none";
+    }
+    // Only now — the browser must keep the gesture for every other case.
+    if (event.cancelable) event.preventDefault();
+    panel.style.transform = `translateY(${offset}px)`;
+  }, { passive: false });
+
+  const release = (event) => {
+    if (startY === null) return;
+    const drag = sheetContentDragModel({
+      startedAtTop: startedAtTop && scroller.scrollTop <= 0,
+      startY,
+      currentY: event.changedTouches?.[0]?.clientY ?? startY,
+      height,
+      elapsedMs: event.timeStamp - startedAt,
+    });
+    const wasDragging = dragging;
+    startY = null;
+    dragging = false;
+    if (!wasDragging) return;
+    panel.style.transition = SETTLE;
+    if (!drag.dismiss) {
+      panel.style.transform = "";
+      setTimeout(reset, SETTLE_MS);
+      return;
+    }
+    // Finish the throw before it disappears, rather than blinking out from
+    // wherever the finger happened to leave it.
+    panel.style.transform = "translateY(100%)";
+    setTimeout(() => { reset(); closeAssignmentPanel(); }, SETTLE_MS);
+  };
+  scroller.addEventListener("touchend", release);
+  scroller.addEventListener("touchcancel", release);
 })();
 
 // ---------------------------------------------------------------------------
@@ -2778,7 +2989,7 @@ function addMsg(role, text, index) {
   }
 
   $("aiMessages").appendChild(el);
-  $("aiMessages").scrollTop = $("aiMessages").scrollHeight;
+  scrollChatToBottom();
   return el;
 }
 
@@ -2871,7 +3082,7 @@ async function sendAi(userText) {
 
     const flush = () => {
       thinking.innerHTML = renderMarkdown(accumulated);
-      $("aiMessages").scrollTop = $("aiMessages").scrollHeight;
+      scrollChatToBottom();
     };
 
     while (true) {
@@ -3013,3 +3224,131 @@ window.addEventListener("pageshow", (e) => { void recheckSessionOnResume(!!e.per
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") void recheckSessionOnResume(false);
 });
+
+
+// ---------------------------------------------------------------------------
+// Asking Classroom again.
+//
+// Everything date-relative on the Planner — the day groups, the overdue count,
+// "New since yesterday" — is computed once, when the report loads. In a tab
+// that is invisible, because tabs get reloaded. Installed to a home screen it
+// is not: the window is suspended and resumed for days, and there was no
+// pull-to-refresh either, because that gesture belongs to the browser chrome
+// the standalone window does not have. So a list built on Monday was still on
+// screen on Wednesday, still calling Monday's post "new since yesterday".
+//
+// Two ways back: the gesture, restored below, and an automatic reload when the
+// app comes back to the foreground onto a list that has outlived its day.
+// ---------------------------------------------------------------------------
+
+/** Rebuild the Planner from Classroom. Safe to call when nothing is signed in. */
+async function reloadReport() {
+  if (!accessToken) return false;
+  const epoch = ++sessionEpoch;
+  try {
+    await loadReport(epoch);
+    return true;
+  } catch (e) {
+    if (epoch === sessionEpoch) setStatus(e?.message || "Couldn't refresh.", true);
+    return false;
+  }
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState !== "visible") return;
+  if (!accessToken || currentView !== "planner") return;
+  if (!reportIsStale({ loadedAt: reportLoadedAt })) return;
+  reloadReport();
+});
+
+(() => {
+  const indicator = $("pullRefresh");
+  if (!indicator) return;
+
+  const standalone = isStandaloneDisplay({
+    displayModeStandalone: (() => {
+      try { return window.matchMedia("(display-mode: standalone)").matches; } catch { return false; }
+    })(),
+    navigatorStandalone: Boolean(window.navigator.standalone),
+  });
+  // In a browser tab the engine still owns this gesture; ours would be a
+  // second pull-to-refresh stacked on the real one.
+  if (!pullRefreshEnabled({ standalone })) return;
+
+  const REST = -52; // parked above the top edge
+  let startY = null;
+  let armed = false;
+  let refreshing = false;
+
+  const place = (distance, { settle = false } = {}) => {
+    indicator.classList.toggle("settling", settle);
+    if (distance <= 0) {
+      indicator.style.transform = `translateY(${REST}px)`;
+      indicator.style.opacity = "0";
+      return;
+    }
+    indicator.style.transform = `translateY(${REST + distance + 20}px)`;
+    indicator.style.opacity = String(Math.min(1, distance / 40));
+  };
+
+  const park = () => {
+    place(0, { settle: true });
+    indicator.classList.remove("armed", "refreshing");
+  };
+
+  document.addEventListener("touchstart", (event) => {
+    if (refreshing || event.touches.length !== 1) { startY = null; return; }
+    // A pull that starts inside the sheet is the sheet's gesture, not the
+    // page's — the sheet has its own answer for a downward drag.
+    const panel = $("ai");
+    if (panel && !panel.hidden && panel.contains(event.target)) { startY = null; return; }
+    if (window.scrollY > 0) { startY = null; return; }
+    startY = event.touches[0].clientY;
+    armed = false;
+  }, { passive: true });
+
+  document.addEventListener("touchmove", (event) => {
+    if (startY === null || event.touches.length !== 1) return;
+    const model = pullRefreshModel({
+      startY,
+      currentY: event.touches[0].clientY,
+      scrollY: window.scrollY,
+      refreshing,
+    });
+    if (!model.active) {
+      if (armed || indicator.style.opacity !== "0") park();
+      armed = false;
+      return;
+    }
+    // Only once this is unmistakably a pull: below that, an accidental few
+    // pixels must still be allowed to become an ordinary scroll.
+    if (event.cancelable && model.distance > 4) event.preventDefault();
+    armed = model.armed;
+    indicator.classList.toggle("armed", armed);
+    place(model.distance);
+  }, { passive: false });
+
+  const release = async () => {
+    if (startY === null) return;
+    const shouldRefresh = armed && !refreshing;
+    startY = null;
+    armed = false;
+    if (!shouldRefresh) return park();
+
+    refreshing = true;
+    indicator.classList.remove("armed");
+    indicator.classList.add("refreshing");
+    place(44, { settle: true });
+    try {
+      // Signed out, or on the Study page, there is no Classroom report to
+      // rebuild — reload the document, which is what the gesture means there.
+      if (accessToken && currentView === "planner") await reloadReport();
+      else window.location.reload();
+    } finally {
+      refreshing = false;
+      park();
+    }
+  };
+  document.addEventListener("touchend", release);
+  document.addEventListener("touchcancel", release);
+})();

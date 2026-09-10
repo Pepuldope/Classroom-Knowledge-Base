@@ -3,6 +3,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   sheetDragModel,
+  sheetContentDragModel,
   viewportBottomInset,
   SHEET_DISMISS_RATIO,
   SHEET_FLICK_MIN_PX,
@@ -60,4 +61,44 @@ test("the bottom inset measures browser chrome the layout viewport cannot see", 
   // Sub-pixel noise is not an inset.
   assert.equal(viewportBottomInset({ innerHeight: 844, visualHeight: 843.4, visualOffsetTop: 0 }), 0);
   assert.equal(viewportBottomInset({}), 0);
+});
+
+
+// --- Dragging the sheet's content, not its handle -------------------------
+// The handle is 28px of a 776px sheet and is not where a thumb lands. Pulling
+// the sheet itself has to dismiss it too — without stealing the scroll.
+
+test("pulling down from the top of the content dismisses the sheet", () => {
+  const far = Math.ceil(SHEET * SHEET_DISMISS_RATIO);
+  const d = sheetContentDragModel({
+    startedAtTop: true, startY: 200, currentY: 200 + far, height: SHEET, elapsedMs: 500,
+  });
+  assert.equal(d.offset, far);
+  assert.equal(d.dismiss, true);
+});
+
+test("the same drag scrolls, and never dismisses, once the content is scrolled in", () => {
+  const far = Math.ceil(SHEET * SHEET_DISMISS_RATIO);
+  const d = sheetContentDragModel({
+    startedAtTop: false, startY: 200, currentY: 200 + far, height: SHEET, elapsedMs: 500,
+  });
+  assert.equal(d.offset, 0, "the sheet does not follow a scrolling finger");
+  assert.equal(d.dismiss, false);
+});
+
+test("reaching the bottom of the content does nothing at all", () => {
+  // Pepuldo, 2026-09-10: scrolling DOWN should just reach the end. Only an
+  // over-pull at the TOP closes the sheet.
+  const d = sheetContentDragModel({
+    startedAtTop: true, startY: 600, currentY: 100, height: SHEET, elapsedMs: 300,
+  });
+  assert.equal(d.offset, 0);
+  assert.equal(d.dismiss, false);
+});
+
+test("a flick from the top counts even when it is short", () => {
+  const d = sheetContentDragModel({
+    startedAtTop: true, startY: 100, currentY: 100 + SHEET_FLICK_MIN_PX + 6, height: SHEET, elapsedMs: 40,
+  });
+  assert.equal(d.dismiss, true);
 });

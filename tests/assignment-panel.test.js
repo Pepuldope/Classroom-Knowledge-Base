@@ -1,7 +1,7 @@
 // The assignment panel's facts, before anything draws them.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { assignmentPanelModel, estimateLabel, groundingLineModel } from "../assignment-panel.js";
+import { assignmentPanelModel, estimateLabel, groundingLineModel, postedModel } from "../assignment-panel.js";
 
 test("estimates read as a person would say them", () => {
   assert.equal(estimateLabel(45), "45m");
@@ -70,4 +70,34 @@ test("the grounding line replaces a box that repeated the whole panel", () => {
   assert.equal(groundingLineModel({ materialCount: 1 }), "Reading this assignment and its 1 attachment");
   assert.equal(groundingLineModel({ materialCount: 4 }), "Reading this assignment and its 4 attachments");
   assert.equal(groundingLineModel(), "Reading this assignment");
+});
+
+
+// --- When it was posted ---------------------------------------------------
+// Requested 2026-09-10: the panel said what and when-due, never when it went
+// up — the fact you want when deciding whether you have already seen this.
+
+test("the panel carries the date the assignment was posted", () => {
+  const m = assignmentPanelModel({ creationTime: "2026-09-08T07:30:00Z" });
+  assert.equal(m.posted.postedAt.toISOString(), "2026-09-08T07:30:00.000Z");
+  assert.equal(m.posted.showUpdated, false);
+});
+
+test("an edit a day or more later is worth saying; Classroom's own save is not", () => {
+  const sameDay = postedModel({
+    creationTime: "2026-09-08T07:30:00Z", updateTime: "2026-09-08T07:31:00Z",
+  });
+  assert.equal(sameDay.showUpdated, false, "a minute later is Classroom, not the teacher");
+  assert.equal(sameDay.updatedAt, null);
+
+  const laterEdit = postedModel({
+    creationTime: "2026-09-08T07:30:00Z", updateTime: "2026-09-09T18:00:00Z",
+  });
+  assert.equal(laterEdit.showUpdated, true);
+  assert.equal(laterEdit.updatedAt.toISOString(), "2026-09-09T18:00:00.000Z");
+});
+
+test("no creation time means the panel says nothing about posting", () => {
+  const m = postedModel({ creationTime: "", updateTime: "2026-09-09T18:00:00Z" });
+  assert.deepEqual(m, { postedAt: null, updatedAt: null, showUpdated: false });
 });
