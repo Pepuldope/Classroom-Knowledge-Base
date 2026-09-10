@@ -2552,6 +2552,8 @@ async function openAi(a) {
   // Visible now, in the same task as the tap, so the sheet animates from the
   // start rather than after a round-trip.
   $("ai").hidden = false;
+  const scrim = $("aiScrim");
+  if (scrim) scrim.hidden = false;
   lockBackgroundScroll();
   // Not on a touch device: raising the keyboard covers half the sheet before
   // the reader has seen any of it. A pointer user gets the caret for free.
@@ -2645,6 +2647,8 @@ function closeAssignmentPanel() {
   // `transform`, and an inline one left over from a dismissal would win.
   panel.style.transform = "";
   panel.style.transition = "";
+  const scrim = $("aiScrim");
+  if (scrim) scrim.hidden = true;
   unlockBackgroundScroll();
   activeAssignment = null;
   activeLibraryNotes = [];
@@ -2652,6 +2656,14 @@ function closeAssignmentPanel() {
 }
 
 $("aiClose").addEventListener("click", closeAssignmentPanel);
+
+// Tapping the page above the sheet dismisses it — and stops there. The scrim
+// is what makes the second half true: before it, the tap went through to the
+// view switcher underneath, so trying to close the sheet switched pages.
+$("aiScrim")?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  closeAssignmentPanel();
+});
 
 // ---------------------------------------------------------------------------
 // The bottom sheet's grab handle.
@@ -3298,10 +3310,12 @@ document.addEventListener("visibilitychange", () => {
 
   document.addEventListener("touchstart", (event) => {
     if (refreshing || event.touches.length !== 1) { startY = null; return; }
-    // A pull that starts inside the sheet is the sheet's gesture, not the
-    // page's — the sheet has its own answer for a downward drag.
+    // While the sheet is open the page behind it is inert and its scroll
+    // offset is pinned at 0 by the lock — which looks exactly like being at
+    // the top of the page. Nothing here is a pull-to-refresh: not inside the
+    // sheet (it has its own answer for a downward drag) and not on the scrim.
     const panel = $("ai");
-    if (panel && !panel.hidden && panel.contains(event.target)) { startY = null; return; }
+    if (panel && !panel.hidden) { startY = null; return; }
     if (window.scrollY > 0) { startY = null; return; }
     startY = event.touches[0].clientY;
     armed = false;

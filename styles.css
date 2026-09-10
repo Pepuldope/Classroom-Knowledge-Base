@@ -1436,6 +1436,10 @@ summary::-webkit-details-marker { color: var(--muted); }
    is out of the tab order and the accessibility tree entirely. */
 .ai-sheet-handle { display: none; }
 
+/* Same story for the scrim: on a desktop the rail sits beside the page, and
+   the page beside it is still something you are meant to be able to click. */
+.ai-scrim { display: none; }
+
 /* Phones: the assignment/material panel is a bottom sheet rather than a
    full-bleed slab. It covers most of the screen but stops short of the top, so
    the list stays visible behind it and the panel reads as something laid over
@@ -1520,6 +1524,26 @@ summary::-webkit-details-marker { color: var(--muted); }
   /* Belt and braces for the sheet's own edges (the handle, the form, the
      quick prompts): a drag that starts on furniture must not scroll the page. */
   #ai { overscroll-behavior: contain; }
+
+  /* Everything the sheet does not cover. It sits above the sticky header
+     (z-index 80) and below the sheet (90), so the tap that dismisses cannot
+     also land on the view switcher underneath — which is how "close this"
+     turned into "go to Study". Reported 2026-09-11.
+     The dimming is deliberate and slight: the page behind is genuinely inert
+     while the sheet is open, and a scrim that shows nothing looks like a page
+     that has stopped responding. */
+  .ai-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 89;
+    background: rgba(0, 0, 0, 0.25);
+    animation: ai-scrim-in 260ms ease both;
+  }
+  @keyframes ai-scrim-in { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .ai-scrim { animation-duration: 1ms; }
+  }
 
   .ai-sheet-handle:active { cursor: grabbing; }
   .ai-sheet-grip {

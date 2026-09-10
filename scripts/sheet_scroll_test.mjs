@@ -208,6 +208,51 @@ const check = (condition, message) => {
   check(lockedAt > 0 && Math.abs(restored.scrollY - lockedAt) <= 2,
     `the list is back where it was left (${Math.round(restored.scrollY)}px, locked at ${lockedAt}px)`);
 
+  // --- Tapping the page above the sheet -----------------------------------
+  // Reported 2026-09-11: "when clicking above the popup, it needs to close the
+  // popup without interacting with anything on the website. Currently it does
+  // not close the popup, and interacts with the rest of the site so you can
+  // accidentally switch pages."
+  await page.locator(".assignment").first().click();
+  await page.waitForSelector("#ai:not([hidden])", { timeout: 5000 });
+  await page.waitForTimeout(500);
+  const above = await page.evaluate(() => {
+    const sheet = document.getElementById("ai").getBoundingClientRect();
+    // Aim at a real control in the exposed strip — the menu button, which sits
+    // in the header's top row. The sheet covers everything from 68px down, so
+    // the view switcher is only half exposed; this is the one that is fully in
+    // the strip, and it is the same class of accident (a dismissing tap that
+    // does something else instead).
+    const menu = document.getElementById("menuBtn").getBoundingClientRect();
+    const scrim = document.getElementById("aiScrim").getBoundingClientRect();
+    return {
+      x: Math.round(menu.x + menu.width / 2),
+      y: Math.round(menu.y + menu.height / 2),
+      exposed: menu.bottom < sheet.top,
+      scrimCovers: scrim.top <= 0 && scrim.bottom >= sheet.top,
+      // What a tap there actually reaches. Before the scrim this was #menuBtn.
+      hitTest: document.elementFromPoint(
+        Math.round(menu.x + menu.width / 2), Math.round(menu.y + menu.height / 2))?.id || "",
+      viewBefore: document.getElementById("kbView").hidden ? "planner" : "kb",
+    };
+  });
+  check(above.exposed && above.scrimCovers && above.hitTest === "aiScrim",
+    `the strip of page above the sheet is covered by the scrim (a tap at ${above.y}px reaches #${above.hitTest})`);
+  await page.mouse.click(above.x, above.y);
+  await page.waitForTimeout(400);
+  const afterTap = await page.evaluate(() => ({
+    sheetHidden: document.getElementById("ai").hidden,
+    scrimHidden: document.getElementById("aiScrim").hidden,
+    view: document.getElementById("kbView").hidden ? "planner" : "kb",
+    menuOpen: !document.getElementById("menuPopover").hidden,
+    bodyPosition: getComputedStyle(document.body).position,
+  }));
+  check(afterTap.sheetHidden, "tapping above the sheet closes it");
+  check(!afterTap.menuOpen && afterTap.view === above.viewBefore,
+    `and goes no further — the control under the tap did not fire, still on ${afterTap.view}`);
+  check(afterTap.scrimHidden && afterTap.bodyPosition === "static",
+    "the scrim goes with it and the page is live again");
+
   // The handle is the other way in, and it was pinned by the same fill mode.
   await page.locator(".assignment").first().click();
   await page.waitForSelector("#ai:not([hidden])", { timeout: 5000 });
@@ -259,6 +304,8 @@ const check = (condition, message) => {
     `nothing spills out of its own box on desktop either${desktopInvariants.clipped.length ? ": " + desktopInvariants.clipped.join("; ") : ""}`);
   check(Math.abs(desktopInvariants.gapBelowQuickPrompts) <= 2,
     `the ask box sits at the bottom of the desktop rail, not under the content (${desktopInvariants.gapBelowQuickPrompts}px gap below it)`);
+  check(await page.evaluate(() => getComputedStyle(document.getElementById("aiScrim")).display) === "none",
+    "no scrim on desktop — the page beside the rail is still meant to be clickable");
   check(desktop.wrapper === "flex", `the sheet body carries its own flex, rather than relying on display: contents (display: ${desktop.wrapper})`);
   check(desktop.messagesScrolls === "auto", "the conversation is still the scroller on desktop");
   check(desktop.bodyPosition === "static" && desktop.scrollY === 200,

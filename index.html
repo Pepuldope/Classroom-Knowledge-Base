@@ -297,6 +297,12 @@
   </div>
 </div>
 
+<!-- The strip of page left visible above the sheet. Tapping it closes the
+     sheet and goes no further: without this the tap fell through to whatever
+     was underneath — usually the view switcher, so "dismiss this" navigated
+     to another page instead. Phones only; above 640px the panel is a side
+     rail and the page beside it is still live. -->
+<div id="aiScrim" class="ai-scrim" aria-hidden="true" hidden></div>
 <aside id="ai" hidden>
   <button id="aiSheetHandle" class="ai-sheet-handle" type="button" aria-label="Close this assignment — or drag down">
     <span class="ai-sheet-grip" aria-hidden="true"></span>
