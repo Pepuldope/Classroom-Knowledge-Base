@@ -4,30 +4,41 @@ import assert from "node:assert/strict";
 import {
   sheetDragModel,
   sheetContentDragModel,
+  sheetGestureIntent,
   viewportBottomInset,
   SHEET_DISMISS_RATIO,
   SHEET_FLICK_MIN_PX,
+  SHEET_DRAG_DAMPING,
+  SHEET_GESTURE_SLOP,
 } from "../sheet-drag.js";
 
 const SHEET = 776; // 92% of an 844px phone
 
-test("a short, slow drag follows the finger but does not dismiss", () => {
+test("the sheet lags the finger rather than sticking to it", () => {
+  // "The popup moving with your finger may need some smoothing or slowdown
+  // coz it feels too fast" — Pepuldo, 2026-09-11. It resists now.
   const d = sheetDragModel({ startY: 100, currentY: 160, height: SHEET, elapsedMs: 400 });
-  assert.equal(d.offset, 60, "the sheet tracks the finger");
-  assert.equal(d.dismiss, false, `60px is under the ${SHEET_DISMISS_RATIO} threshold`);
+  assert.equal(d.travel, 60, "the finger moved 60px");
+  assert.equal(d.offset, 60 * SHEET_DRAG_DAMPING, "the sheet came less far than the finger");
+  assert.ok(d.offset < d.travel, "resistance, not adhesion");
+  assert.equal(d.dismiss, false);
 });
 
-test("dragging past a quarter of the sheet dismisses it", () => {
-  const far = Math.ceil(SHEET * SHEET_DISMISS_RATIO);
+test("dismissal is measured on the sheet, at roughly the finger distance it always was", () => {
+  const far = Math.ceil((SHEET * SHEET_DISMISS_RATIO) / SHEET_DRAG_DAMPING);
   assert.equal(sheetDragModel({ startY: 0, currentY: far, height: SHEET, elapsedMs: 2000 }).dismiss, true);
-  assert.equal(sheetDragModel({ startY: 0, currentY: far - 1, height: SHEET, elapsedMs: 2000 }).dismiss, false);
+  assert.equal(sheetDragModel({ startY: 0, currentY: far - 4, height: SHEET, elapsedMs: 2000 }).dismiss, false);
+  // The damping was compensated, not stacked on top: the finger still travels
+  // about a quarter of the sheet to close it, as it did at 1:1.
+  assert.ok(Math.abs(far / SHEET - 0.25) < 0.02, `finger travel to dismiss is ${(far / SHEET).toFixed(3)} of the sheet`);
 });
 
-test("a quick flick dismisses without travelling far", () => {
-  // 80px in 100ms — the gesture people actually make.
+test("speed is judged on the finger, not on the sheet it is dragging", () => {
+  // Damping must not make a flick 1.7x harder: how fast someone flicks is a
+  // fact about their hand, and it is the same hand as before.
   const flick = sheetDragModel({ startY: 0, currentY: 80, height: SHEET, elapsedMs: 100 });
+  assert.equal(flick.velocity, 0.8, "80px of finger in 100ms");
   assert.equal(flick.dismiss, true);
-  assert.ok(flick.velocity >= 0.5);
 });
 
 test("a tap is not a flick", () => {
@@ -35,6 +46,13 @@ test("a tap is not a flick", () => {
   // velocity and must not close the sheet the tap just opened.
   const tap = sheetDragModel({ startY: 0, currentY: SHEET_FLICK_MIN_PX - 1, height: SHEET, elapsedMs: 10 });
   assert.equal(tap.dismiss, false);
+});
+
+test("the first few pixels of a gesture do not move the sheet at all", () => {
+  // Otherwise a recognised gesture starts with the sheet already jumped.
+  const justPast = sheetDragModel({ startY: 0, currentY: SHEET_GESTURE_SLOP + 10, height: SHEET, slop: SHEET_GESTURE_SLOP });
+  assert.equal(justPast.travel, 10, "the slop is spent, not carried");
+  assert.equal(sheetDragModel({ startY: 0, currentY: SHEET_GESTURE_SLOP, height: SHEET, slop: SHEET_GESTURE_SLOP }).offset, 0);
 });
 
 test("upward drags are a no-op, not a stretch", () => {
@@ -69,16 +87,17 @@ test("the bottom inset measures browser chrome the layout viewport cannot see", 
 // the sheet itself has to dismiss it too — without stealing the scroll.
 
 test("pulling down from the top of the content dismisses the sheet", () => {
-  const far = Math.ceil(SHEET * SHEET_DISMISS_RATIO);
+  // Finger distance, which is slop plus the damped threshold.
+  const far = SHEET_GESTURE_SLOP + Math.ceil((SHEET * SHEET_DISMISS_RATIO) / SHEET_DRAG_DAMPING);
   const d = sheetContentDragModel({
     startedAtTop: true, startY: 200, currentY: 200 + far, height: SHEET, elapsedMs: 500,
   });
-  assert.equal(d.offset, far);
+  assert.ok(d.offset < far, "the sheet lags the finger here too");
   assert.equal(d.dismiss, true);
 });
 
 test("the same drag scrolls, and never dismisses, once the content is scrolled in", () => {
-  const far = Math.ceil(SHEET * SHEET_DISMISS_RATIO);
+  const far = Math.ceil(SHEET / 2);
   const d = sheetContentDragModel({
     startedAtTop: false, startY: 200, currentY: 200 + far, height: SHEET, elapsedMs: 500,
   });
@@ -98,7 +117,38 @@ test("reaching the bottom of the content does nothing at all", () => {
 
 test("a flick from the top counts even when it is short", () => {
   const d = sheetContentDragModel({
-    startedAtTop: true, startY: 100, currentY: 100 + SHEET_FLICK_MIN_PX + 6, height: SHEET, elapsedMs: 40,
+    startedAtTop: true, startY: 100,
+    currentY: 100 + SHEET_GESTURE_SLOP + SHEET_FLICK_MIN_PX + 6, height: SHEET, elapsedMs: 40,
   });
   assert.equal(d.dismiss, true);
+});
+
+
+// --- Which gesture is this? ----------------------------------------------
+// Reported 2026-09-11: "it sometimes gets confused whether you are scrolling
+// the popup content or trying to get rid of it — mostly on the web app".
+
+test("nothing is decided until the finger has actually gone somewhere", () => {
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: 0, dy: 4 }), "undecided");
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: 3, dy: -5 }), "undecided");
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: 0, dy: SHEET_GESTURE_SLOP }), "dismiss");
+});
+
+test("a scroll that begins with a few pixels of wobble stays a scroll", () => {
+  // The reported confusion, exactly: a thumb starting a flick UP often moves a
+  // few px DOWN first. Under the slop that is not a dismissal.
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: 1, dy: 6 }), "undecided");
+  // ...and once it commits upward it is a scroll.
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: 1, dy: -40 }), "scroll");
+});
+
+test("a sideways gesture is never a dismissal", () => {
+  // The library strip inside the sheet scrolls horizontally.
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: 60, dy: 20 }), "scroll");
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: -60, dy: 20 }), "scroll");
+  assert.equal(sheetGestureIntent({ startedAtTop: true, dx: 20, dy: 60 }), "dismiss");
+});
+
+test("scrolled in even a pixel, a downward drag is only ever a scroll", () => {
+  assert.equal(sheetGestureIntent({ startedAtTop: false, dx: 0, dy: 400 }), "scroll");
 });

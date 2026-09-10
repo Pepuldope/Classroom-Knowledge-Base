@@ -23,7 +23,7 @@ import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STAT
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
-import { sheetDragModel, sheetContentDragModel, viewportBottomInset } from "./sheet-drag.js";
+import { sheetDragModel, sheetContentDragModel, sheetGestureIntent, viewportBottomInset, SHEET_GESTURE_SLOP } from "./sheet-drag.js";
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
 import { pullRefreshModel, pullRefreshEnabled, isStandaloneDisplay } from "./pull-refresh.js";
 import { reportIsStale } from "./report-freshness.js";
@@ -2616,6 +2616,33 @@ function postedLine(posted) {
 // ---------------------------------------------------------------------------
 let lockedScrollY = null;
 
+/**
+ * Hold the sheet's own layout still for the duration of a drag.
+ *
+ * Reported 2026-09-11: "when moving the popup down the bottom part (text
+ * input, etc) wants to stay on screen and kind of creeps up." The sheet is
+ * `height: 92dvh` with a bottom padding driven by `--viewport-bottom-inset`,
+ * and both of those track the phone's browser chrome — which expands and
+ * collapses DURING a drag. So while the sheet was sliding down as a whole, it
+ * was also being re-laid-out from the bottom, and its last row crept upward
+ * inside it. A sheet in flight should be a rigid slab: its height is pinned in
+ * px and the inset stops updating until the gesture is resolved.
+ */
+let sheetGeometryFrozen = false;
+
+function freezeSheetGeometry(panel) {
+  if (sheetGeometryFrozen || !panel) return;
+  sheetGeometryFrozen = true;
+  panel.style.height = `${panel.getBoundingClientRect().height}px`;
+}
+
+function thawSheetGeometry(panel) {
+  if (!sheetGeometryFrozen) return;
+  sheetGeometryFrozen = false;
+  if (panel) panel.style.height = "";
+  syncViewportInset();
+}
+
 function isPhoneLayout() {
   try { return window.matchMedia("(max-width: 640px)").matches; } catch { return false; }
 }
@@ -2647,6 +2674,7 @@ function closeAssignmentPanel() {
   // `transform`, and an inline one left over from a dismissal would win.
   panel.style.transform = "";
   panel.style.transition = "";
+  thawSheetGeometry(panel);
   const scrim = $("aiScrim");
   if (scrim) scrim.hidden = true;
   unlockBackgroundScroll();
@@ -2692,6 +2720,7 @@ $("aiScrim")?.addEventListener("click", (event) => {
   const settle = () => {
     panel.style.transition = "";
     panel.style.transform = "";
+    thawSheetGeometry(panel);
   };
 
   handle.addEventListener("pointerdown", (event) => {
@@ -2700,6 +2729,7 @@ $("aiScrim")?.addEventListener("click", (event) => {
     startedAt = event.timeStamp;
     travelled = 0;
     height = panel.getBoundingClientRect().height;
+    freezeSheetGeometry(panel);
     // While a finger is down the transform IS the finger; easing it would lag.
     panel.style.transition = "none";
     try { handle.setPointerCapture(event.pointerId); } catch { /* older engines */ }
@@ -2780,65 +2810,84 @@ function scrollChatToBottom() {
   const SETTLE_MS = 200;
   const SETTLE = `transform ${SETTLE_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`;
   let startY = null;
+  let startX = 0;
   let startedAt = 0;
   let startedAtTop = false;
   let height = 0;
   let dragging = false;
+  // "undecided" until the finger clears the slop, then committed for the rest
+  // of the touch. The commitment is the point: without it, scrolling to the
+  // top and continuing to pull turns into a dismissal mid-flick.
+  let intent = "scroll";
 
   const reset = () => {
     startY = null;
     dragging = false;
+    intent = "scroll";
     panel.style.transition = "";
     panel.style.transform = "";
+    thawSheetGeometry(panel);
   };
 
   scroller.addEventListener("touchstart", (event) => {
     if (!isPhoneLayout() || event.touches.length !== 1) { startY = null; return; }
     startY = event.touches[0].clientY;
+    startX = event.touches[0].clientX;
     startedAt = event.timeStamp;
     // Sampled once, on the way down: a drag that scrolls to the top and keeps
     // going must stay a scroll, not become a dismissal halfway through.
     startedAtTop = scroller.scrollTop <= 0;
     height = panel.getBoundingClientRect().height;
     dragging = false;
+    intent = "undecided";
   }, { passive: true });
 
   scroller.addEventListener("touchmove", (event) => {
     if (startY === null || event.touches.length !== 1) return;
-    // Live check as well as the sampled one: after an up-then-down flick
-    // within a single gesture the content is scrolled in, and scrolling back
-    // is what the finger means.
-    const atTop = startedAtTop && scroller.scrollTop <= 0;
-    const { offset } = sheetContentDragModel({
-      startedAtTop: atTop, startY, currentY: event.touches[0].clientY, height,
-    });
-    if (offset <= 0) {
-      // Let go of the sheet if the finger changed its mind mid-gesture.
-      if (dragging) { dragging = false; panel.style.transform = ""; }
-      return;
+    const touch = event.touches[0];
+    if (intent === "undecided") {
+      // Live check as well as the sampled one: after an up-then-down flick
+      // within a single gesture the content is scrolled in, and scrolling back
+      // is what the finger means.
+      intent = sheetGestureIntent({
+        startedAtTop: startedAtTop && scroller.scrollTop <= 0,
+        dx: touch.clientX - startX,
+        dy: touch.clientY - startY,
+      });
+      // Still undecided: hand the gesture to nobody yet. Ten pixels of nothing
+      // is what stops a scroll that begins with a wobble from being read as a
+      // dismissal.
+      if (intent === "undecided") return;
     }
+    if (intent !== "dismiss") return;
+    const { offset } = sheetContentDragModel({
+      startedAtTop: true, startY, currentY: touch.clientY, height, slop: SHEET_GESTURE_SLOP,
+    });
     if (!dragging) {
       dragging = true;
+      freezeSheetGeometry(panel);
       // While a finger is down the transform IS the finger; easing it lags.
       panel.style.transition = "none";
     }
     // Only now — the browser must keep the gesture for every other case.
     if (event.cancelable) event.preventDefault();
-    panel.style.transform = `translateY(${offset}px)`;
+    panel.style.transform = offset > 0 ? `translateY(${offset}px)` : "";
   }, { passive: false });
 
   const release = (event) => {
     if (startY === null) return;
     const drag = sheetContentDragModel({
-      startedAtTop: startedAtTop && scroller.scrollTop <= 0,
+      startedAtTop: intent === "dismiss",
       startY,
       currentY: event.changedTouches?.[0]?.clientY ?? startY,
       height,
       elapsedMs: event.timeStamp - startedAt,
+      slop: SHEET_GESTURE_SLOP,
     });
     const wasDragging = dragging;
     startY = null;
     dragging = false;
+    intent = "scroll";
     if (!wasDragging) return;
     panel.style.transition = SETTLE;
     if (!drag.dismiss) {
@@ -2865,17 +2914,24 @@ function scrollChatToBottom() {
 // underneath the browser's own bar and could not be tapped. `visualViewport` is
 // the only thing that reports the difference; the sheet pads itself by it.
 // ---------------------------------------------------------------------------
+function syncViewportInset() {
+  // Not while the sheet is mid-gesture: the phone's chrome collapses and
+  // expands DURING a drag, and re-padding the sheet's bottom edge underneath a
+  // moving sheet is what made its last row creep upward.
+  if (sheetGeometryFrozen) return;
+  const vv = window.visualViewport;
+  const inset = viewportBottomInset({
+    innerHeight: window.innerHeight,
+    visualHeight: vv?.height ?? window.innerHeight,
+    visualOffsetTop: vv?.offsetTop ?? 0,
+  });
+  document.documentElement.style.setProperty("--viewport-bottom-inset", `${inset}px`);
+}
+
 (() => {
   const vv = window.visualViewport;
   let queued = false;
-  const sync = () => {
-    const inset = viewportBottomInset({
-      innerHeight: window.innerHeight,
-      visualHeight: vv?.height ?? window.innerHeight,
-      visualOffsetTop: vv?.offsetTop ?? 0,
-    });
-    document.documentElement.style.setProperty("--viewport-bottom-inset", `${inset}px`);
-  };
+  const sync = syncViewportInset;
   const schedule = () => {
     if (queued) return;
     queued = true;

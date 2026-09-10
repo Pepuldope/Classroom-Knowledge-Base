@@ -70,6 +70,20 @@ const sheetOffset = (page) => page.evaluate(() => {
 });
 
 /**
+ * Where the sheet's last row sits INSIDE the sheet, and how tall the sheet is.
+ *
+ * Reported 2026-09-11: "when moving the popup down the bottom part (text
+ * input, etc) wants to stay on screen and kind of creeps up." Both numbers are
+ * constants of the sheet, not of the screen — if either moves while the sheet
+ * is being dragged, the sheet is being re-laid-out mid-flight.
+ */
+const sheetInnerGeometry = (page) => page.evaluate(() => {
+  const panel = document.getElementById("ai").getBoundingClientRect();
+  const form = document.getElementById("aiForm").getBoundingClientRect();
+  return { formFromTop: Math.round(form.top - panel.top), height: Math.round(panel.height) };
+});
+
+/**
  * Two invariants that only an EXPANDED original description exercises.
  *
  * `spill`: a box that clips nothing must not be given a height that clips.
@@ -184,18 +198,59 @@ const check = (condition, message) => {
   check(await page.evaluate(() => document.getElementById("ai").hidden) === false,
     "scrolling back up mid-content does not dismiss the sheet");
 
+  // A scroll that starts with a few pixels of downward wobble — the reported
+  // confusion — must still be a scroll. Back to the top first, so the old
+  // "at the top + any downward movement" rule would have grabbed it.
+  await page.evaluate(() => { document.getElementById("aiScroll").scrollTop = 0; });
+  await page.waitForTimeout(200);
+  const cdp = await page.context().newCDPSession(page);
+  const at = (y) => [{ x: mid.x, y, radiusX: 2, radiusY: 2, force: 1, id: 1 }];
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: at(400) });
+  for (const y of [404, 407, 405, 380, 320, 240, 180]) {
+    await cdp.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: at(y) });
+    await page.waitForTimeout(16);
+  }
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await cdp.detach();
+  await page.waitForTimeout(400);
+  const afterWobble = await page.evaluate(() => ({
+    hidden: document.getElementById("ai").hidden,
+    scrollTop: Math.round(document.getElementById("aiScroll").scrollTop),
+  }));
+  check(!afterWobble.hidden && afterWobble.scrollTop > 0,
+    `a flick up that begins with 7px of down is a scroll, not a dismissal (${afterWobble.scrollTop}px scrolled)`);
+
   // Back at the top, the same pull is a dismissal — and it has to be VISIBLE
   // on the way. Requested 2026-09-10: "I would like it to follow with your
   // finger as you pull down so you have that feedback."
+  // The wobble above ended in a fling, and a fling keeps scrolling after the
+  // finger has gone. Let it land before resetting, or the drag below starts
+  // from a scroller that is not at the top and is correctly read as a scroll.
+  await page.waitForTimeout(900);
   await page.evaluate(() => { document.getElementById("aiScroll").scrollTop = 0; });
+  await page.waitForFunction(() => document.getElementById("aiScroll").scrollTop === 0,
+    null, { timeout: 5000 });
   await page.waitForTimeout(200);
   const sheetHeight = await page.evaluate(() => document.getElementById("ai").getBoundingClientRect().height);
+  const restGeometry = await sheetInnerGeometry(page);
   let followed = 0;
+  let maxTravel = 0;
+  const innerDrift = { form: 0, height: 0 };
   await touchDrag(page, {
     x: mid.x, fromY: 300, toY: 300 + sheetHeight * 0.45, steps: 14, stepMs: 20,
-    onMove: async () => { followed = Math.max(followed, await sheetOffset(page)); },
+    onMove: async (progress) => {
+      followed = Math.max(followed, await sheetOffset(page));
+      maxTravel = Math.round(sheetHeight * 0.45 * progress);
+      const now = await sheetInnerGeometry(page);
+      innerDrift.form = Math.max(innerDrift.form, Math.abs(now.formFromTop - restGeometry.formFromTop));
+      innerDrift.height = Math.max(innerDrift.height, Math.abs(now.height - restGeometry.height));
+    },
   });
   check(followed > 40, `the sheet follows the finger down (${followed}px at its furthest)`);
+  check(followed < maxTravel,
+    `and lags it rather than sticking to it (${followed}px of sheet for ${maxTravel}px of finger)`);
+  check(innerDrift.form <= 1 && innerDrift.height <= 1,
+    `the sheet moves as one slab — the ask box does not creep up inside it (drifted ${innerDrift.form}px, height ${innerDrift.height}px)`);
   await page.waitForTimeout(500);
   check(await page.evaluate(() => document.getElementById("ai").hidden) === true,
     `pulling down from the top of the content closes the sheet (${Math.round(sheetHeight * 0.45)}px)`);
