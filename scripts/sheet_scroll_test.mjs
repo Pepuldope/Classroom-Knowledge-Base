@@ -251,6 +251,25 @@ const check = (condition, message) => {
     `and lags it rather than sticking to it (${followed}px of sheet for ${maxTravel}px of finger)`);
   check(innerDrift.form <= 1 && innerDrift.height <= 1,
     `the sheet moves as one slab — the ask box does not creep up inside it (drifted ${innerDrift.form}px, height ${innerDrift.height}px)`);
+
+  // Reported 2026-09-11: released halfway, the sheet "kind of looks like it
+  // immediately disappears instead of continuing on its trajectory". Sample
+  // every frame from the moment the finger leaves: it has to be caught in
+  // places it was never drawn while the finger was down.
+  const flight = await page.evaluate((releasedAt) => new Promise((resolve) => {
+    const panel = document.getElementById("ai");
+    const samples = [];
+    const started = performance.now();
+    const tick = () => {
+      const t = getComputedStyle(panel).transform;
+      samples.push(t === "none" ? 0 : Math.round(new DOMMatrixReadOnly(t).m42));
+      if (performance.now() - started < 180) requestAnimationFrame(tick);
+      else resolve({ samples, beyondRelease: samples.filter((y) => y > releasedAt + 8).length });
+    };
+    requestAnimationFrame(tick);
+  }), followed);
+  check(flight.beyondRelease >= 3,
+    `the sheet carries on past where it was let go (${flight.beyondRelease} frames beyond ${followed}px, reaching ${Math.max(...flight.samples)}px)`);
   await page.waitForTimeout(500);
   check(await page.evaluate(() => document.getElementById("ai").hidden) === true,
     `pulling down from the top of the content closes the sheet (${Math.round(sheetHeight * 0.45)}px)`);

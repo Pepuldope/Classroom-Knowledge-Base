@@ -25,6 +25,39 @@ export const SHEET_FLICK_MIN_PX = 24;
 /** Finger travel a content drag must clear before it means anything. */
 export const SHEET_GESTURE_SLOP = 10;
 
+/** How long the sheet takes to spring back when the pull was not enough. */
+export const SHEET_SETTLE_MS = 200;
+/** Floor for how fast a dismissed sheet leaves the screen. Sheet px per ms. */
+export const SHEET_THROW_SPEED = 2.4;
+/** A throw is never snappier than this, however short the remaining distance. */
+export const SHEET_THROW_MIN_MS = 130;
+/** ...nor slower than this, however far it still has to go. */
+export const SHEET_THROW_MAX_MS = 340;
+
+/**
+ * How long a dismissed sheet should take to finish leaving.
+ *
+ * Reported 2026-09-11: released halfway down, the sheet "kind of looks like it
+ * immediately disappears instead of continuing on its trajectory". A fixed
+ * duration is why: the same 200ms covered 572px when the sheet was released
+ * near the top and 78px when it was released near the bottom, so the first
+ * case was a blur and read as a cut rather than a movement.
+ *
+ * Distance over speed instead, so the sheet leaves at a consistent pace from
+ * wherever it was let go — and at least as fast as the finger was already
+ * moving it, because a throw that is slower than the hand that threw it is the
+ * other way to look wrong.
+ */
+export function sheetThrowDuration({ offset = 0, height = 0, velocity = 0 } = {}) {
+  const h = Number(height) > 0 ? Number(height) : 0;
+  const remaining = Math.max(0, h - (Number(offset) || 0));
+  // `velocity` is the finger; the sheet is moving at the damped fraction of it.
+  const released = Math.max(0, Number(velocity) || 0) * SHEET_DRAG_DAMPING;
+  const speed = Math.max(SHEET_THROW_SPEED, released);
+  const ms = remaining / speed;
+  return Math.min(SHEET_THROW_MAX_MS, Math.max(SHEET_THROW_MIN_MS, Math.round(ms)));
+}
+
 /**
  * Resolve a drag in progress (or just ended) into an offset and a verdict.
  *

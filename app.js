@@ -23,7 +23,7 @@ import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STAT
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
-import { sheetDragModel, sheetContentDragModel, sheetGestureIntent, viewportBottomInset, SHEET_GESTURE_SLOP } from "./sheet-drag.js";
+import { sheetDragModel, sheetContentDragModel, sheetGestureIntent, sheetThrowDuration, viewportBottomInset, SHEET_GESTURE_SLOP, SHEET_SETTLE_MS } from "./sheet-drag.js";
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
 import { pullRefreshModel, pullRefreshEnabled, isStandaloneDisplay } from "./pull-refresh.js";
 import { reportIsStale } from "./report-freshness.js";
@@ -2643,6 +2643,47 @@ function thawSheetGeometry(panel) {
   syncViewportInset();
 }
 
+/** Settling back is a deceleration; leaving the screen is not. */
+const SHEET_SETTLE_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
+/** The standard "exiting" curve: it picks up speed on its way out. */
+const SHEET_EXIT_EASING = "cubic-bezier(0.4, 0, 1, 1)";
+
+/**
+ * Commit a transition on the sheet so it actually runs.
+ *
+ * The drag sets `transition: none` — while a finger is down the transform IS
+ * the finger. Setting a transition and the target transform in the same tick
+ * then asks the engine to transition from a style that said "do not
+ * transition", and WebKit does not reliably do it: the sheet jumps to the end
+ * value instead. Reported 2026-09-11 as the sheet "immediately disappearing"
+ * rather than continuing down. Reading offsetHeight in between flushes the
+ * first change on its own, so the second one has something to animate FROM.
+ */
+function commitSheetTransition(panel, transition) {
+  panel.style.transition = transition;
+  void panel.offsetHeight;
+}
+
+/**
+ * Finish the dismissal from wherever the finger let go.
+ *
+ * Returns how long that takes, so the caller hides the sheet when it has
+ * actually left rather than on a fixed timer that may be shorter.
+ */
+function throwSheetAway(panel, { offset = 0, height = 0, velocity = 0 } = {}) {
+  const ms = sheetThrowDuration({ offset, height, velocity });
+  commitSheetTransition(panel, `transform ${ms}ms ${SHEET_EXIT_EASING}`);
+  panel.style.transform = "translateY(100%)";
+  return ms;
+}
+
+/** Spring back: the pull was not enough, and the sheet returns to rest. */
+function settleSheetBack(panel) {
+  commitSheetTransition(panel, `transform ${SHEET_SETTLE_MS}ms ${SHEET_SETTLE_EASING}`);
+  panel.style.transform = "";
+  return SHEET_SETTLE_MS;
+}
+
 function isPhoneLayout() {
   try { return window.matchMedia("(max-width: 640px)").matches; } catch { return false; }
 }
@@ -2710,8 +2751,6 @@ $("aiScrim")?.addEventListener("click", (event) => {
   const panel = $("ai");
   if (!handle || !panel) return;
 
-  const SETTLE_MS = 200;
-  const SETTLE = `transform ${SETTLE_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`;
   let startY = null;
   let startedAt = 0;
   let height = 0;
@@ -2751,16 +2790,14 @@ $("aiScrim")?.addEventListener("click", (event) => {
       elapsedMs: event.timeStamp - startedAt,
     });
     startY = null;
-    panel.style.transition = SETTLE;
     if (!drag.dismiss) {
-      panel.style.transform = "";
-      setTimeout(settle, SETTLE_MS);
+      setTimeout(settle, settleSheetBack(panel));
       return;
     }
     // Finish the throw before the sheet disappears, rather than blinking out
     // from wherever the finger happened to leave it.
-    panel.style.transform = "translateY(100%)";
-    setTimeout(() => { settle(); closeAssignmentPanel(); }, SETTLE_MS);
+    const ms = throwSheetAway(panel, { offset: drag.offset, height, velocity: drag.velocity });
+    setTimeout(() => { settle(); closeAssignmentPanel(); }, ms);
   };
   handle.addEventListener("pointerup", release);
   handle.addEventListener("pointercancel", release);
@@ -2807,8 +2844,6 @@ function scrollChatToBottom() {
   const panel = $("ai");
   if (!scroller || !panel) return;
 
-  const SETTLE_MS = 200;
-  const SETTLE = `transform ${SETTLE_MS}ms cubic-bezier(0.32, 0.72, 0, 1)`;
   let startY = null;
   let startX = 0;
   let startedAt = 0;
@@ -2889,16 +2924,14 @@ function scrollChatToBottom() {
     dragging = false;
     intent = "scroll";
     if (!wasDragging) return;
-    panel.style.transition = SETTLE;
     if (!drag.dismiss) {
-      panel.style.transform = "";
-      setTimeout(reset, SETTLE_MS);
+      setTimeout(reset, settleSheetBack(panel));
       return;
     }
     // Finish the throw before it disappears, rather than blinking out from
     // wherever the finger happened to leave it.
-    panel.style.transform = "translateY(100%)";
-    setTimeout(() => { reset(); closeAssignmentPanel(); }, SETTLE_MS);
+    const ms = throwSheetAway(panel, { offset: drag.offset, height, velocity: drag.velocity });
+    setTimeout(() => { reset(); closeAssignmentPanel(); }, ms);
   };
   scroller.addEventListener("touchend", release);
   scroller.addEventListener("touchcancel", release);

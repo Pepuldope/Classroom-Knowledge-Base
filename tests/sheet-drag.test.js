@@ -10,6 +10,10 @@ import {
   SHEET_FLICK_MIN_PX,
   SHEET_DRAG_DAMPING,
   SHEET_GESTURE_SLOP,
+  sheetThrowDuration,
+  SHEET_THROW_MIN_MS,
+  SHEET_THROW_MAX_MS,
+  SHEET_THROW_SPEED,
 } from "../sheet-drag.js";
 
 const SHEET = 776; // 92% of an 844px phone
@@ -151,4 +155,37 @@ test("a sideways gesture is never a dismissal", () => {
 
 test("scrolled in even a pixel, a downward drag is only ever a scroll", () => {
   assert.equal(sheetGestureIntent({ startedAtTop: false, dx: 0, dy: 400 }), "scroll");
+});
+
+
+// --- Finishing the throw --------------------------------------------------
+// Reported 2026-09-11: released halfway, the sheet "kind of looks like it
+// immediately disappears instead of continuing on its trajectory".
+
+test("the sheet leaves at a pace, not in a fixed number of milliseconds", () => {
+  const early = sheetThrowDuration({ offset: 120, height: SHEET });
+  const late = sheetThrowDuration({ offset: 700, height: SHEET });
+  assert.ok(early > late, "further to go takes longer, which is what a pace means");
+  assert.equal(early, Math.round((SHEET - 120) / SHEET_THROW_SPEED));
+});
+
+test("a sheet released halfway is visibly in flight, not a cut", () => {
+  // The reported case: ~204px down a 776px sheet.
+  const ms = sheetThrowDuration({ offset: 204, height: SHEET });
+  assert.ok(ms > 200, `${ms}ms — longer than the flat 200ms that read as a jump`);
+  assert.ok(ms <= SHEET_THROW_MAX_MS);
+});
+
+test("a throw is never slower than the hand that threw it", () => {
+  const gentle = sheetThrowDuration({ offset: 100, height: SHEET, velocity: 0.2 });
+  const hurled = sheetThrowDuration({ offset: 100, height: SHEET, velocity: 8 });
+  assert.ok(hurled < gentle, "a fast flick keeps its speed on the way out");
+  assert.ok(hurled >= SHEET_THROW_MIN_MS, "but never becomes a disappearance");
+});
+
+test("the duration is clamped at both ends", () => {
+  assert.equal(sheetThrowDuration({ offset: SHEET, height: SHEET }), SHEET_THROW_MIN_MS,
+    "nothing left to travel is still an animation, not a vanishing");
+  assert.equal(sheetThrowDuration({ offset: 0, height: 4000 }), SHEET_THROW_MAX_MS);
+  assert.equal(sheetThrowDuration(), SHEET_THROW_MIN_MS, "degenerate input does not divide by zero");
 });
