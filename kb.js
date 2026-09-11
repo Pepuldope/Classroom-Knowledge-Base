@@ -3243,11 +3243,14 @@ async function sendTutor(text, { retry = false } = {}) {
   const assistantEl = addTutorMessage("assistant", "…", true);
   let acc = "";
   try {
-    const retrieved = tutorRequestNotesModel(buildTutorRetrievedNotes(localKbBundle, text));
+    const focus = openTutorFocus();
+    const retrieved = tutorRequestNotesModel(
+      buildTutorRetrievedNotes(localKbBundle, text, { focusNote: focus }),
+    );
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
-      body: JSON.stringify({ messages: tutorMessages, notes: retrieved, language: preferredTutorLanguage() }),
+      body: JSON.stringify({ messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage() }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
@@ -3336,7 +3339,32 @@ function renderTutorSources(container, notes) {
 // ---------------------------------------------------------------------------
 // Note-detail modal — open a full note by its index in the private bundle.
 // ---------------------------------------------------------------------------
+/**
+ * The note the student currently has open, or null.
+ *
+ * The Study tutor had no anchor at all — it sent keyword hits and nothing else,
+ * so "explain this" had no "this". See api/tutor.js `focus`.
+ */
+let openNoteIndex = null;
+
+function openTutorFocus() {
+  const note = openNoteIndex == null ? null : localNoteFromBundle(localKbBundle, openNoteIndex);
+  if (!note) return null;
+  return {
+    title: note.t || "",
+    kind: "material",
+    course: note.course || "",
+    y: note.y || "",
+    topic: note.topic || "",
+    description: (note.x || note.s || "").slice(0, 3000),
+    // A note is reference material: it has no due date and nothing to hand in,
+    // and saying so is better than leaving the model to assume either way.
+    attachments: [],
+  };
+}
+
 async function openKbNote(index) {
+  openNoteIndex = Number.isInteger(index) ? index : null;
   const modal = $("kbNoteModal");
   const titleEl = $("kbNoteTitle");
   const metaEl = $("kbNoteMeta");
@@ -3444,6 +3472,10 @@ async function renderRelatedNotes(index) {
 }
 
 function closeKbNote() {
+  // Closing the note un-anchors the tutor. Leaving it set would let a question
+  // asked ten minutes later be answered against a note nobody is looking at,
+  // which is a subtler version of the bug this all fixes.
+  openNoteIndex = null;
   const modal = $("kbNoteModal");
   if (modal) modal.hidden = true;
   announceNoteModal("close");

@@ -60,6 +60,7 @@ GATES=(
 "models|-|Task kind vocabulary tests|node --test tests/task-kinds.test.js"
 "models|-|Redirect sign-in model tests|node --test tests/auth-redirect.test.js"
 "models|-|Cross-device prefs merge model tests|node --test tests/prefs-sync.test.js"
+"models|-|Tutor context and anchoring model tests|node --test tests/tutor-context.test.js"
 "models|-|Interrupted Classroom build privacy tests|node --test tests/archive-builder-abort.test.js"
 "models|-|Resumable Classroom build checkpoint tests|node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.js"
 "models,panel|-|Assignment panel model tests|node --test tests/assignment-panel.test.js"

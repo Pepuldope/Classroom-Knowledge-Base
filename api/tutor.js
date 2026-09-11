@@ -9,6 +9,7 @@ export const config = { runtime: "edge" };
 // configured providers (OpenRouter, local proxy, Groq, Cerebras, Mistral,
 // NVIDIA, GitHub, Qwen, Google) so the tutor stays up even if one runs out.
 const CONTEXT_NOTES = 6;
+const MAX_ATTACHMENTS = 8;
 
 /** Keep the server-side model context bounded and free of client metadata. */
 export function normalizeTutorNotes(notes, limit = CONTEXT_NOTES) {
@@ -24,13 +25,107 @@ export function normalizeTutorNotes(notes, limit = CONTEXT_NOTES) {
   }));
 }
 
+const str = (value, max) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+/**
+ * The thing the student currently has open, normalized and bounded.
+ *
+ * Returns null when there is no anchor, which is a real state: the Study tutor
+ * can be asked a question with nothing open, and the prompt has to say so
+ * rather than imply an anchor that does not exist.
+ *
+ * `attachments` is an array, and an EMPTY array is not the same as a missing
+ * one. "This assignment has three attachments" and "this assignment has none"
+ * are both answers; "I don't know what's attached" is the thing to avoid, and
+ * it is what the tutor had to say before, because absence was silent.
+ */
+export function tutorFocusModel(focus) {
+  if (!focus || typeof focus !== "object") return null;
+  const title = str(focus.title, 300);
+  if (!title) return null;
+  const rawAttachments = Array.isArray(focus.attachments) ? focus.attachments : null;
+  const attachments = (rawAttachments || []).slice(0, MAX_ATTACHMENTS).map((a) => ({
+    title: str(a?.title, 240) || "Untitled attachment",
+    kind: str(a?.kind, 40),
+    link: str(a?.link, 500),
+    text: str(a?.text, 2000),
+  })).filter((a) => a.title);
+  return {
+    title,
+    kind: str(focus.kind, 40) || "assignment",
+    course: str(focus.course, 160),
+    y: str(focus.y, 40),
+    topic: str(focus.topic, 160),
+    description: str(focus.description, 3000),
+    dueDate: str(focus.dueDate, 40),
+    dueInDays: Number.isFinite(Number(focus.dueInDays)) ? Math.trunc(Number(focus.dueInDays)) : null,
+    submitted: typeof focus.submitted === "boolean" ? focus.submitted : null,
+    link: str(focus.link, 500),
+    // null means "the client did not tell us"; [] means "we know: nothing".
+    attachments: rawAttachments ? attachments : null,
+  };
+}
+
 export function tutorLanguageInstruction(language = "en") {
   return language === "sk"
     ? "Reply in Slovak (slovenčina), while keeping note titles and quoted source text unchanged."
     : "";
 }
 
-function buildSystemPrompt(notes, language = "en") {
+function dueLine(focus, today) {
+  if (!focus.dueDate) return "Due: no due date set";
+  const days = focus.dueInDays;
+  if (days == null) return `Due: ${focus.dueDate}`;
+  if (days < 0) return `Due: ${focus.dueDate} — ${-days} day(s) AGO`;
+  if (days === 0) return `Due: ${focus.dueDate} — TODAY`;
+  if (days === 1) return `Due: ${focus.dueDate} — TOMORROW`;
+  return `Due: ${focus.dueDate} — in ${days} days`;
+}
+
+/**
+ * Render the anchor.
+ *
+ * This block is the whole point of the rewrite. The Planner popup always sent
+ * the open assignment, but buildSystemPrompt rendered it as "NOTE 1" among the
+ * retrieved notes, identical in form to five keyword matches from other classes
+ * and other years. Asked "what do I need to know for this quiz?", the model
+ * correctly described NOTE 1 and then asked WHICH QUIZ THE STUDENT MEANT —
+ * it had the anchor and had no way to tell it was the anchor.
+ */
+export function renderFocusBlock(focus, today = "") {
+  if (!focus) return "";
+  const where = [focus.course, focus.y].filter(Boolean).join(", ");
+  const lines = [
+    "=== WHAT THE STUDENT IS LOOKING AT RIGHT NOW ===",
+    "This is the open item. Unless they clearly ask about something else, EVERY question is about THIS.",
+    "",
+    `${focus.kind === "material" ? "Material" : "Assignment"}: "${focus.title}"`,
+    where ? `Class: ${where}` : "Class: not recorded",
+    focus.topic ? `Topic: ${focus.topic}` : "",
+    dueLine(focus, today),
+    focus.submitted === null ? "" : `Status: ${focus.submitted ? "already handed in" : "NOT handed in yet"}`,
+    focus.link ? `Classroom link: ${focus.link}` : "",
+  ].filter(Boolean);
+
+  if (focus.description) lines.push("", "Description as written by the teacher:", focus.description);
+
+  if (focus.attachments === null) {
+    lines.push("", "Attached materials: not known (do not claim there are none).");
+  } else if (focus.attachments.length === 0) {
+    // Said explicitly, because the student WILL ask "is there anything attached?"
+    // and silence is not an answer they can act on.
+    lines.push("", "Attached materials: NONE. This item has no attachments — say so plainly if asked.");
+  } else {
+    lines.push("", `Attached materials (${focus.attachments.length}):`);
+    focus.attachments.forEach((a, i) => {
+      const head = `${i + 1}. ${a.kind ? `[${a.kind}] ` : ""}${a.title}${a.link ? ` — ${a.link}` : ""}`;
+      lines.push(a.text ? `${head}\n   Contents:\n   ${a.text.replace(/\n/g, "\n   ")}` : `${head} (contents not readable — you can name it but not quote it)`);
+    });
+  }
+  return lines.join("\n");
+}
+
+function renderNotesBlock(notes, hasFocus) {
   const ctx = notes
     .map((n, i) => {
       const head = `NOTE ${i + 1} — "${n.t}"${n.course ? ` (${n.course}${n.y ? `, ${n.y}` : ""})` : ""}${n.topic ? ` · topic: ${n.topic}` : ""}`;
@@ -38,23 +133,62 @@ function buildSystemPrompt(notes, language = "en") {
       return `${head}\n${body}`;
     })
     .join("\n\n---\n\n");
-  return [
-    "You are a friendly study tutor for a student using their private Classroom knowledge base.",
-    "Answer using ONLY the notes provided below. If the notes do not cover the question, say so plainly and suggest what topic to look up — do NOT invent facts or pull from outside knowledge.",
-    "Be encouraging and clear. Use short paragraphs, bullet points where helpful, and concrete examples drawn from the notes.",
-    tutorLanguageInstruction(language),
-    "When you use a fact, you may mention which note it came from (e.g. 'the STAR Method note says…').",
-    "",
-    "=== PRIVATE KNOWLEDGE BASE (retrieved notes) ===",
-    ctx || "(no notes retrieved)",
-  ].join("\n");
+  const heading = hasFocus
+    ? [
+        "=== BACKGROUND: OTHER NOTES FROM THEIR KNOWLEDGE BASE ===",
+        "Supporting material only. These were found by search and may be from OTHER classes or OTHER years —",
+        "check the class and year on each before relying on it, and never mistake one of these for the open item above.",
+      ].join("\n")
+    : "=== THE STUDENT'S KNOWLEDGE BASE (retrieved notes) ===";
+  return `${heading}\n\n${ctx || "(no notes retrieved)"}`;
 }
 
-/** Build the shared grounded conversation used by KB and Planner tutor clients. */
-export function buildTutorMessages(messages, notes, language = "en") {
+function buildSystemPrompt(notes, { focus = null, language = "en", today = "" } = {}) {
+  const rules = [
+    "You are a friendly, encouraging study tutor for a student using their private Classroom knowledge base.",
+    "",
+    "HOW TO USE WHAT YOU ARE GIVEN:",
+    // The line the reported transcript needed and did not have.
+    focus
+      ? "- An item is open. Answer about THAT item. Do NOT ask the student which assignment, class or quiz they mean — you have been told. Only ask if they genuinely raise a different subject."
+      : "- Nothing is open right now. If the question is ambiguous across several notes, it is fair to ask which one they mean.",
+    "- FACTS ABOUT THEIR COURSE — what is on a quiz, what a task asks for, when something is due, what was covered, what is attached — come ONLY from the context below. If it is not there, say plainly that you cannot see it rather than guessing.",
+    "- EXPLAINING A CONCEPT is different. If the material names something and the student asks what it IS, explain it properly using your own knowledge. Do not refuse to teach because the note is terse.",
+    "- Keep the two visibly apart. Course facts can be attributed ('your quiz note lists…'); general explanation should read as general explanation.",
+    "- Never invent a due date, a grade, a task requirement or an attachment. Those are facts, and a wrong one costs the student marks.",
+    tutorLanguageInstruction(language),
+    "",
+    "STYLE: short paragraphs, bullets where they help, concrete examples taken from their own material wherever possible.",
+    today ? `Today's date is ${today}.` : "",
+    "",
+  ].filter(Boolean);
+
+  const focusBlock = renderFocusBlock(focus, today);
+  return [
+    rules.join("\n"),
+    focusBlock,
+    focusBlock ? "" : null,
+    renderNotesBlock(notes, !!focus),
+  ].filter((part) => part !== null).join("\n");
+}
+
+/**
+ * Build the shared grounded conversation used by KB and Planner tutor clients.
+ *
+ * The third argument accepts either the old language string or an options
+ * object, because kb_e2e_test and older callers pass `"sk"` positionally.
+ */
+export function buildTutorMessages(messages, notes, options = {}) {
+  const opts = typeof options === "string" ? { language: options } : (options || {});
   const safeMessages = Array.isArray(messages) ? messages : [];
   const safeNotes = normalizeTutorNotes(notes);
-  return [{ role: "system", content: buildSystemPrompt(safeNotes, language) }, ...safeMessages];
+  const focus = tutorFocusModel(opts.focus);
+  const language = opts.language === "sk" ? "sk" : "en";
+  const today = typeof opts.today === "string" ? opts.today : "";
+  return [
+    { role: "system", content: buildSystemPrompt(safeNotes, { focus, language, today }) },
+    ...safeMessages,
+  ];
 }
 
 export default async function handler(req) {
@@ -76,7 +210,13 @@ export default async function handler(req) {
   const notes = normalizeTutorNotes(body.notes);
   const language = body.language === "sk" ? "sk" : "en";
 
-  const messages = buildTutorMessages(body.messages, notes, language);
+  // `focus` is the item the student has open. Its absence is a valid state and
+  // the prompt says so; what it must never do is silently imply an anchor.
+  const messages = buildTutorMessages(body.messages, notes, {
+    language,
+    focus: body.focus,
+    today: new Date().toISOString().slice(0, 10),
+  });
 
   // Build the source descriptors we'll surface as clickable chips (noteIndex
   // so the UI can open the full note). Emitted early as a control SSE event.

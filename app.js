@@ -3255,32 +3255,45 @@ async function sendAi(userText) {
 
   const a = activeAssignment;
 
-  const materialsContext = activeMaterials.map((m) => {
-    const linkPart = m.link ? ` URL: ${m.link}` : "";
-    if (m.text) return `[${m.kind}] Title: ${m.title}${linkPart}\nContent:\n${m.text}`;
-    return `[${m.kind}] Title: ${m.title}${linkPart}`;
-  }).join("\n\n---\n\n");
-
-  const assignmentNote = {
-    t: a.title || "Assignment",
+  // The open assignment is sent as `focus`, NOT as the first retrieved note.
+  //
+  // It used to be `assignmentNote`, prepended to the list — and api/tutor.js
+  // rendered it as "NOTE 1", identical in form to five keyword matches from
+  // other classes and other years. Asked "what do I need to know for this
+  // quiz?", the tutor described NOTE 1 correctly and then asked which quiz was
+  // meant, listing the others. It had the answer and no way to know it had it.
+  const due = dueDateObj(a);
+  const focus = {
+    title: a.title || "Assignment",
+    kind: a.kind === "material" ? "material" : "assignment",
     course: a.courseName || "",
-    topic: a.enrichment?.topic || "Assignment",
-    s: a.enrichment?.oneLineSummary || "",
-    x: [
-      a.description ? `Description: ${a.description}` : "",
-      materialsContext ? `Attached materials:\n${materialsContext}` : "",
-      a.alternateLink ? `Classroom link: ${withAuthUser(a.alternateLink)}` : "",
-    ].filter(Boolean).join("\n\n"),
+    topic: a.enrichment?.topic || "",
+    description: [a.description || "", a.enrichment?.oneLineSummary || ""].filter(Boolean).join("\n\n"),
+    dueDate: due ? due.toISOString().slice(0, 10) : "",
+    dueInDays: due ? daysUntil(due) : null,
+    // Only assignments have a submission state; a material has none to report.
+    submitted: a.kind === "assignment" ? !isPending(a) : null,
+    link: a.alternateLink ? withAuthUser(a.alternateLink) : "",
+    // Always an array, never omitted: an empty one is the fact that there are
+    // no attachments, which the tutor could not state before.
+    attachments: activeMaterials.map((m) => ({
+      title: m.title || "", kind: m.kind || "", link: m.link || "", text: m.text || "",
+    })),
   };
-  const tutorNotes = [assignmentNote, ...activeLibraryNotes.slice(0, 5).map((n) => ({
+  const tutorNotes = activeLibraryNotes.slice(0, 5).map((n) => ({
     t: n.t, course: n.course, y: n.y, topic: n.topic, s: n.s, x: n.x,
-  }))];
+  }));
 
   try {
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
-      body: JSON.stringify({ messages: aiHistory, notes: tutorNotes }),
+      body: JSON.stringify({
+        messages: aiHistory,
+        notes: tutorNotes,
+        focus,
+        language: displayPrefs.language === "sk" ? "sk" : "en",
+      }),
     });
     if (r.status === 429) {
       const data = await r.json().catch(() => ({}));
