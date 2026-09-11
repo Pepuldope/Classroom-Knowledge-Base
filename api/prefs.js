@@ -1,3 +1,5 @@
+import { mergeSyncedPrefs } from "../prefs-sync.js";
+
 export const config = { runtime: "edge" };
 
 // Accept both credential namings. Vercel's Upstash integration injects
@@ -45,6 +47,18 @@ function prefsKey(sub) {
   return `prefs:${sub}`;
 }
 
+/** Whatever is stored for this user, always an object. */
+async function readPrefs(sub) {
+  const raw = await kvGet(prefsKey(sub));
+  if (!raw) return {};
+  try {
+    // Double-encoded values exist in the wild from an earlier writer.
+    let parsed = JSON.parse(raw);
+    if (typeof parsed === "string") parsed = JSON.parse(parsed);
+    return (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : {};
+  } catch { return {}; }
+}
+
 export default async function handler(req) {
   if (!KV_URL || !KV_TOKEN) {
     return new Response(JSON.stringify({ error: "storage_not_configured" }), {
@@ -63,16 +77,7 @@ export default async function handler(req) {
 
   if (req.method === "GET") {
     try {
-      const raw = await kvGet(prefsKey(sub));
-      let prefs = {};
-      if (raw) {
-        try {
-          let parsed = JSON.parse(raw);
-          if (typeof parsed === "string") parsed = JSON.parse(parsed);
-          if (parsed && typeof parsed === "object") prefs = parsed;
-        } catch {}
-      }
-      return new Response(JSON.stringify({ prefs }), {
+      return new Response(JSON.stringify({ prefs: await readPrefs(sub) }), {
         headers: { "Content-Type": "application/json" },
       });
     } catch (e) {
@@ -88,8 +93,23 @@ export default async function handler(req) {
       return new Response(JSON.stringify({ error: "prefs object required" }), { status: 400 });
     }
     try {
-      await kvSet(prefsKey(sub), JSON.stringify(body.prefs));
-      return new Response(JSON.stringify({ ok: true }), {
+      // Merge, never replace. This endpoint used to kvSet the caller's blob
+      // wholesale, so the second device to save that day erased the first
+      // one's study progress, streak and pins. mergeSyncedPrefs applies a rule
+      // per section: union for the streak, max/later for progress, per-id
+      // last-write-wins with tombstones for the sets you can remove from.
+      //
+      // There is no lock around this read-modify-write, and it does not need
+      // one. Every accumulating section merges commutatively and idempotently,
+      // so two devices racing land on the same document whichever order they
+      // arrive in, and an update lost to a race is repaired by the next sync
+      // rather than lost for good. (The deliberate settings — display,
+      // kbSettings, hiddenCourseIds — stay last-write-wins by design.)
+      const merged = mergeSyncedPrefs(body.prefs, await readPrefs(sub));
+      await kvSet(prefsKey(sub), JSON.stringify(merged));
+      // Hand back what was actually stored so the caller converges on it
+      // immediately instead of waiting for its next GET.
+      return new Response(JSON.stringify({ ok: true, prefs: merged }), {
         headers: { "Content-Type": "application/json" },
       });
     } catch (e) {

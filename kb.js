@@ -212,6 +212,20 @@ function announceCopyStatus(element, message) {
 const STUDY_LIST_KEY = "cwa_tutor_study_list";
 const STUDY_ACTIVITY_KEY = "cwa_kb_study_activity";
 const STUDY_PROGRESS_KEY = "cwa_kb_note_progress";
+
+/**
+ * Tell app.js that something synced has changed here.
+ *
+ * Via window rather than an import because the dependency runs the other way —
+ * app.js imports kb.js — and because the push is debounced there, so a study
+ * session that opens thirty notes still sends one request. A no-op when the
+ * Planner half has not loaded, which is the correct behaviour and not a bug to
+ * guard against: nothing is lost, the next reconcile picks the change up by
+ * diffing rather than by having been told.
+ */
+function notePrefsChanged() {
+  try { window.__cwaPushPrefs?.(); } catch {}
+}
 const STUDY_MODE_PROGRESS_KEY = "cwa_kb_study_mode_progress";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
 const KB_PINNED_COURSES_KEY = "cwa_kb_pinned_courses";
@@ -335,6 +349,7 @@ export function loadKbPinnedCourses() {
 export function saveKbPinnedCourses(value) {
   const courses = kbPinnedCoursesModel(value);
   try { localStorage.setItem(KB_PINNED_COURSES_KEY, JSON.stringify(courses)); } catch {}
+  notePrefsChanged();
   return courses;
 }
 
@@ -376,6 +391,7 @@ function loadPinnedNotes() {
 function savePinnedNotes(value) {
   const notes = pinnedNotesModel(value);
   try { localStorage.setItem(KB_PINNED_NOTES_KEY, JSON.stringify(notes)); } catch {}
+  notePrefsChanged();
   return notes;
 }
 
@@ -435,6 +451,7 @@ function loadStudyList() {
 function saveStudyList(value) {
   const list = studyListModel(value);
   try { localStorage.setItem(STUDY_LIST_KEY, JSON.stringify(list)); } catch {}
+  notePrefsChanged();
   return list;
 }
 
@@ -512,6 +529,7 @@ export function loadKbSettings() {
 export function saveKbSettings(value) {
   const settings = kbSettingsModel(value);
   try { localStorage.setItem(KB_SETTINGS_KEY, JSON.stringify(settings)); } catch {}
+  notePrefsChanged();
   return settings;
 }
 
@@ -531,6 +549,7 @@ function markStudyActivity() {
   const updated = recordStudyActivity(loadStudyActivity(), todayIso());
   try { localStorage.setItem(STUDY_ACTIVITY_KEY, JSON.stringify(updated)); } catch {}
   renderStudyStreak(updated);
+  notePrefsChanged();
 }
 function loadStudyProgress() {
   let raw;
@@ -593,6 +612,7 @@ function markNoteProgress(index) {
   try { localStorage.setItem(STUDY_PROGRESS_KEY, JSON.stringify(next)); } catch {}
   renderStudyProgress(next);
   renderReviewDigest(next);
+  notePrefsChanged();
 }
 // groups (owner request #11). Opening a course used to spill ALL notes (e.g.
 // 343 for "Matematika 1") in one flat list — overwhelming. This groups by the

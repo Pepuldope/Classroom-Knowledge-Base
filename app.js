@@ -19,6 +19,7 @@ import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js"
 import { kbLocalStatusModel } from "./kb-local-status.js";
 import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel, routeTransitionFocusPrivacyModel } from "./route-transition.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession, sessionResumeModel } from "./auth-session.js";
+import { readLocalPrefsDoc, applySyncedPrefs, mergeLocally, STORAGE_KEYS } from "./prefs-sync-local.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
@@ -106,36 +107,87 @@ async function loadServerPrefs() {
   } catch { return null; }
 }
 
+/**
+ * Push this device's document and adopt whatever the merge produced.
+ *
+ * The POST is the whole sync: /api/prefs merges the body with what is stored
+ * and returns the result, so one round trip both sends and receives. A separate
+ * GET would only widen the window in which the two disagree.
+ */
 async function saveServerPrefs(prefs) {
-  if (!prefsStorageAvailable || !accessToken) return;
+  if (!prefsStorageAvailable || !accessToken) return null;
   try {
     const r = await fetchWithTimeout("/api/prefs", {
       method: "POST",
       headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ prefs }),
     });
-    if (r.status === 503) prefsStorageAvailable = false;
-  } catch {}
+    if (r.status === 503) { prefsStorageAvailable = false; return null; }
+    if (!r.ok) return null;
+    const data = await r.json().catch(() => null);
+    return (data && data.prefs && typeof data.prefs === "object") ? data.prefs : null;
+  } catch { return null; }
 }
 
-async function syncPrefsFromServer() {
-  const remote = await loadServerPrefs();
-  if (!remote) return false;
-  prefsLoadedFromServer = true;
-  if (Array.isArray(remote.hiddenCourseIds)) {
-    hiddenCourseIds = new Set(remote.hiddenCourseIds);
-    saveHiddenCourses(hiddenCourseIds);
+/** Adopt a merged document into this device's in-memory state. */
+function adoptMergedPrefs(merged) {
+  if (!merged) return false;
+  applySyncedPrefs(merged);
+  // applySyncedPrefs has written localStorage; these two are also held in
+  // module state, so they have to be re-read rather than left stale.
+  if (Array.isArray(merged.hiddenCourseIds)) hiddenCourseIds = new Set(merged.hiddenCourseIds);
+  if (merged.display && typeof merged.display === "object") {
+    displayPrefs = { ...defaultDisplayPrefs, ...merged.display };
   }
-  if (remote.display && typeof remote.display === "object") {
-    displayPrefs = { ...defaultDisplayPrefs, ...remote.display };
-    saveDisplayPrefsLocal(displayPrefs);
-  }
+  pinnedIds = loadIdSet(PINNED_KEY);
+  dismissedIds = loadIdSet(DISMISSED_KEY);
   return true;
 }
 
-function pushPrefsToServer() {
-  saveServerPrefs({ hiddenCourseIds: [...hiddenCourseIds], display: displayPrefs });
+/**
+ * Pull on sign-in: push what this device has, take back the merge.
+ *
+ * This used to be a GET that OVERWROTE local state with the server's copy,
+ * which is why it could only ever carry settings — running it on study progress
+ * would have thrown away whatever this device had done since its last visit.
+ */
+async function syncPrefsFromServer() {
+  const merged = await saveServerPrefs(readLocalPrefsDoc());
+  if (!merged) {
+    // Offline or storage down: still reconcile this device's own journal, so a
+    // week offline does not arrive as one undifferentiated blob later.
+    mergeLocally(await loadServerPrefs());
+    return false;
+  }
+  prefsLoadedFromServer = true;
+  adoptMergedPrefs(merged);
+  return true;
 }
+
+// Pins, dismissals and note opens are ordinary interactions, not settings
+// saves: without this a study session would POST on every tap. Trailing-edge
+// only — the last state in a burst is the one worth sending.
+const PREFS_PUSH_DEBOUNCE_MS = 4000;
+let prefsPushTimer = null;
+
+function pushPrefsToServer({ immediate = false } = {}) {
+  if (prefsPushTimer) { clearTimeout(prefsPushTimer); prefsPushTimer = null; }
+  const run = () => {
+    prefsPushTimer = null;
+    saveServerPrefs(readLocalPrefsDoc()).then((merged) => { if (merged) adoptMergedPrefs(merged); });
+  };
+  if (immediate) run();
+  else prefsPushTimer = setTimeout(run, PREFS_PUSH_DEBOUNCE_MS);
+}
+
+// A debounced push that never fires is a lost change. Leaving the page is the
+// one moment we know there will be no later chance.
+window.addEventListener("pagehide", () => {
+  if (prefsPushTimer) pushPrefsToServer({ immediate: true });
+});
+// Sibling modules (kb.js) change synced state too, and must not reach into
+// app.js internals to say so.
+window.__cwaPushPrefs = pushPrefsToServer;
 
 const SORT_KEY = "cwa_sort";
 let currentSort = sessionStorage.getItem(SORT_KEY) || "default";
@@ -168,8 +220,9 @@ async function revokeServerToken() {
 // offer and the canonical list no longer contains. Bumping re-fetches them;
 // the server answers from its own cache, so this costs no AI calls.
 const ENRICH_KEY = "cwa_enrich_v13";
-const DISMISSED_KEY = "cwa_dismissed";
-const PINNED_KEY = "cwa_pinned";
+// Declared once in prefs-sync-local.js, which also has to know them.
+const DISMISSED_KEY = STORAGE_KEYS.dismissed;
+const PINNED_KEY = STORAGE_KEYS.pinned;
 
 function loadIdSet(key) {
   try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); }
@@ -2177,6 +2230,7 @@ function assignmentCard(a) {
       if (pinnedIds.has(a.id)) pinnedIds.delete(a.id);
       else pinnedIds.add(a.id);
       saveIdSet(PINNED_KEY, pinnedIds);
+      pushPrefsToServer();
       if (window.__renderAll) window.__renderAll();
     });
     actions.appendChild(pin);
@@ -2208,6 +2262,7 @@ function assignmentCard(a) {
       ev.stopPropagation();
       dismissedIds.add(a.id);
       saveIdSet(DISMISSED_KEY, dismissedIds);
+      pushPrefsToServer();
       if (window.__renderAll) window.__renderAll();
     });
     actions.appendChild(del);
