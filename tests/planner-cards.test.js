@@ -70,6 +70,53 @@ test("new-today assignments list not-done before submitted", () => {
     ["todo2", "todo1", "done2", "done1"]);
 });
 
+test("inside each half, the nearest deadline comes first", () => {
+  const pending = (a) => a.id.startsWith("todo");
+  const at = (iso) => new Date(iso).getTime();
+  // Deliberately scrambled, and with a submitted item due before every
+  // pending one — the halves must still not interleave.
+  const items = [
+    { kind: "assignment", id: "todo-friday", due: at("2026-09-18T23:59:00") },
+    { kind: "assignment", id: "done-monday", due: at("2026-09-14T23:59:00") },
+    { kind: "assignment", id: "todo-today", due: at("2026-09-11T23:59:00") },
+    { kind: "assignment", id: "done-sunday", due: at("2026-09-13T23:59:00") },
+  ];
+  const sorted = sortPendingFirst(items, pending, { dueTime: (a) => a.due });
+  assert.deepEqual(sorted.map((i) => i.id),
+    ["todo-today", "todo-friday", "done-sunday", "done-monday"]);
+});
+
+test("work with no deadline sinks to the bottom of its own half", () => {
+  const pending = () => true;
+  const at = (iso) => new Date(iso).getTime();
+  const items = [
+    { kind: "assignment", id: "undated-first", due: null },
+    { kind: "assignment", id: "friday", due: at("2026-09-18T23:59:00") },
+    { kind: "assignment", id: "undated-second", due: undefined },
+    { kind: "assignment", id: "today", due: at("2026-09-11T23:59:00") },
+  ];
+  const sorted = sortPendingFirst(items, pending, { dueTime: (a) => a.due });
+  // Dated work in deadline order, then the undated in the order it arrived:
+  // "no deadline" is not "due at the epoch", and it is not urgent either.
+  assert.deepEqual(sorted.map((i) => i.id),
+    ["today", "friday", "undated-first", "undated-second"]);
+});
+
+test("with no deadline accessor the caller's order still survives", () => {
+  // The Planner's sort dropdown is the caller's order. When the student has
+  // picked one explicitly, this must not quietly re-sort underneath them.
+  const pending = (a) => a.id.startsWith("todo");
+  const items = [
+    { kind: "assignment", id: "todo-b", due: 2 },
+    { kind: "assignment", id: "todo-a", due: 1 },
+    { kind: "assignment", id: "done-b", due: 4 },
+  ];
+  assert.deepEqual(sortPendingFirst(items, pending).map((i) => i.id),
+    ["todo-b", "todo-a", "done-b"]);
+  assert.deepEqual(sortPendingFirst(items, pending, {}).map((i) => i.id),
+    ["todo-b", "todo-a", "done-b"]);
+});
+
 test("only assignments are ranked by submission state", () => {
   const pending = () => false;
   // Materials have no submission; they must not be shuffled to the back.

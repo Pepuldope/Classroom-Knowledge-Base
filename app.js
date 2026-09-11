@@ -2285,10 +2285,14 @@ function renderWeek(inScope) {
 function renderTodayNew(all) {
   const list = $("todayList");
   list.innerHTML = "";
-  // Not done first, submitted after; applySort decides the order within each.
+  // Not done first, then soonest deadline — being new says nothing about what
+  // to open first. An explicit sort from the dropdown is the student's own
+  // choice and stays the order inside each half; only "default", which sorts
+  // by nothing, hands the decision to the deadline.
   const items = sortPendingFirst(
     applySort(all.filter((a) => a.kind !== "announcement" && isPostedSinceYesterday(a))),
     isPending,
+    currentSort === "default" ? { dueTime: (a) => dueDateObj(a)?.getTime() ?? null } : {},
   );
   if (items.length === 0) {
     list.innerHTML = `<div class="empty">No new assignments posted since yesterday.</div>`;

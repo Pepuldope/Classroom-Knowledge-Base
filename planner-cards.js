@@ -59,23 +59,45 @@ export function groupPlannerItems(items) {
 }
 
 /**
- * Put work still to do above work already handed in, without disturbing the
- * order within each half.
+ * Put work still to do above work already handed in, then order each half by
+ * deadline.
  *
  * "New since yesterday" sorted purely by the caller's sort, so a submitted
  * assignment could sit above one the student still has to start. Whether it is
- * done is the first thing you want to know; everything else is a tiebreak.
+ * done is the first thing you want to know; when it is due is the second.
+ * Being new is why an item is in this section — it says nothing about which of
+ * the new things to open first, and posting order is not that answer.
  *
  * `pending` is passed in because submission state lives in app.js — this module
- * stays free of Classroom's data shape.
+ * stays free of Classroom's data shape. `dueTime` is optional for the same
+ * reason it is optional at the call site: the Planner's sort dropdown is the
+ * student's explicit choice, and when they have made one it must survive. Omit
+ * it and this is exactly the stable partition it was before.
+ *
+ * Work with no deadline sorts last inside its half rather than first. A missing
+ * due date is not "due at the epoch"; an undated handout is the least urgent
+ * thing on the list, not the most.
  */
-export function sortPendingFirst(items, pending) {
+export function sortPendingFirst(items, pending, { dueTime = null } = {}) {
   const list = Array.isArray(items) ? items : [];
   const rank = (item) => (item?.kind === "assignment" && !pending(item) ? 1 : 0);
-  // Index breaks ties so the sort is stable across engines.
+  const due = (item) => {
+    if (!dueTime) return 0;
+    const raw = dueTime(item);
+    // `Number(null)` is 0, so a null deadline would otherwise score as the
+    // most urgent thing on the list. Nullish is missing, full stop.
+    if (raw == null) return Infinity;
+    const t = Number(raw);
+    return Number.isFinite(t) ? t : Infinity;
+  };
+  // Equal deadlines are compared first, not subtracted: two undated items both
+  // score Infinity, and Infinity - Infinity is NaN, which makes a comparator
+  // return "unordered" and the sort arbitrary. Index breaks the tie instead, so
+  // the order is stable across engines.
+  const byDue = (a, b) => (a.due === b.due ? 0 : a.due - b.due);
   return list
-    .map((item, i) => ({ item, i, rank: rank(item) }))
-    .sort((a, b) => a.rank - b.rank || a.i - b.i)
+    .map((item, i) => ({ item, i, rank: rank(item), due: due(item) }))
+    .sort((a, b) => a.rank - b.rank || byDue(a, b) || a.i - b.i)
     .map(({ item }) => item);
 }
 
