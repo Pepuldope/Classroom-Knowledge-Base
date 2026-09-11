@@ -62,6 +62,7 @@ GATES=(
 "models|-|Cross-device prefs merge model tests|node --test tests/prefs-sync.test.js"
 "models|-|Tutor context and anchoring model tests|node --test tests/tutor-context.test.js"
 "models|-|Chat composer and streaming UX model tests|node --test tests/chat-ux.test.js"
+"models|-|Classroom material inference model tests|node --test tests/related-materials.test.js"
 "models|-|Interrupted Classroom build privacy tests|node --test tests/archive-builder-abort.test.js"
 "models|-|Resumable Classroom build checkpoint tests|node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.js"
 "models,panel|-|Assignment panel model tests|node --test tests/assignment-panel.test.js"

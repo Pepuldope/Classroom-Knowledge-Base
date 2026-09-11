@@ -3052,3 +3052,14 @@ summary::-webkit-details-marker { color: var(--muted); }
   opacity: 0.55;
   cursor: not-allowed;
 }
+
+/* Reasoning models write nothing for several seconds while they work. The dots
+   alone are honest but uninformative — a long silence looks the same whether
+   the model is deriving an answer or the request has hung. This appears only
+   once reasoning tokens are actually arriving, so it is evidence, not filler. */
+.ai-thinking.is-reasoning { gap: 8px; }
+.ai-thinking-label {
+  font-size: 0.85em;
+  color: var(--muted);
+  font-style: italic;
+}

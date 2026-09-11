@@ -94,6 +94,58 @@ export function thinkingBubble(doc = document) {
 }
 
 /**
+ * What an SSE delta actually carried.
+ *
+ * Every model in the chain is a reasoning model, so a stream opens with
+ * `reasoning` / `reasoning_content` tokens and emits no `content` for seconds.
+ * A UI that treats "the response started" as "the answer started" shows an
+ * empty bubble for that whole time — which is what it did, because `fetch`
+ * resolves on the HEADERS and the dots were dismissed there.
+ */
+export function deltaKind(choice) {
+  const delta = choice?.delta || {};
+  if (typeof delta.content === "string" && delta.content.length) return "content";
+  const reasoning = delta.reasoning ?? delta.reasoning_content;
+  if (typeof reasoning === "string" && reasoning.length) return "reasoning";
+  return "none";
+}
+
+/**
+ * Move a thinking bubble to its answering state — once, on the first token of
+ * real content, never on the headers.
+ *
+ * Idempotent: the stream calls it on every chunk and only the first does work.
+ */
+export function revealAnswer(el) {
+  if (!el || !el.classList.contains("ai-thinking")) return false;
+  el.classList.remove("ai-thinking");
+  el.classList.remove("is-reasoning");
+  el.removeAttribute("role");
+  el.removeAttribute("aria-label");
+  el.textContent = "";
+  return true;
+}
+
+/**
+ * Say that the model is reasoning rather than stalled.
+ *
+ * Without this the dots are honest but uninformative: eight seconds of silence
+ * looks identical whether the model is deriving an answer or the request is
+ * hung. The label only appears once reasoning tokens are actually arriving, so
+ * it is evidence, not decoration.
+ */
+export function markReasoning(el, doc = document) {
+  if (!el || !el.classList.contains("ai-thinking") || el.classList.contains("is-reasoning")) return false;
+  el.classList.add("is-reasoning");
+  const label = doc.createElement("span");
+  label.className = "ai-thinking-label";
+  label.textContent = "Thinking…";
+  el.appendChild(label);
+  el.setAttribute("aria-label", "The tutor is working through the answer");
+  return true;
+}
+
+/**
  * Apply a composer state to real controls.
  *
  * `quick` is the row of one-tap prompt buttons. They send too, so leaving them

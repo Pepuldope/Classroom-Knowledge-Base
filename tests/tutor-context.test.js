@@ -294,3 +294,42 @@ test("a plain string chain still works and defaults to mid strength", () => {
   assert.deepEqual(providerModelEntries(p), [{ id: "a", strength: 2 }, { id: "b", strength: 2 }]);
   assert.deepEqual(providerModels({ model: "solo" }), ["solo"]);
 });
+
+// --- inferred material links ----------------------------------------------
+
+test("likely material is offered as a guess, never as the required reading", () => {
+  const text = prompt([], {
+    focus: {
+      ...QUIZ,
+      attachments: [],
+      relatedMaterials: [
+        { title: "Vocabulary — synonyms, similes, idioms", kind: "material", postedAt: "2026-09-07", why: "similar title, posted 1 day(s) apart", link: "https://classroom.google.com/m1" },
+      ],
+    },
+  });
+  assert.match(text, /MAY be the material referred to/);
+  assert.match(text, /Vocabulary — synonyms, similes, idioms/);
+  assert.match(text, /posted 2026-09-07/);
+  assert.match(text, /classroom\.google\.com\/m1/);
+  // The guardrail: matched by us, not by the teacher.
+  assert.match(text, /NOT by the teacher/);
+  assert.match(text, /never state that they are the required material/);
+  // And "no attachments" is still said, because it is still true.
+  assert.match(text, /Attached materials: NONE/);
+});
+
+test("no inferred material means no section at all", () => {
+  const text = prompt([], { focus: { ...QUIZ, attachments: [], relatedMaterials: [] } });
+  assert.ok(!/MAY be the material referred to/.test(text));
+  // A client that never sends the field behaves the same way.
+  assert.ok(!/MAY be the material referred to/.test(prompt([], { focus: { ...QUIZ, attachments: [] } })));
+});
+
+test("inferred material is bounded like everything else", () => {
+  const focus = tutorFocusModel({
+    title: "t",
+    relatedMaterials: Array.from({ length: 20 }, (_, i) => ({ title: `m${i}`, why: "w".repeat(400) })),
+  });
+  assert.equal(focus.relatedMaterials.length, 5);
+  assert.equal(focus.relatedMaterials[0].why.length, 120);
+});

@@ -63,6 +63,17 @@ export function tutorFocusModel(focus) {
     link: str(focus.link, 500),
     // null means "the client did not tell us"; [] means "we know: nothing".
     attachments: rawAttachments ? attachments : null,
+    // Inferred, never authoritative — see related-materials.js.
+    relatedMaterials: (Array.isArray(focus.relatedMaterials) ? focus.relatedMaterials : [])
+      .slice(0, 5)
+      .map((m) => ({
+        title: str(m?.title, 240),
+        kind: str(m?.kind, 40),
+        link: str(m?.link, 500),
+        postedAt: str(m?.postedAt, 20),
+        why: str(m?.why, 120),
+      }))
+      .filter((m) => m.title),
   };
 }
 
@@ -120,6 +131,23 @@ export function renderFocusBlock(focus, today = "") {
     focus.attachments.forEach((a, i) => {
       const head = `${i + 1}. ${a.kind ? `[${a.kind}] ` : ""}${a.title}${a.link ? ` — ${a.link}` : ""}`;
       lines.push(a.text ? `${head}\n   Contents:\n   ${a.text.replace(/\n/g, "\n   ")}` : `${head} (contents not readable — you can name it but not quote it)`);
+    });
+  }
+
+  // The gap the tutor itself named: "the materials are in your Classroom
+  // folders, but there are no attachments listed on this assignment." They
+  // usually ARE in the class, as separate posts. These are matched by title and
+  // posting date, so they are suggestions — worded as such, deliberately.
+  if (focus.relatedMaterials.length) {
+    lines.push(
+      "",
+      `Other posts in this same class that MAY be the material referred to (${focus.relatedMaterials.length}).`,
+      "These were matched by title and posting date, NOT by the teacher. Offer them as",
+      "\"this looks like it might be it\" and never state that they are the required material:",
+    );
+    focus.relatedMaterials.forEach((m, i) => {
+      const bits = [m.postedAt ? `posted ${m.postedAt}` : "", m.why].filter(Boolean).join("; ");
+      lines.push(`${i + 1}. [${m.kind}] ${m.title}${bits ? ` (${bits})` : ""}${m.link ? ` — ${m.link}` : ""}`);
     });
   }
   return lines.join("\n");

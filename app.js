@@ -20,7 +20,8 @@ import { kbLocalStatusModel } from "./kb-local-status.js";
 import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel, routeTransitionFocusPrivacyModel } from "./route-transition.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession, sessionResumeModel } from "./auth-session.js";
 import { readLocalPrefsDoc, applySyncedPrefs, mergeLocally, STORAGE_KEYS } from "./prefs-sync-local.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, deltaKind, revealAnswer, markReasoning } from "./chat-ux.js";
+import { relatedCourseMaterials } from "./related-materials.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
@@ -3335,6 +3336,8 @@ async function sendAi(userText) {
     attachments: activeMaterials.map((m) => ({
       title: m.title || "", kind: m.kind || "", link: m.link || "", text: m.text || "",
     })),
+    // What the teacher probably meant by "it's in the Classroom folder".
+    relatedMaterials: relatedCourseMaterials(a, allAssignments),
   };
   const tutorNotes = activeLibraryNotes.slice(0, 5).map((n) => ({
     t: n.t, course: n.course, y: n.y, topic: n.topic, s: n.s, x: n.x,
@@ -3364,11 +3367,10 @@ async function sendAi(userText) {
     const reader = r.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    thinking.innerHTML = "";
-
-    thinking.classList.remove("ai-thinking");
-    thinking.removeAttribute("role");
-    thinking.removeAttribute("aria-label");
+    // The dots stay until the first token of ANSWER. `fetch` resolves on the
+    // response headers, and every model in the chain reasons before it writes,
+    // so dismissing them here — which is what this did — left an empty bubble
+    // on screen for as long as the model took to think.
 
     const flush = () => {
       // Read the position BEFORE the new text changes scrollHeight, or every
@@ -3392,9 +3394,15 @@ async function sendAi(userText) {
         if (payload === "[DONE]") continue;
         try {
           const json = JSON.parse(payload);
-          const delta = json.choices?.[0]?.delta?.content;
-          if (delta) {
-            accumulated += delta;
+          const choice = json.choices?.[0];
+          const kind = deltaKind(choice);
+          if (kind === "reasoning") {
+            // Alive, and visibly so: eight seconds of silence otherwise looks
+            // the same as a hung request.
+            markReasoning(thinking);
+          } else if (kind === "content") {
+            revealAnswer(thinking);
+            accumulated += choice.delta.content;
             flush();
           }
         } catch {}

@@ -107,3 +107,74 @@ test("applying state to missing controls does not throw", () => {
   assert.doesNotThrow(() => applyComposerState(composerStateModel({}), {}));
   assert.doesNotThrow(() => applyComposerState(composerStateModel({}), { quick: [null] }));
 });
+
+// --- reasoning models stream before they answer ---------------------------
+
+import { deltaKind, revealAnswer, markReasoning } from "../chat-ux.js";
+
+test("a reasoning token is not an answer token", () => {
+  // The reported symptom: the dots vanished and the bubble sat empty for
+  // several seconds. Every model in the chain reasons before it writes.
+  assert.equal(deltaKind({ delta: { content: "An idiom" } }), "content");
+  assert.equal(deltaKind({ delta: { reasoning: "the user is asking" } }), "reasoning");
+  assert.equal(deltaKind({ delta: { reasoning_content: "let me check" } }), "reasoning");
+  // Role-only and empty deltas open a stream and say nothing.
+  assert.equal(deltaKind({ delta: { role: "assistant" } }), "none");
+  assert.equal(deltaKind({ delta: { content: "" } }), "none");
+  assert.equal(deltaKind({}), "none");
+  assert.equal(deltaKind(null), "none");
+});
+
+test("content wins when a delta somehow carries both", () => {
+  assert.equal(deltaKind({ delta: { reasoning: "hmm", content: "the answer" } }), "content");
+});
+
+// A DOM stub small enough to be obviously correct.
+const stubEl = () => {
+  const classes = new Set(["ai-msg", "assistant", "ai-thinking"]);
+  return {
+    textContent: "",
+    attrs: {},
+    children: [],
+    classList: {
+      add: (c) => classes.add(c),
+      remove: (c) => classes.delete(c),
+      contains: (c) => classes.has(c),
+    },
+    setAttribute(k, v) { this.attrs[k] = v; },
+    removeAttribute(k) { delete this.attrs[k]; },
+    appendChild(child) { this.children.push(child); return child; },
+  };
+};
+const stubDoc = { createElement: () => ({ className: "", textContent: "" }) };
+
+test("revealing the answer happens once, however many chunks arrive", () => {
+  const el = stubEl();
+  el.setAttribute("role", "status");
+  assert.equal(revealAnswer(el), true, "the first content token must reveal");
+  assert.equal(el.classList.contains("ai-thinking"), false);
+  assert.equal(el.attrs.role, undefined);
+  // The stream calls this on every chunk; only the first may do work, or the
+  // bubble is wiped mid-answer.
+  el.textContent = "An idiom is";
+  assert.equal(revealAnswer(el), false);
+  assert.equal(el.textContent, "An idiom is");
+  assert.equal(revealAnswer(null), false);
+});
+
+test("the thinking label appears once, and only while still thinking", () => {
+  const el = stubEl();
+  assert.equal(markReasoning(el, stubDoc), true);
+  assert.equal(el.children.length, 1);
+  assert.match(el.children[0].textContent, /Thinking/);
+  // Repeated reasoning tokens must not stack labels.
+  assert.equal(markReasoning(el, stubDoc), false);
+  assert.equal(el.children.length, 1);
+});
+
+test("once the answer starts, reasoning can no longer relabel the bubble", () => {
+  const el = stubEl();
+  revealAnswer(el);
+  assert.equal(markReasoning(el, stubDoc), false, "a late reasoning token overwrote the answer");
+  assert.equal(el.children.length, 0);
+});

@@ -19,7 +19,7 @@ import { renderLightMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, deltaKind, revealAnswer, markReasoning } from "./chat-ux.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -3332,16 +3332,14 @@ async function sendTutor(text, { retry = false } = {}) {
           const j = JSON.parse(payload);
           // A control event from the tutor route: sources used for grounding.
           if (j && j.type === "sources") { sources = Array.isArray(j.notes) ? j.notes : []; continue; }
-          const delta = j.choices?.[0]?.delta?.content;
-          if (delta) {
-            acc += delta;
+          const choice = j.choices?.[0];
+          const kind = deltaKind(choice);
+          if (kind === "reasoning") {
+            markReasoning(assistantEl);
+          } else if (kind === "content") {
+            acc += choice.delta.content;
             if (assistantEl) {
-              if (assistantEl.classList.contains("ai-thinking")) {
-                assistantEl.classList.remove("ai-thinking");
-                assistantEl.removeAttribute("role");
-                assistantEl.removeAttribute("aria-label");
-                assistantEl.textContent = "";
-              }
+              revealAnswer(assistantEl);
               // Position read BEFORE the text lands, or every chunk reads as
               // "the user just scrolled away".
               const following = isAtBottom(wrap);
