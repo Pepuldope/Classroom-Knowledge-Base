@@ -1,18 +1,23 @@
-// live_cross_view_related_retry_test.mjs — live-shell smoke for repeated related-note
-// retry announcements in assignment-shaped cards on Archive and Planner.
+// live_cross_view_related_retry_test.mjs — live-shell smoke for repeated
+// related-note retry announcements in assignment-shaped cards on the Planner.
 //
-// NOTE ON HOW THE SURFACE IS REVEALED (do not "fix" this back to clicking the
-// view toggle): Archive is a PRIVATE view. auth-view.js declares
-// PRIVATE_VIEWS = {"kb","archive"} and app.js setView() routes any private view
-// to a "planner" fallback when there is no access token. The live site is always
-// signed out here, so clicking .view-toggle-btn[data-view="archive"] can never
-// reveal #archiveView — it silently lands on Planner instead. That auth gating
-// is correct and must stay (see LOOP-GUARDRAILS.md).
+// RETIRED HALF (owner decision, 2026-09-11): this used to run the same fixture
+// against #archiveView as well. The Archive view no longer exists — its corpus
+// was merged into Study and the surface was deleted (see archive.js's header) —
+// so that half asserted "missing surface archiveView" and failed on every run,
+// including on a clean checkout. It was the sole reason the full suite needed
+// KB_SKIP_LIVE=1, which cost far more than the coverage was worth: skipping the
+// live group to dodge one dead assertion also skipped the live checks that
+// actually watch production.
 //
-// This smoke is about the related-preview retry UI *inside* a surface, not about
-// routing, and it injects its own fixture card anyway. So it reveals the target
-// surface directly rather than navigating to it, which keeps Archive coverage
-// without requiring a signed-in session.
+// The Planner half is real and stays. It is not redundant with the local
+// cross-view gates: it runs against the DEPLOYED site, so it catches a build or
+// deploy that serves different JS from the repo.
+//
+// NOTE ON HOW THE SURFACE IS REVEALED (do not "fix" this to clicking the view
+// toggle): this smoke is about the related-preview retry UI *inside* a surface,
+// not about routing, and it injects its own fixture card. It reveals the target
+// surface directly, which keeps it working without a signed-in session.
 import { chromium } from "playwright";
 import assert from "node:assert/strict";
 
@@ -74,9 +79,9 @@ try {
   const response = await gotoLiveWithRetry();
   assert.ok(response?.ok(), `live site should load (HTTP ${response?.status()})`);
   await page.waitForSelector("#viewToggle:not([hidden])", { timeout: 15000 });
-  for (const [view, surface] of [["archive", "archiveView"], ["planner", "plannerView"]]) {
+  for (const [view, surface] of [["planner", "plannerView"]]) {
     await page.evaluate((name) => {
-      const surfaces = ["kbView", "archiveView", "plannerView"];
+      const surfaces = ["kbView", "plannerView"];
       if (!document.getElementById(name)) throw new Error("missing surface " + name);
       for (const id of surfaces) {
         const node = document.getElementById(id);
@@ -115,7 +120,7 @@ try {
     await card.evaluate((node) => node.remove());
   }
   assert.deepEqual(pageErrors, [], `live page errors: ${pageErrors.join(" | ")}`);
-  console.log(`✓ live Archive + Planner repeated related-preview retry smoke (${LIVE})`);
+  console.log(`✓ live Planner repeated related-preview retry smoke (${LIVE})`);
 } finally {
   await browser.close();
 }
