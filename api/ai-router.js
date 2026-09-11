@@ -127,12 +127,15 @@ export const PROVIDERS = [
     name: "openrouter",
     baseURL: "https://openrouter.ai/api/v1/chat/completions",
     apiKey: process.env.OPENROUTER_API_KEY,
+    // `strength` is what makes per-question routing possible at all. Tier
+    // routing picks a PROVIDER, and in production there is exactly one — so
+    // selecting between tiers did nothing. Selecting between MODELS does.
     models: [
-      "nvidia/nemotron-3-ultra-550b-a55b:free",   // 550B MoE, 1M ctx
-      "nvidia/nemotron-3-super-120b-a12b:free",   // 120B, 262K, structured output
-      "google/gemma-4-31b-it:free",               // strong instruction-tuned
-      "dots-studio/dots-3-note-preview:free",     // 512K ctx
-      "nex-agi/nex-n2.5-pro:free",
+      { id: "nvidia/nemotron-3-ultra-550b-a55b:free", strength: 3 },  // 550B MoE, 1M ctx
+      { id: "nvidia/nemotron-3-super-120b-a12b:free", strength: 3 },  // 120B, 262K
+      { id: "google/gemma-4-31b-it:free", strength: 2 },              // strong instruction-tuned
+      { id: "dots-studio/dots-3-note-preview:free", strength: 2 },    // 512K ctx
+      { id: "nex-agi/nex-n2.5-pro:free", strength: 1 },
     ],
     effort: 3,
     capabilities: ["json", "long_context"],
@@ -147,10 +150,45 @@ export const PROVIDERS = [
  * single-key providers name one model each because their id is stable, and
  * OpenRouter carries a chain because its free ids are not.
  */
-export function providerModels(p) {
-  const chain = Array.isArray(p?.models) ? p.models.filter(Boolean) : [];
+/** One chain entry, however it was written: "id" or { id, strength }. */
+function modelEntry(entry) {
+  if (typeof entry === "string") return entry ? { id: entry, strength: 2 } : null;
+  const id = typeof entry?.id === "string" ? entry.id : "";
+  if (!id) return null;
+  const strength = Number(entry.strength);
+  return { id, strength: Number.isFinite(strength) ? strength : 2 };
+}
+
+export function providerModelEntries(p) {
+  const chain = Array.isArray(p?.models) ? p.models.map(modelEntry).filter(Boolean) : [];
   if (chain.length) return chain;
-  return p?.model ? [p.model] : [];
+  const single = modelEntry(p?.model);
+  return single ? [single] : [];
+}
+
+/**
+ * The models to try for a provider, in order, for a given tier.
+ *
+ * Without a tier this is just the chain as written — strongest first, which is
+ * the right default and what every non-tutor caller gets.
+ *
+ * With a tier, models are ordered by how close their strength is to what the
+ * question needs, and NOTHING IS DROPPED: a mismatched model moves down the
+ * list, never off it, so a tier preference can never turn into an outage. That
+ * matters more here than usual, because this one provider is the whole service.
+ *
+ * The asymmetry is deliberate. Answering a lookup with a 550B model wastes a
+ * slot on a shared free key; answering "explain this proof" with the smallest
+ * model gives the student a worse explanation. So ties break UPWARD — when two
+ * models are equally far from the target, the stronger one goes first.
+ */
+export function providerModels(p, { tier = null } = {}) {
+  const entries = providerModelEntries(p);
+  if (!tier) return entries.map((e) => e.id);
+  return entries
+    .map((e, i) => ({ e, i, gap: Math.abs(e.strength - tier) }))
+    .sort((a, b) => a.gap - b.gap || b.e.strength - a.e.strength || a.i - b.i)
+    .map(({ e }) => e.id);
 }
 
 /** The id to report when nothing has been attempted yet. */
@@ -502,7 +540,7 @@ export function getRouterMetrics() {
  * The error thrown when the chain is exhausted carries every model tried, so
  * the 502 a user eventually sees names all of them rather than only the last.
  */
-async function callProviderOnce(p, { messages, max_tokens, temperature, stream }) {
+async function callProviderOnce(p, { messages, max_tokens, temperature, stream, tier = null }) {
   if (_forcedFail.has(p.name)) {
     const e = new Error(`${p.name} forced-fail (drill)`);
     e.provider = p.name;
@@ -514,7 +552,7 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream }
     "Content-Type": "application/json",
     ...(p.headers || {}),
   };
-  const chain = providerModels(p);
+  const chain = providerModels(p, { tier });
   if (chain.length === 0) {
     const e = new Error(`${p.name} has no model configured`);
     e.provider = p.name;
@@ -685,7 +723,10 @@ export async function routeChat(messages, opts = {}) {
     hard: { max_tokens: 8000, temperature: 0.3 },
     tutor: { max_tokens: 6000, temperature: 0.5 },
     default: { max_tokens: 4000, temperature: 0.4 },
-    quick: { max_tokens: 1500, temperature: 0.7 },
+    // Extraction, not invention: "when is this due", "what is on the quiz".
+    // This was 0.7 — the highest temperature in the table, on the one task
+    // whose answer is copied out of the context rather than composed.
+    quick: { max_tokens: 2000, temperature: 0.15 },
   };
 
   // --- Tiered routing (Pepuldo policy) ---
@@ -774,7 +815,7 @@ export async function routeChat(messages, opts = {}) {
     const isProbe = getHealth(p.name).state === "half_open";
     if (isProbe) beginProbe(p); // count this as a limited recovery probe
     try {
-      const r = await callProviderOnce(p, { messages, max_tokens: MT, temperature: TEMP, stream });
+      const r = await callProviderOnce(p, { messages, max_tokens: MT, temperature: TEMP, stream, tier });
       const latency = Date.now() - pt0;
       recordOutcome(p, true);
       bump(_metrics.byProvider, p.name);

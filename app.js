@@ -20,6 +20,7 @@ import { kbLocalStatusModel } from "./kb-local-status.js";
 import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel, routeTransitionFocusPrivacyModel } from "./route-transition.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession, sessionResumeModel } from "./auth-session.js";
 import { readLocalPrefsDoc, applySyncedPrefs, mergeLocally, STORAGE_KEYS } from "./prefs-sync-local.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput } from "./chat-ux.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
@@ -248,6 +249,17 @@ let sessionEpoch = 0;
 let reportLoadedAt = 0;
 let activeAssignment = null;
 let aiHistory = [];
+/**
+ * The in-flight reply, so a second send is impossible and Stop has something to
+ * cancel. Null when idle.
+ *
+ * Declared up here with the rest of the chat state rather than beside sendAi:
+ * the submit handler is registered ~150 lines earlier and calls setAiBusy at
+ * module-evaluation time, which put a `let` declared further down inside its
+ * temporal dead zone. That threw during init and took the whole assignment
+ * panel with it — no sheet, no error the user could see.
+ */
+let aiStreamController = null;
 let allAssignments = [];
 let activeMaterials = [];
 let lazyEnrichTriggered = false;
@@ -3136,11 +3148,21 @@ $("aiClearBtn").addEventListener("click", () => {
 
 $("aiForm").addEventListener("submit", (e) => {
   e.preventDefault();
+  // The same button is Send and Stop; which one it is right now is the only
+  // thing that decides what submitting does.
+  if (aiStreamController) { stopAiStream(); return; }
   const text = $("aiInput").value.trim();
   if (!text) return;
   $("aiInput").value = "";
   sendAi(text);
+  setAiBusy(true);
 });
+
+// Send stays dead until there is something to send.
+$("aiInput").addEventListener("input", () => { if (!aiStreamController) setAiBusy(false); });
+// And it starts dead, rather than live over an empty box until the first
+// keystroke happens to refresh it.
+setAiBusy(false);
 
 
 function escapeHtml(s) {
@@ -3247,13 +3269,47 @@ function editMessage(index) {
   sendAi(trimmed);
 }
 
+function aiComposerControls() {
+  return {
+    input: $("aiInput"),
+    submit: $("aiForm")?.querySelector('button[type="submit"]'),
+    quick: [...document.querySelectorAll(".ai-quick button")],
+  };
+}
+
+function setAiBusy(busy) {
+  const input = $("aiInput");
+  applyComposerState(
+    composerStateModel({ busy, hasText: !!input?.value.trim(), canStop: !!aiStreamController }),
+    aiComposerControls(),
+  );
+}
+
+function stopAiStream() {
+  if (!aiStreamController) return false;
+  aiStreamController.abort();
+  aiStreamController = null;
+  return true;
+}
+
 async function sendAi(userText) {
   if (!activeAssignment) return;
+  // A send while one is already in flight used to interleave two streams into
+  // the same transcript. The composer is closed below, but this is the guard
+  // that actually holds — a quick-prompt button or Enter can still race it.
+  if (aiStreamController) return;
   aiHistory.push({ role: "user", content: userText });
   addMsg("user", userText, aiHistory.length - 1);
-  const thinking = addMsg("assistant", "…");
+  const thinking = $("aiMessages").appendChild(thinkingBubble());
+  scrollChatToBottom();
+  aiStreamController = new AbortController();
+  const signal = aiStreamController.signal;
+  setAiBusy(true);
 
   const a = activeAssignment;
+  // Declared out here so the catch below can keep a partial answer when the
+  // student presses Stop.
+  let accumulated = "";
 
   // The open assignment is sent as `focus`, NOT as the first retrieved note.
   //
@@ -3288,6 +3344,7 @@ async function sendAi(userText) {
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      signal,
       body: JSON.stringify({
         messages: aiHistory,
         notes: tutorNotes,
@@ -3307,12 +3364,19 @@ async function sendAi(userText) {
     const reader = r.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let accumulated = "";
     thinking.innerHTML = "";
 
+    thinking.classList.remove("ai-thinking");
+    thinking.removeAttribute("role");
+    thinking.removeAttribute("aria-label");
+
     const flush = () => {
+      // Read the position BEFORE the new text changes scrollHeight, or every
+      // chunk looks like the reader has just been pushed off the bottom.
+      const scroller = $("aiScroll")?.scrollHeight > $("aiScroll")?.clientHeight ? $("aiScroll") : $("aiMessages");
+      const following = isAtBottom(scroller);
       thinking.innerHTML = renderMarkdown(accumulated);
-      scrollChatToBottom();
+      followOutput(scroller, following);
     };
 
     while (true) {
@@ -3338,7 +3402,9 @@ async function sendAi(userText) {
     }
 
     if (!accumulated) {
-      thinking.textContent = "(no response)";
+      const end = streamEndModel({ text: "" });
+      thinking.className = end.className;
+      thinking.innerHTML = renderMarkdown(end.text);
     } else {
       aiHistory.push({ role: "assistant", content: accumulated });
       renderChatHistory();
@@ -3346,8 +3412,21 @@ async function sendAi(userText) {
       refreshSuggestions();
     }
   } catch (e) {
-    thinking.className = "ai-msg error";
-    thinking.textContent = e.message;
+    // A deliberate Stop is not an error. Keep whatever had arrived: it is
+    // usually most of the answer, and discarding it punishes stopping.
+    const aborted = e?.name === "AbortError";
+    const end = streamEndModel({ text: accumulated, aborted, error: aborted ? "" : e.message });
+    thinking.className = end.className;
+    thinking.innerHTML = renderMarkdown(end.text);
+    if (aborted && accumulated.trim()) {
+      aiHistory.push({ role: "assistant", content: accumulated });
+      saveChatHistory(activeAssignment.id, aiHistory);
+    } else if (!aborted) {
+      aiHistory.pop();
+    }
+  } finally {
+    aiStreamController = null;
+    setAiBusy(false);
   }
 }
 

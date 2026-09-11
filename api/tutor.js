@@ -191,6 +191,58 @@ export function buildTutorMessages(messages, notes, options = {}) {
   ];
 }
 
+// Questions whose answer is COPIED OUT of the context we already supplied:
+// the due date, the task list, what is attached. A 550B model adds nothing to
+// reading a field back, and every call spends a slot on one shared free key.
+const LOOKUP_PATTERNS = [
+  /\bwhen\s+(is|was|does|do)\b/i,
+  /\b(due|deadline|hand(ed)?\s*in|submitted|turned\s*in)\b/i,
+  /\bwhat('?s| is| are)?\s+(attached|the attachments?|included)\b/i,
+  /\bwhat\s+do\s+i\s+need\s+(to know|for)\b/i,
+  /\b(list|summar(ise|ize|y)|overview|recap|tl;?dr)\b/i,
+  /\bwhich\s+(class|course|topic|sprint)\b/i,
+  /\bhave\s+i\s+(done|submitted|handed)\b/i,
+];
+
+// Questions that need actual reasoning or teaching. These win over a lookup
+// match, because "explain what I need to know" is a teaching request wearing a
+// lookup's words.
+const REASONING_PATTERNS = [
+  /\bexplain\b|\bwhy\b|\bhow\s+(do|does|can|would|should)\b/i,
+  /\b(prove|derive|solve|calculate|work\s+out|step[-\s]?by[-\s]?step)\b/i,
+  /\bi\s+(don'?t|do not|can'?t)\s+(understand|get|follow)\b/i,
+  /\b(difference|compare|contrast|versus|vs\.?)\b/i,
+  /\b(quiz|test)\s+me\b|\bpractice\b|\bexample[s]?\s+of\b/i,
+  /\bwhat\s+(is|are)\s+(a|an|the)?\s*\w+\s*\?*$/i,
+];
+
+/**
+ * Which tier this question deserves.
+ *
+ * A local heuristic, not a model call. The router can classify with a cheap
+ * model first, but here that would mean a second round trip against the SAME
+ * single free key before the student sees a token — paying latency and quota
+ * to save quota.
+ *
+ * It is deliberately biased. Only a confident lookup is downgraded; everything
+ * else, including anything ambiguous, gets the strong tier. Answering a lookup
+ * with a big model is merely wasteful. Answering "explain this proof" with the
+ * smallest model gives a student a worse explanation, and they have no way to
+ * know that is why.
+ */
+export function tutorQuestionTier(messages) {
+  const last = [...(Array.isArray(messages) ? messages : [])]
+    .reverse()
+    .find((m) => m?.role === "user")?.content;
+  const text = typeof last === "string" ? last.trim().slice(0, 500) : "";
+  if (!text) return "tutor";
+  if (REASONING_PATTERNS.some((re) => re.test(text))) return "hard";
+  if (LOOKUP_PATTERNS.some((re) => re.test(text))) return "quick";
+  // A long question is doing something more than asking for a field back.
+  if (text.length > 180) return "hard";
+  return "tutor";
+}
+
 export default async function handler(req) {
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
@@ -212,6 +264,7 @@ export default async function handler(req) {
 
   // `focus` is the item the student has open. Its absence is a valid state and
   // the prompt says so; what it must never do is silently imply an anchor.
+  const task = tutorQuestionTier(body.messages);
   const messages = buildTutorMessages(body.messages, notes, {
     language,
     focus: body.focus,
@@ -228,7 +281,9 @@ export default async function handler(req) {
   // ---- Route through all providers with failover ----
   let routed;
   try {
-    routed = await routeChat(messages, { task: "tutor", stream: true });
+    // Per-question routing. With one provider configured, the tier no longer
+    // selects a provider — it selects a model inside that provider's chain.
+    routed = await routeChat(messages, { task, stream: true });
   } catch (e) {
     return jsonResponse({ error: "AI request failed", details: e.message }, 502);
   }
@@ -259,6 +314,7 @@ export default async function handler(req) {
       "X-AI-Provider": routed.provider,
       "X-AI-Model": routed.model,
       "X-AI-Tier": String(routed.meta?.tier ?? ""),
+      "X-AI-Task": task,
       "X-AI-Attempts": String(routed.meta?.attempts ?? 1),
       "X-AI-Fallback": routed.meta?.fallbackReason || "none",
       "X-RateLimit-Used": String(rate.count),

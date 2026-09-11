@@ -204,3 +204,93 @@ test("with no focus the relevance order is left exactly as found", () => {
   const same = [{ t: "a", course: "X" }, { t: "b", course: "X" }];
   assert.deepEqual(rankByCourseAffinity(same, { course: "X" }).map((h) => h.t), ["a", "b"]);
 });
+
+// --- per-question routing -------------------------------------------------
+
+import { tutorQuestionTier } from "../api/tutor.js";
+import { providerModels, providerModelEntries, PROVIDERS } from "../api/ai-router.js";
+
+const ask = (q) => tutorQuestionTier([{ role: "user", content: q }]);
+
+test("questions answered by reading the context back route cheap", () => {
+  // Every one of these is a field we already put in the prompt. A 550B model
+  // adds nothing to reading it out, and the key is shared and rate-limited.
+  assert.equal(ask("when is this due?"), "quick");
+  assert.equal(ask("have i submitted this yet"), "quick");
+  assert.equal(ask("what's attached to this assignment?"), "quick");
+  assert.equal(ask("what do i need to know for this quiz?"), "quick");
+  assert.equal(ask("give me a summary"), "quick");
+});
+
+test("questions that need teaching or reasoning route strong", () => {
+  assert.equal(ask("explain what an idiom is"), "hard");
+  assert.equal(ask("why does this work?"), "hard");
+  assert.equal(ask("how do i solve this equation"), "hard");
+  assert.equal(ask("i don't understand similes"), "hard");
+  assert.equal(ask("what's the difference between a simile and a metaphor"), "hard");
+  assert.equal(ask("quiz me on these"), "hard");
+});
+
+test("a teaching request wearing a lookup's words is still teaching", () => {
+  // Matches both pattern sets; reasoning has to win or the student gets the
+  // small model for the question they most needed the big one for.
+  assert.equal(ask("explain what i need to know for this quiz"), "hard");
+  assert.equal(ask("summarise this and then explain why it matters"), "hard");
+});
+
+test("anything unclear gets the strong model, not the cheap one", () => {
+  // The asymmetry: a wasted big call costs quota, a wrong small call costs the
+  // student a worse explanation they cannot detect.
+  assert.equal(ask("hmm"), "tutor");
+  assert.equal(ask(""), "tutor");
+  assert.equal(tutorQuestionTier([]), "tutor");
+  assert.equal(tutorQuestionTier(null), "tutor");
+  assert.equal(tutorQuestionTier([{ role: "assistant", content: "when is this due?" }]), "tutor");
+  // A long question is doing more than asking for a field back.
+  assert.equal(ask("a".repeat(200)), "hard");
+});
+
+test("the tier is read from the student's latest message, not the first", () => {
+  const thread = [
+    { role: "user", content: "when is this due?" },
+    { role: "assistant", content: "Friday." },
+    { role: "user", content: "explain why that matters" },
+  ];
+  assert.equal(tutorQuestionTier(thread), "hard");
+});
+
+// --- tier -> model selection ----------------------------------------------
+
+const OPENROUTER = PROVIDERS.find((p) => p.name === "openrouter");
+
+test("a cheap question puts a smaller model first, a hard one the strongest", () => {
+  const strong = providerModels(OPENROUTER, { tier: 3 });
+  const cheap = providerModels(OPENROUTER, { tier: 1 });
+  const entries = providerModelEntries(OPENROUTER);
+  const strengthOf = (id) => entries.find((e) => e.id === id).strength;
+  assert.equal(strengthOf(strong[0]), 3, "a hard question did not get a strong model");
+  assert.ok(strengthOf(cheap[0]) < 3, "a lookup still burned the strongest model");
+});
+
+test("no tier preference ever drops a model from the chain", () => {
+  // The whole failover story rests on this: a preference reorders, it never
+  // shortens. One provider carries production; a short chain is an outage.
+  const full = providerModels(OPENROUTER).slice().sort();
+  for (const tier of [1, 2, 3]) {
+    assert.deepEqual(providerModels(OPENROUTER, { tier }).slice().sort(), full,
+      `tier ${tier} lost a model from the chain`);
+  }
+});
+
+test("ties break upward — the stronger model wins an equal gap", () => {
+  const p = { models: [{ id: "weak", strength: 1 }, { id: "strong", strength: 3 }] };
+  // Tier 2 is one step from both. The stronger one goes first.
+  assert.deepEqual(providerModels(p, { tier: 2 }), ["strong", "weak"]);
+});
+
+test("a plain string chain still works and defaults to mid strength", () => {
+  const p = { models: ["a", "b"] };
+  assert.deepEqual(providerModels(p), ["a", "b"]);
+  assert.deepEqual(providerModelEntries(p), [{ id: "a", strength: 2 }, { id: "b", strength: 2 }]);
+  assert.deepEqual(providerModels({ model: "solo" }), ["solo"]);
+});

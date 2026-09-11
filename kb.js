@@ -19,6 +19,7 @@ import { renderLightMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput } from "./chat-ux.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -1488,7 +1489,15 @@ export function wireKbEvents() {
   tutorClose?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = true; });
   tutorClearChat?.addEventListener("click", clearTutorUi);
   tutorNewTopic?.addEventListener("click", resetTutorUi);
-  tutorForm?.addEventListener("submit", (e) => { e.preventDefault(); const v = tutorInput?.value.trim(); if (v) sendTutor(v); });
+  tutorForm?.addEventListener("submit", (e) => {
+    e.preventDefault();
+    // One button, two jobs — which one depends on whether a reply is running.
+    if (tutorStreamController) { stopTutorStream(); return; }
+    const v = tutorInput?.value.trim();
+    if (v) { sendTutor(v); setTutorBusy(true); }
+  });
+  tutorInput?.addEventListener("input", () => { if (!tutorStreamController) setTutorBusy(false); });
+  setTutorBusy(false);
   document.querySelectorAll("#kbTutorModal .ai-quick button").forEach((b) =>
     b.addEventListener("click", () => { const p = b.dataset.prompt; if (p) sendTutor(p); })
   );
@@ -3230,7 +3239,35 @@ function preferredTutorLanguage() {
   } catch { return "en"; }
 }
 
+/** The in-flight tutor reply — see chat-ux.js. Null when idle. */
+let tutorStreamController = null;
+
+function tutorComposerControls() {
+  return {
+    input: $("kbTutorInput"),
+    submit: $("kbTutorForm")?.querySelector('button[type="submit"]'),
+    quick: [...document.querySelectorAll("#kbTutorModal .ai-quick button")],
+  };
+}
+
+function setTutorBusy(busy) {
+  applyComposerState(
+    composerStateModel({ busy, hasText: !!$("kbTutorInput")?.value.trim(), canStop: !!tutorStreamController }),
+    tutorComposerControls(),
+  );
+}
+
+function stopTutorStream() {
+  if (!tutorStreamController) return false;
+  tutorStreamController.abort();
+  tutorStreamController = null;
+  return true;
+}
+
 async function sendTutor(text, { retry = false } = {}) {
+  // One reply at a time. The quick-prompt buttons call straight in here, so
+  // the disabled composer alone is not enough of a guard.
+  if (tutorStreamController) return;
   const input = $("kbTutorInput");
   if (input) input.value = "";
   if (!retry) {
@@ -3240,7 +3277,12 @@ async function sendTutor(text, { retry = false } = {}) {
   const sourcesEl = $("kbTutorSources");
   if (sourcesEl) sourcesEl.innerHTML = `<span class="ai-context-note">Thinking… (searching the knowledge base)</span>`;
 
-  const assistantEl = addTutorMessage("assistant", "…", true);
+  const wrap = $("kbTutorMessages");
+  const assistantEl = wrap ? wrap.appendChild(thinkingBubble()) : null;
+  if (assistantEl) { assistantEl.dataset.role = "assistant"; wrap.scrollTop = wrap.scrollHeight; }
+  tutorStreamController = new AbortController();
+  const signal = tutorStreamController.signal;
+  setTutorBusy(true);
   let acc = "";
   try {
     const focus = openTutorFocus();
@@ -3250,6 +3292,7 @@ async function sendTutor(text, { retry = false } = {}) {
     const r = await fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
+      signal,
       body: JSON.stringify({ messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage() }),
     });
     if (!r.ok) {
@@ -3290,7 +3333,22 @@ async function sendTutor(text, { retry = false } = {}) {
           // A control event from the tutor route: sources used for grounding.
           if (j && j.type === "sources") { sources = Array.isArray(j.notes) ? j.notes : []; continue; }
           const delta = j.choices?.[0]?.delta?.content;
-          if (delta) { acc += delta; if (assistantEl) assistantEl.textContent = acc; }
+          if (delta) {
+            acc += delta;
+            if (assistantEl) {
+              if (assistantEl.classList.contains("ai-thinking")) {
+                assistantEl.classList.remove("ai-thinking");
+                assistantEl.removeAttribute("role");
+                assistantEl.removeAttribute("aria-label");
+                assistantEl.textContent = "";
+              }
+              // Position read BEFORE the text lands, or every chunk reads as
+              // "the user just scrolled away".
+              const following = isAtBottom(wrap);
+              assistantEl.textContent = acc;
+              followOutput(wrap, following);
+            }
+          }
         } catch {}
       }
     }
@@ -3304,10 +3362,20 @@ async function sendTutor(text, { retry = false } = {}) {
     addTutorAttribution(assistantEl, provider, model);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {
+    const aborted = e?.name === "AbortError";
+    const end = streamEndModel({ text: acc, aborted, error: aborted ? "" : e.message });
     if (assistantEl) {
-      assistantEl.textContent = `❌ ${e.message}`;
-      addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
+      assistantEl.classList.remove("ai-thinking");
+      assistantEl.className = `ai-msg ai-msg-assistant${end.className.includes("error") ? " error" : ""}`;
+      assistantEl.textContent = end.text;
+      // A deliberate Stop is not a failure, so it gets no retry prompt.
+      if (!aborted) addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
     }
+    // Keep a stopped partial answer in the thread: it is usually most of it.
+    if (aborted && acc.trim()) tutorMessages.push({ role: "assistant", content: acc });
+  } finally {
+    tutorStreamController = null;
+    setTutorBusy(false);
   }
 }
 
