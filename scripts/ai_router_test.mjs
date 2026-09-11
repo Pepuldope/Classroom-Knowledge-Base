@@ -27,6 +27,10 @@ import {
   __debugSetHealth,
   setDrillDown,
   getDrillState,
+  providerModels,
+  primaryModel,
+  isModelLevelFailure,
+  completeChat,
 } from "../api/ai-router.js";
 
 // Enable all bundled providers (module read process.env at load; stub keys).
@@ -42,14 +46,23 @@ function json(status, obj) {
   return { status, ok: status >= 200 && status < 300, json: async () => obj, text: async () => JSON.stringify(obj) };
 }
 function installFetch(scenario = {}) {
-  global.fetch = async (url) => {
+  global.fetch = async (url, init) => {
     const p = byUrl.get(url);
     const name = p?.name;
+    // The model actually asked for — a provider with a chain sends a different
+    // one on each attempt, and that is the whole thing under test below.
+    let model = null;
+    try { model = JSON.parse(init?.body || "{}").model || null; } catch {}
+    if (scenario.onRequest) scenario.onRequest(name, model);
     if (scenario.classifyTier && name === "cerebras") {
       return json(200, { choices: [{ message: { content: `{"tier":"${scenario.classifyTier}"}` } }] });
     }
+    if (scenario.deadModels?.[model]) {
+      const dead = scenario.deadModels[model];
+      return { status: dead.status, ok: false, json: async () => ({}), text: async () => dead.body };
+    }
     if (scenario.fail && scenario.fail.includes(name)) return json(429, { error: "rate" });
-    return json(200, { choices: [{ message: { content: `OK-from-${name}` } }] });
+    return json(200, { choices: [{ message: { content: `OK-from-${name}:${model}` } }] });
   };
 }
 beforeEach(() => resetRouterHealth());
@@ -332,4 +345,97 @@ test("KV-backed drill: setDrillDown marks a provider down and logs it", async ()
     process.env.KV_REST_API_URL = REAL.url;
     process.env.KV_REST_API_TOKEN = REAL.tok;
   }
+});
+
+
+// ---------------------------------------------------------------------------
+// Model chains — the 2026-09-11 outage.
+//
+// Production has exactly ONE configured provider (router-health reports
+// `configured: false` for the other eight), so "fail over to the next provider"
+// had nowhere to go. When `openai/gpt-oss-120b:free` was moved to paid, the
+// popup tutor returned a flat 502. The fix is depth WITHIN a provider.
+// ---------------------------------------------------------------------------
+
+/**
+ * Leave openrouter as the ONLY configured provider, which is what production
+ * actually is, and restore the rest afterwards.
+ */
+function onlyOpenRouter(fn) {
+  const saved = PROVIDERS.map((p) => [p, p.apiKey]);
+  for (const p of PROVIDERS) if (p.name !== "openrouter") p.apiKey = "";
+  return (async () => { try { return await fn(); } finally { for (const [p, key] of saved) p.apiKey = key; } })();
+}
+
+const OR = () => PROVIDERS.find((p) => p.name === "openrouter");
+
+test("a retired slug falls through to the next model on the same key", () => onlyOpenRouter(async () => {
+  const chain = providerModels(OR());
+  const asked = [];
+  installFetch({
+    onRequest: (name, model) => { if (name === "openrouter") asked.push(model); },
+    deadModels: {
+      [chain[0]]: {
+        status: 404,
+        body: '{"error":{"message":"This model is unavailable for free. The paid version is available now","code":404}}',
+      },
+    },
+  });
+  const r = await completeChat([{ role: "user", content: "hi" }], { task: "hard" });
+  // The exact failure Pepuldo hit: model one is gone, and the answer still
+  // arrives — from model two, on the same key, with no user-visible error.
+  assert.deepEqual(asked.slice(0, 2), [chain[0], chain[1]]);
+  assert.equal(r.model, chain[1], "the answer was not attributed to the model that gave it");
+  assert.match(r.text, /OK-from-openrouter/);
+}));
+
+test("a chain with every model retired reports all of them, not just the last", () => onlyOpenRouter(async () => {
+  const chain = providerModels(OR());
+  const dead = {};
+  for (const m of chain) dead[m] = { status: 404, body: '{"error":{"message":"unavailable for free","code":404}}' };
+  installFetch({ deadModels: dead });
+  const err = await completeChat([{ role: "user", content: "hi" }], { task: "hard" }).then(() => null, (e) => e);
+  assert.ok(err, "an entirely dead chain still answered");
+  // The 502 that started this named one slug and hid the rest. Whoever reads
+  // the next one should be able to see the whole chain is gone.
+  for (const model of chain) assert.match(err.message, new RegExp(model.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+}));
+
+test("a dead key is not retried against four more models", () => onlyOpenRouter(async () => {
+  // The counterpart rule. Walking the chain on a 401 is four more ways to be
+  // slow about the same failure.
+  const asked = [];
+  const dead = {};
+  for (const m of providerModels(OR())) dead[m] = { status: 401, body: '{"error":"invalid key"}' };
+  installFetch({ onRequest: (name, model) => { if (name === "openrouter") asked.push(model); }, deadModels: dead });
+  await completeChat([{ role: "user", content: "hi" }], { task: "hard" }).catch(() => null);
+  assert.equal(asked.length, 1, `a 401 tried ${asked.length} models; it should stop at the first`);
+}));
+
+test("model-level failures are told apart from provider-level ones", () => {
+  // A retired or paid-only slug: try the next model.
+  assert.equal(isModelLevelFailure(404, "no endpoints found"), true);
+  assert.equal(isModelLevelFailure(404, "This model is unavailable for free. The paid version is available now"), true);
+  assert.equal(isModelLevelFailure(400, "model not found"), true);
+  // A per-model upstream limit: try the next model. An account-wide one: do not.
+  assert.equal(isModelLevelFailure(429, "temporarily rate-limited upstream"), true);
+  assert.equal(isModelLevelFailure(429, "Provider returned error"), true);
+  assert.equal(isModelLevelFailure(429, "You have exceeded your daily quota"), false);
+  // The key and the service are never the model's fault.
+  assert.equal(isModelLevelFailure(401, "invalid key"), false);
+  assert.equal(isModelLevelFailure(500, "upstream"), false);
+  assert.equal(isModelLevelFailure(200, ""), false);
+});
+
+test("every provider resolves to at least one model, chain or not", () => {
+  for (const p of PROVIDERS) {
+    const chain = providerModels(p);
+    assert.ok(chain.length >= 1, `${p.name} resolves to no model at all`);
+    assert.equal(primaryModel(p), chain[0]);
+    assert.ok(chain.every((m) => typeof m === "string" && m.length), `${p.name} has an empty model id`);
+  }
+  // The one provider that actually carries production has real depth.
+  const or = PROVIDERS.find((p) => p.name === "openrouter");
+  assert.ok(providerModels(or).length >= 3,
+    "openrouter is the only configured provider in production; a short chain is an outage waiting for a retirement");
 });

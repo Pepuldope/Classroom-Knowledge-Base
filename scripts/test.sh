@@ -91,7 +91,7 @@ GATES=(
 "models|-|Commit-guard secret scanner tests|python3 scripts/guard_regex_test.py"
 "models|-|Live-check mitigation classifier tests|node --test tests/live-http.test.js"
 "models,kb|-|Related preview accessibility model tests|node --test tests/kb-related-status.test.js"
-"models|net|Enrichment model chain still exists on OpenRouter|node scripts/enrich_models_test.mjs"
+"models|net|Every OpenRouter model id is live and free|node scripts/model_catalogue_test.mjs"
 "auth|srv|IndexedDB auth-session reload e2e|node scripts/auth_session_reload_test.mjs"
 "auth|srv|IndexedDB auth-session continuity e2e|node scripts/auth_session_continuity_test.mjs"
 "auth|srv|Returning user never sees the sign-in card|node scripts/auth_restore_flash_test.mjs"

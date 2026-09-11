@@ -108,21 +108,72 @@ export const PROVIDERS = [
     effort: 2,
     capabilities: ["json"], // tool-use depends on the proxied model; don't assume.
   },
-  // 9. OpenRouter — gpt-oss-120b:free for very-high-intelligence (effort-3) tasks.
-  //    Replaces deepseek/deepseek-v4-pro, which is NOT free on OpenRouter (Pepuldo:
-  //    "on openrouter it is not free"). gpt-oss-120b:free is a strong open MoE with
-  //    131K context, $0 pricing — a genuine free effort-3 slot. Not the default, so
-  //    we don't lean on a single provider / weak model.
+  // 9. OpenRouter — the effort-3 slot, and in practice the ONLY configured
+  //    provider: /api/router-health on production reports `configured: false`
+  //    for all eight above, because only OPENROUTER_API_KEY is set. Every
+  //    nine-provider failover story in this file is, live, a single key.
+  //
+  //    That is why this one carries a CHAIN. On 2026-09-11 the popup tutor
+  //    returned a flat 502 — "This model is unavailable for free. The paid
+  //    version is available now" — because `openai/gpt-oss-120b:free` had been
+  //    moved off the free tier. One retired slug, no second model behind it,
+  //    total outage. Free OpenRouter slugs are retired WITHOUT NOTICE; treating
+  //    any single one as load-bearing is the bug, not the slug that died.
+  //
+  //    Ordered strongest first, vendors mixed so retirements are uncorrelated.
+  //    Verified against https://openrouter.ai/api/v1/models on 2026-09-11;
+  //    scripts/model_catalogue_test.mjs re-checks every id in this repo.
   {
     name: "openrouter",
     baseURL: "https://openrouter.ai/api/v1/chat/completions",
     apiKey: process.env.OPENROUTER_API_KEY,
-    model: "openai/gpt-oss-120b:free",
+    models: [
+      "nvidia/nemotron-3-ultra-550b-a55b:free",   // 550B MoE, 1M ctx
+      "nvidia/nemotron-3-super-120b-a12b:free",   // 120B, 262K, structured output
+      "google/gemma-4-31b-it:free",               // strong instruction-tuned
+      "dots-studio/dots-3-note-preview:free",     // 512K ctx
+      "nex-agi/nex-n2.5-pro:free",
+    ],
     effort: 3,
     capabilities: ["json", "long_context"],
     headers: { "HTTP-Referer": "https://classroom-knowledge-base.vercel.app", "X-Title": "Classroom KB" },
   },
 ];
+
+/**
+ * The models to try for a provider, in order.
+ *
+ * `model` (one id) and `models` (a chain) are both supported: the eight
+ * single-key providers name one model each because their id is stable, and
+ * OpenRouter carries a chain because its free ids are not.
+ */
+export function providerModels(p) {
+  const chain = Array.isArray(p?.models) ? p.models.filter(Boolean) : [];
+  if (chain.length) return chain;
+  return p?.model ? [p.model] : [];
+}
+
+/** The id to report when nothing has been attempted yet. */
+export function primaryModel(p) {
+  return providerModels(p)[0] || null;
+}
+
+/**
+ * Does this failure condemn the MODEL, or the whole provider?
+ *
+ * The distinction decides whether we try the next model on the same key or give
+ * up on the key entirely. A retired or paid-only slug is a 404 and says nothing
+ * about the other four. A 401 is the key. A 429 is either: OpenRouter words a
+ * per-model upstream limit as "temporarily rate-limited upstream" / "Provider
+ * returned error", and an account-wide one plainly — api/ai.js has drawn this
+ * same line since it was written.
+ */
+export function isModelLevelFailure(status, body = "") {
+  if (status === 404) return true;
+  if (status === 400 && /model|slug|not.{0,12}(found|available)/i.test(body)) return true;
+  if (status === 429) return /upstream|provider returned error/i.test(body);
+  return false;
+}
 
 function enabledProviders() {
   return PROVIDERS.filter((p) => p.apiKey && p.baseURL);
@@ -137,7 +188,8 @@ function enabledProviders() {
 export function listProviderAvailability() {
   return PROVIDERS.map((p) => ({
     name: p.name,
-    model: p.model,
+    model: primaryModel(p),
+    models: providerModels(p),
     effort: p.effort,
     configured: !!(p.apiKey && p.baseURL),
   }));
@@ -439,6 +491,17 @@ export function getRouterMetrics() {
  * Call a single provider. Throws on 429/401/5xx/network so the caller fails
  * over. Returns { text, provider, model } (or { stream, ... }).
  */
+/**
+ * Call one provider, walking its model chain.
+ *
+ * A model-level failure (a retired slug, a per-model upstream 429) moves to the
+ * next model on the SAME key. Anything else — the key is bad, the account is
+ * rate-limited, the service is down — throws immediately, because trying four
+ * more models against a dead key is four more ways to be slow about it.
+ *
+ * The error thrown when the chain is exhausted carries every model tried, so
+ * the 502 a user eventually sees names all of them rather than only the last.
+ */
 async function callProviderOnce(p, { messages, max_tokens, temperature, stream }) {
   if (_forcedFail.has(p.name)) {
     const e = new Error(`${p.name} forced-fail (drill)`);
@@ -446,36 +509,54 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream }
     e.status = 429;
     throw e;
   }
-  const body = {
-    model: p.model,
-    messages,
-    max_tokens,
-    temperature,
-    stream,
-    ...(p.extra || {}),
-  };
   const headers = {
     Authorization: `Bearer ${p.apiKey}`,
     "Content-Type": "application/json",
     ...(p.headers || {}),
   };
-  const res = await fetch(p.baseURL, { method: "POST", headers, body: JSON.stringify(body) });
-  if (res.status === 429 || res.status === 401 || res.status >= 500) {
-    const e = new Error(`${p.name} HTTP ${res.status}`);
+  const chain = providerModels(p);
+  if (chain.length === 0) {
+    const e = new Error(`${p.name} has no model configured`);
     e.provider = p.name;
-    e.status = res.status;
+    e.status = 500;
     throw e;
   }
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    const e = new Error(`${p.name} HTTP ${res.status}: ${t.slice(0, 200)}`);
+
+  const skipped = [];
+  for (let i = 0; i < chain.length; i++) {
+    const model = chain[i];
+    const body = { model, messages, max_tokens, temperature, stream, ...(p.extra || {}) };
+    const res = await fetch(p.baseURL, { method: "POST", headers, body: JSON.stringify(body) });
+
+    if (res.ok) {
+      if (stream) return { stream: res.body, provider: p.name, model, response: res };
+      const data = await res.json();
+      return { text: data.choices?.[0]?.message?.content || "", provider: p.name, model };
+    }
+
+    // Read the body once: the text is what tells a dead slug apart from a dead
+    // key, and a 429 upstream apart from a 429 account-wide.
+    const text = await res.text().catch(() => "");
+    const last = i === chain.length - 1;
+    if (!last && isModelLevelFailure(res.status, text)) {
+      skipped.push(`${model} (HTTP ${res.status})`);
+      bump(_metrics.byReason, "model_retired");
+      continue;
+    }
+    const detail = text ? `: ${text.slice(0, 200)}` : "";
+    const tail = skipped.length ? ` [after ${skipped.join(", ")}]` : "";
+    // Name the model that failed, not just the provider. The 502 that started
+    // this said "openrouter HTTP 404" and left whoever read it to guess which
+    // of five slugs had died.
+    const e = new Error(`${p.name} ${model} HTTP ${res.status}${detail}${tail}`);
     e.provider = p.name;
     e.status = res.status;
+    e.model = model;
+    e.modelsTried = [...skipped.map((s) => s.split(" ")[0]), model];
     throw e;
   }
-  if (stream) return { stream: res.body, provider: p.name, model: p.model, response: res };
-  const data = await res.json();
-  return { text: data.choices?.[0]?.message?.content || "", provider: p.name, model: p.model };
+  // Unreachable: the loop either returns or throws on its last iteration.
+  throw new Error(`${p.name}: model chain exhausted`);
 }
 
 /**
@@ -494,8 +575,8 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream }
 export async function shadowCheckDeepSeek(messages, opts, getPrimary) {
   // Only run for effort-3 (hard) calls, and only if the OpenRouter slot is up
   // and not the one that already served the answer (avoid double-counting).
-  // The OpenRouter slot is now openai/gpt-oss-120b:free (free, effort-3) — used
-  // as an independent parallel second-opinion on hard tasks.
+  // The OpenRouter slot runs its own model chain (see PROVIDERS) — used as an
+  // independent parallel second-opinion on hard tasks.
   const deepseek = PROVIDERS.find((p) => p.name === "openrouter");
   if (!deepseek || !deepseek.apiKey || !deepseek.baseURL) {
     return { ok: false, error: "openrouter not configured", model: null, text: null, agreement: null };
@@ -519,7 +600,7 @@ export async function shadowCheckDeepSeek(messages, opts, getPrimary) {
     return { ok: true, model: r.model, text: r.text || "", agreement: null, provider: "openrouter" };
   } catch (e) {
     bump(_metrics, "shadowFailures");
-    return { ok: false, error: e?.message || String(e), model: deepseek.model, text: null, agreement: null };
+    return { ok: false, error: e?.message || String(e), model: primaryModel(deepseek), text: null, agreement: null };
   }
 }
 
@@ -686,7 +767,7 @@ export async function routeChat(messages, opts = {}) {
     if (!underRpmLimit(p)) {
       lastErr = new Error(`${p.name} skipped: rpmLimit (${p.rpmLimit}/min) reached`);
       bump(_metrics.byReason, "rpm_skip");
-      logRoute({ tier, task, provider: p.name, model: p.model, reason: "rpm_skip", latencyMs: 0 });
+      logRoute({ tier, task, provider: p.name, model: primaryModel(p), reason: "rpm_skip", latencyMs: 0 });
       continue;
     }
     const pt0 = Date.now();
@@ -700,12 +781,12 @@ export async function routeChat(messages, opts = {}) {
       const reason = tried.length ? `fallback_after:${tried.join(",")}` : (isProbe ? "half_open_probe_ok" : "ok");
       if (tried.length) bump(_metrics, "fallbacks");
       if (isProbe) bump(_metrics, "probes");
-      logRoute({ tier, task, provider: p.name, model: p.model, reason, latencyMs: latency });
+      logRoute({ tier, task, provider: p.name, model: r.model, reason, latencyMs: latency });
       // Attach the full routing decision so callers can surface fallback
       // lineage (check #2) without re-deriving it.
       const meta = {
         provider: p.name,
-        model: p.model,
+        model: r.model,
         tier,
         task,
         attempts: tried.length + 1,
@@ -715,7 +796,7 @@ export async function routeChat(messages, opts = {}) {
       };
       // ---- Parallel OpenRouter shadow check (hard/effort-3 only, non-stream) ----
       // Nemotron (or whichever provider answered) is authoritative; the OpenRouter
-      // gpt-oss-120b:free slot runs the SAME request concurrently as an independent
+      // slot runs the SAME request concurrently as an independent
       // second opinion. It never blocks the primary response. Result is attached for
       // telemetry / confidence — not used as the served text.
       let shadow = null;
@@ -730,7 +811,7 @@ export async function routeChat(messages, opts = {}) {
             }
             return s;
           })
-          .catch((e) => ({ ok: false, error: String(e), model: "openai/gpt-oss-120b:free", text: null, agreement: null }));
+          .catch((e) => ({ ok: false, error: String(e), model: null, text: null, agreement: null }));
       }
       return { ...r, meta, shadow };
     } catch (e) {
@@ -740,7 +821,7 @@ export async function routeChat(messages, opts = {}) {
       const etype =
         e.status === 429 ? "rate_limited" : e.status >= 500 ? "server_error" : e.status === 401 ? "auth_error" : "other";
       bump(_metrics.byReason, etype);
-      logRoute({ tier, task, provider: p.name, model: p.model, reason: `error:${etype}`, latencyMs: latency, errorType: etype, ok: false });
+      logRoute({ tier, task, provider: p.name, model: e.model || primaryModel(p), reason: `error:${etype}`, latencyMs: latency, errorType: etype, ok: false });
       lastErr = e; // 429 / 5xx / network / forced-fail -> try the next provider
       tried.push(p.name);
       continue;

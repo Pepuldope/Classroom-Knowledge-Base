@@ -8,10 +8,15 @@ export const config = { runtime: "edge" };
 // A chain rather than a pair: :free models answer 429 "temporarily
 // rate-limited upstream" when their shared capacity is busy, which one backup
 // does not survive. Mixed vendors so the failures are uncorrelated.
+// Verified against the live catalogue on 2026-09-11;
+// scripts/model_catalogue_test.mjs re-checks every id in this repo.
+// `minimax/minimax-m2.7:free` was here and had been retired — it cost a
+// round-trip and a 404 on every call that reached it.
 const MODEL_CHAIN = [
+  "nvidia/nemotron-3-ultra-550b-a55b:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
   "google/gemma-4-31b-it:free",
-  "minimax/minimax-m2.7:free",
+  "dots-studio/dots-3-note-preview:free",
   "nvidia/nemotron-3.5-lightning:free",
 ];
 
