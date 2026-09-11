@@ -93,6 +93,7 @@ GATES=(
 "models|net|Enrichment model chain still exists on OpenRouter|node scripts/enrich_models_test.mjs"
 "auth|srv|IndexedDB auth-session reload e2e|node scripts/auth_session_reload_test.mjs"
 "auth|srv|IndexedDB auth-session continuity e2e|node scripts/auth_session_continuity_test.mjs"
+"auth|srv|Returning user never sees the sign-in card|node scripts/auth_restore_flash_test.mjs"
 "theme|seed|Theme contrast browser tests|node scripts/theme_contrast_test.mjs"
 "theme|seed|Visual common-sense browser gate (light + dark)|node scripts/visual_common_sense_test.mjs"
 "kb,mobile|seed|KB copy confirmation mobile e2e|node scripts/kb_copy_mobile_test.mjs"

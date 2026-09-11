@@ -4,6 +4,44 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Classroom Knowledge Base</title>
+<!-- Runs before the first paint, which is the whole point, so it stays
+     synchronous, classic and tiny.
+
+     The bug it fixes: the sign-in card below ships visible, and app.js could
+     not hide it until it had parsed, imported a dozen modules, awaited an
+     IndexedDB read and, on a cold start, waited on /api/oauth-config and
+     /api/oauth-refresh. So a student who signed in weeks ago opened the app
+     and was shown "Sign in with Google" — for a moment on a laptop, for a
+     second or more on a phone — before being silently signed in anyway.
+     Nothing was wrong; it just looked like they had been logged out.
+
+     localStorage is synchronous and already holds two flags that say this
+     browser has signed in before. That is enough to paint the right thing
+     first time. It is deliberately NOT proof of a live session: it only
+     decides which of two cards to paint, and app.js clears the attribute the
+     moment it knows better. -->
+<script>
+(function () {
+  var refresh = false, returning = false;
+  try {
+    refresh = localStorage.getItem("cwa_has_server_session") === "1";
+    returning = refresh || !!localStorage.getItem("cwa_user_hint");
+  } catch (e) { /* storage blocked: fall through as a first-time visitor */ }
+  if (!returning) return;
+  document.documentElement.setAttribute("data-restoring", "1");
+  // The refresh token is in an httpOnly cookie, so this request needs nothing
+  // from the page — not the module graph, not IndexedDB, not Google's script.
+  // Starting it here overlaps it with all of that instead of queueing behind
+  // it. serverRefreshAccessToken() picks the promise up.
+  if (refresh) {
+    try {
+      var p = fetch("/api/oauth-refresh", { method: "POST" });
+      p.catch(function () {});  // nobody may be listening yet
+      window.__cwaRefreshPrefetch = p;
+    } catch (e) {}
+  }
+})();
+</script>
 <link rel="stylesheet" href="/styles.css" />
 <link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="%232563eb"/><text x="50%25" y="55%25" font-family="-apple-system,system-ui,sans-serif" font-size="20" font-weight="700" fill="white" text-anchor="middle" dominant-baseline="middle">C</text></svg>' />
 <link rel="preconnect" href="https://accounts.google.com" />
@@ -82,6 +120,17 @@
       </ol>
 
       <button id="loginBtn" class="primary big-login">Sign in with Google</button>
+    </div>
+  </section>
+
+  <!-- What a returning student sees in place of the sign-in card. Shown by
+       CSS on html[data-restoring] alone, so it is on screen at the first
+       paint; app.js removes that attribute as soon as it knows whether the
+       session came back. -->
+  <section id="resuming" role="status" aria-live="polite">
+    <div class="welcome-card resuming-card">
+      <span class="resuming-spinner" aria-hidden="true"></span>
+      <p class="resuming-text">Signing you back in…</p>
     </div>
   </section>
 

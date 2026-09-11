@@ -337,13 +337,57 @@ async function recoverAccessToken({ useStored = true } = {}) {
   return null;
 }
 
-async function serverRefreshAccessToken() {
-  if (!serverRefreshAvailable) return null;
-  if (!hasServerSession()) return null;
+/**
+ * Take the /api/oauth-refresh request the inline boot script already started.
+ *
+ * It fires before this file has even been fetched, so by the time the module
+ * graph has loaded and IndexedDB has answered, the token is usually already on
+ * its way back. Returns null after the first call: a Response body can only be
+ * read once, and every later refresh is a genuinely new request.
+ */
+function takeRefreshPrefetch() {
+  const pending = window.__cwaRefreshPrefetch || null;
+  if (pending) window.__cwaRefreshPrefetch = null;
+  return pending;
+}
+
+/**
+ * Stop painting the returning-user boot state.
+ *
+ * The inline script guesses from localStorage that a session exists; this is
+ * the point where guessing stops, in both directions. Called when the session
+ * is back (the Planner takes over) and when it is not (the sign-in card is the
+ * honest answer, and now it is the right one rather than a flash).
+ */
+function endRestoringPaint() {
+  document.documentElement.removeAttribute("data-restoring");
+}
+
+// Boot has two callers that both want a token and neither knows about the
+// other: restoreSession(), and the pageshow/visibilitychange recheck that fires
+// on the same load. They each sent their own POST to /api/oauth-refresh, so a
+// cold start spent two round trips and two refresh-token redemptions to get one
+// access token. silentRefresh() has deduped itself since it was written; this
+// is the same idea, and the reason the first gate below counts the requests.
+let serverRefreshInFlight = null;
+
+function serverRefreshAccessToken() {
+  if (!serverRefreshAvailable) return Promise.resolve(null);
+  if (!hasServerSession()) return Promise.resolve(null);
+  if (serverRefreshInFlight) return serverRefreshInFlight;
+  serverRefreshInFlight = requestServerRefresh().finally(() => { serverRefreshInFlight = null; });
+  return serverRefreshInFlight;
+}
+
+async function requestServerRefresh() {
   try {
     // No body: the endpoint reads the httpOnly refresh cookie this request
     // carries. Nothing here names an account.
-    const r = await fetchWithTimeout("/api/oauth-refresh", { method: "POST" });
+    const prefetched = takeRefreshPrefetch();
+    // A prefetch that failed outright costs a retry, never the session — the
+    // boot script fires it with no timeout and no error handling of its own.
+    let r = prefetched ? await prefetched.catch(() => null) : null;
+    if (!r) r = await fetchWithTimeout("/api/oauth-refresh", { method: "POST" });
     if (r.status === 500 || r.status === 503) { serverRefreshAvailable = false; return null; }
     if (r.status === 401 || r.status === 404) {
       // Cookie missing, expired or revoked — stop asking.
@@ -606,32 +650,42 @@ async function restoreSession() {
   if (restoreSessionStarted) return;
   restoreSessionStarted = true;
 
-  // consumeAuthRedirect() may still be redeeming a code. Wait for it, then
-  // bail if it signed us in: storeToken() already armed the refresh timer, and
-  // a second onSignedIn() here would bump sessionEpoch and strand the first
-  // one's render.
-  await authRedirectSettled.catch(() => false);
-  if (accessToken) return;
+  // Every exit from here is a decision: signed back in, or not. The boot state
+  // painted from localStorage has to end at whichever one it turns out to be,
+  // and there are five ways out of this function.
+  try {
+    // consumeAuthRedirect() may still be redeeming a code. Wait for it, then
+    // bail if it signed us in: storeToken() already armed the refresh timer, and
+    // a second onSignedIn() here would bump sessionEpoch and strand the first
+    // one's render.
+    await authRedirectSettled.catch(() => false);
+    if (accessToken) return;
 
-  const stored = await loadStoredToken();
-  if (stored && stored.token) {
-    accessToken = stored.token;
-    const remaining = Math.max(60, Math.round((stored.expiresAt - Date.now()) / 1000));
-    scheduleSilentRefresh(remaining);
-    onSignedIn();
-    return;
-  }
+    const stored = await loadStoredToken();
+    if (stored && stored.token) {
+      accessToken = stored.token;
+      const remaining = Math.max(60, Math.round((stored.expiresAt - Date.now()) / 1000));
+      scheduleSilentRefresh(remaining);
+      onSignedIn();
+      return;
+    }
 
-  const cfg = await getOauthConfig().catch(() => ({ hasRefreshTokens: false }));
-  // Server-side refresh first: it works after a browser restart, and needs no
-  // Google script. GIS silent auth is the fallback, not the first resort.
-  if (cfg.hasRefreshTokens && hasServerSession()) {
-    const token = await serverRefreshAccessToken();
-    if (token) { onSignedIn(); return; }
-  }
-  if (loadUserHint()) {
-    const ok = await silentRefresh();
-    if (ok) onSignedIn();
+    const cfg = await getOauthConfig().catch(() => ({ hasRefreshTokens: false }));
+    // Server-side refresh first: it works after a browser restart, and needs no
+    // Google script. GIS silent auth is the fallback, not the first resort.
+    if (cfg.hasRefreshTokens && hasServerSession()) {
+      const token = await serverRefreshAccessToken();
+      if (token) { onSignedIn(); return; }
+    }
+    if (loadUserHint()) {
+      const ok = await silentRefresh();
+      if (ok) onSignedIn();
+    }
+  } finally {
+    // onSignedIn() has already done this on the paths that reach it; doing it
+    // again is free. The path that matters is the one where nothing came back,
+    // where this is what reveals the sign-in card.
+    endRestoringPaint();
   }
 }
 
@@ -1452,6 +1506,9 @@ function switchAccount() {
 
 async function onSignedIn() {
   const epoch = ++sessionEpoch;
+  // The guess paid off (or sign-in happened the long way round); either way the
+  // boot state has served its purpose and "Loading your courses…" takes over.
+  endRestoringPaint();
   $("welcome").hidden = true;
   const mw = $("menuWrap"); if (mw) mw.hidden = false;
   const sb = $("sidebar"); if (sb) sb.hidden = false;

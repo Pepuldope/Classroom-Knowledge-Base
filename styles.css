@@ -378,6 +378,51 @@ h2,
   justify-content: center;
   padding: 2rem 0 4rem;
 }
+
+/* The returning-user boot state. See the inline script in index.html: it sets
+   data-restoring from localStorage before the first paint, so these two rules
+   are what decide which card a returning student actually sees — not the
+   `hidden` property app.js sets several awaits later.
+
+   They are written as display overrides rather than as the `hidden` attribute
+   precisely because nothing can set an attribute on an element that has not
+   been parsed yet. Once app.js removes data-restoring, `hidden` governs both
+   again and this state is unreachable for the rest of the session. */
+#resuming { display: none; }
+html[data-restoring] #welcome { display: none; }
+html[data-restoring] #resuming {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 0 4rem;
+}
+/* Same card shell as the sign-in one, so the swap to a loaded Planner — or
+   back to the sign-in card, if the session really is gone — does not move the
+   page under the reader. */
+.resuming-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2.5rem 2rem;
+}
+.resuming-spinner {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  animation: resuming-spin 700ms linear infinite;
+}
+.resuming-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+@keyframes resuming-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .resuming-spinner { animation-duration: 1600ms; }
+}
 .welcome-card {
   background: var(--card);
   border: 1px solid var(--border);
