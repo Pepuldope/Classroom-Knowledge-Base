@@ -1,0 +1,57 @@
+[
+  {
+    "id": "000000000001",
+    "name": "beta gamma delta",
+    "section": "gamma",
+    "ownerId": "000000000000000000002",
+    "creationTime": "2026-08-21T09:26:45.300Z",
+    "updateTime": "2026-09-04T08:45:47.794Z",
+    "courseState": "ACTIVE",
+    "alternateLink": "https://classroom.google.com/s10/s11",
+    "teacherGroupEmail": "student@example.edu",
+    "courseGroupEmail": "student@example.edu",
+    "guardiansEnabled": false,
+    "calendarId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA3",
+    "gradebookSettings": {
+      "calculationType": "delta",
+      "displaySetting": "epsilon"
+    },
+    "levels": "zeta eta"
+  },
+  {
+    "id": "000000000004",
+    "name": "eta theta",
+    "section": "theta",
+    "ownerId": "000000000000000000005",
+    "creationTime": "2026-09-09T08:19:07.621Z",
+    "updateTime": "2026-09-09T08:19:57.717Z",
+    "courseState": "ACTIVE",
+    "alternateLink": "https://classroom.google.com/s20/s21",
+    "teacherGroupEmail": "student@example.edu",
+    "courseGroupEmail": "student@example.edu",
+    "guardiansEnabled": false,
+    "calendarId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA6",
+    "gradebookSettings": {
+      "calculationType": "delta",
+      "displaySetting": "epsilon"
+    }
+  },
+  {
+    "id": "000000000007",
+    "name": "unit module chapter section",
+    "section": "theta",
+    "ownerId": "000000000000000000008",
+    "creationTime": "2026-09-08T08:30:19.108Z",
+    "updateTime": "2026-09-08T09:43:51.482Z",
+    "courseState": "ACTIVE",
+    "alternateLink": "https://classroom.google.com/s30/s31",
+    "teacherGroupEmail": "student@example.edu",
+    "courseGroupEmail": "student@example.edu",
+    "guardiansEnabled": false,
+    "calendarId": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA9",
+    "gradebookSettings": {
+      "calculationType": "delta",
+      "displaySetting": "epsilon"
+    }
+  }
+]

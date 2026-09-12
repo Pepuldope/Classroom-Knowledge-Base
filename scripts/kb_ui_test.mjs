@@ -19,6 +19,7 @@
 
 import { chromium } from "playwright";
 import { mkdirSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import assert from "node:assert/strict";
 
 const BASE = process.env.BASE_URL || "http://localhost:4321";
@@ -39,7 +40,11 @@ const openFilterPanel = async (page) => {
   await page.waitForSelector("#kbFilterChips .kb-chip", { state: "visible", timeout: 10000 });
 };
 
-const SHOTS = new URL("./screenshots/", import.meta.url).pathname;
+// fileURLToPath, not .pathname: on Windows a file: URL's pathname is
+// "/C:/...%20..." — a leading slash that makes mkdir resolve it against the
+// current drive ("C:\C:\...") and percent-escapes that never decode. Harmless
+// on macOS/Linux, which is why this only ever failed on the Windows box.
+const SHOTS = fileURLToPath(new URL("./screenshots/", import.meta.url));
 mkdirSync(SHOTS, { recursive: true });
 
 const results = [];

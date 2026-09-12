@@ -1,0 +1,501 @@
+{
+  "000000000001": {
+    "topics": [
+      {
+        "courseId": "000000000001",
+        "topicId": "000000000010",
+        "name": "východisko úvod",
+        "updateTime": "2026-09-10T09:34:44.234Z"
+      },
+      {
+        "courseId": "000000000001",
+        "topicId": "000000000011",
+        "name": "úvod záver výsledky Šprint",
+        "updateTime": "2026-09-10T09:38:45.324Z"
+      },
+      {
+        "courseId": "000000000001",
+        "topicId": "000000000012",
+        "name": "záver výsledky Šprint",
+        "updateTime": "2026-09-11T06:35:27.244Z"
+      }
+    ],
+    "courseWork": [
+      {
+        "courseId": "000000000001",
+        "id": "000000000013",
+        "title": "výsledky Šprint téma úloha písomka",
+        "description": "Šprint téma úloha písomka cvičenie poznámky zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie poznámky zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie poznámky zhrnutie článok",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA14",
+                "title": "téma úloha písomka",
+                "alternateLink": "https://docs.google.com/s40/s41/s42/s43",
+                "thumbnailUrl": "https://lh3.google.com/s50/s51"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s60/s61/s62/s63/s64",
+        "creationTime": "2026-09-10T09:38:45.325Z",
+        "updateTime": "2026-09-10T09:39:20.956Z",
+        "dueDate": {
+          "year": 2026,
+          "month": 9,
+          "day": 16
+        },
+        "dueTime": {
+          "hours": 21,
+          "minutes": 59
+        },
+        "maxPoints": 100,
+        "workType": "ASSIGNMENT",
+        "submissionModificationMode": "notes",
+        "creatorUserId": "000000000000000000015",
+        "topicId": "000000000011"
+      }
+    ],
+    "courseWorkMaterials": [
+      {
+        "courseId": "000000000001",
+        "id": "000000000016",
+        "title": "review",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA17",
+                "title": "cvičenie poznámky zhrnutie článok prezentácia",
+                "alternateLink": "https://docs.google.com/s70/s71/s72/s73",
+                "thumbnailUrl": "https://lh3.google.com/s80/s81"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s90/s91/s92/s93/s94",
+        "creationTime": "2026-08-21T09:33:24.443Z",
+        "updateTime": "2026-09-11T06:35:17.426Z",
+        "creatorUserId": "000000000000000000002",
+        "topicId": "000000000012"
+      },
+      {
+        "courseId": "000000000001",
+        "id": "000000000018",
+        "title": "summary",
+        "description": "zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie poznámky zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie poznámky zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie poznámky zhrnutie",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA19",
+                "title": "článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie",
+                "alternateLink": "https://docs.google.com/s100/s101/s102/s103",
+                "thumbnailUrl": "https://lh3.google.com/s110/s111"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA20",
+                "title": "prezentácia východisko úvod záver výsledky",
+                "alternateLink": "https://docs.google.com/s120/s121/s122/s123",
+                "thumbnailUrl": "https://lh3.google.com/s130/s131"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s140/s141/s142/s143/s144",
+        "creationTime": "2026-09-10T09:32:18.478Z",
+        "updateTime": "2026-09-10T09:34:45.092Z",
+        "creatorUserId": "000000000000000000015",
+        "topicId": "000000000010"
+      }
+    ],
+    "announcements": [],
+    "submissions": [
+      {
+        "courseId": "000000000001",
+        "courseWorkId": "000000000013",
+        "id": "AAAAAAAAAAAAAAAAAAAA21",
+        "userId": "000000000000000000022",
+        "state": "NEW",
+        "alternateLink": "https://classroom.google.com/s150/s151/s152/s153/s154/s155/s156/s157/s158",
+        "courseWorkType": "ASSIGNMENT",
+        "assignmentSubmission": {}
+      }
+    ]
+  },
+  "000000000004": {
+    "topics": [
+      {
+        "courseId": "000000000004",
+        "topicId": "000000000023",
+        "name": "problem",
+        "updateTime": "2026-09-10T13:34:27.585Z"
+      }
+    ],
+    "courseWork": [
+      {
+        "courseId": "000000000004",
+        "id": "000000000024",
+        "title": "úvod záver výsledky",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA25",
+                "title": "záver výsledky Šprint téma úloha",
+                "alternateLink": "https://docs.google.com/s160/s161/s162/s163",
+                "thumbnailUrl": "https://lh3.google.com/s170/s171"
+              },
+              "shareMode": "STUDENT_COPY"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s180/s181/s182/s183/s184",
+        "creationTime": "2026-09-10T13:33:05.867Z",
+        "updateTime": "2026-09-10T13:34:21.860Z",
+        "dueDate": {
+          "year": 2026,
+          "month": 9,
+          "day": 23
+        },
+        "dueTime": {
+          "hours": 21,
+          "minutes": 59
+        },
+        "maxPoints": 100,
+        "workType": "ASSIGNMENT",
+        "submissionModificationMode": "notes",
+        "creatorUserId": "000000000000000000026",
+        "topicId": "000000000023"
+      },
+      {
+        "courseId": "000000000004",
+        "id": "000000000027",
+        "title": "výsledky Šprint téma úloha písomka cvičenie",
+        "description": "report quiz test exam project alpha beta",
+        "materials": [
+          {
+            "form": {
+              "formUrl": "https://docs.google.com/s190/s191/s192/s193/s194",
+              "title": "téma úloha písomka cvičenie poznámky zhrnutie článok",
+              "thumbnailUrl": "https://lh4.googleusercontent.com/s200"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s210/s211/s212/s213/s214",
+        "creationTime": "2026-09-09T08:20:43.541Z",
+        "updateTime": "2026-09-09T08:41:47.821Z",
+        "dueDate": {
+          "year": 2026,
+          "month": 9,
+          "day": 9
+        },
+        "dueTime": {
+          "hours": 21,
+          "minutes": 59
+        },
+        "workType": "ASSIGNMENT",
+        "submissionModificationMode": "notes",
+        "creatorUserId": "000000000000000000005"
+      }
+    ],
+    "courseWorkMaterials": [
+      {
+        "courseId": "000000000004",
+        "id": "000000000028",
+        "title": "úloha písomka cvičenie poznámky zhrnutie",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA29",
+                "title": "písomka cvičenie poznámky zhrnutie článok",
+                "alternateLink": "https://docs.google.com/s220/s221/s222/s223",
+                "thumbnailUrl": "https://lh3.google.com/s230/s231"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s240/s241/s242/s243/s244",
+        "creationTime": "2026-09-10T13:09:28.984Z",
+        "updateTime": "2026-09-10T13:28:32.482Z",
+        "creatorUserId": "000000000000000000026"
+      },
+      {
+        "courseId": "000000000004",
+        "id": "000000000030",
+        "title": "cvičenie poznámky zhrnutie článok prezentácia východisko",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA31",
+                "title": "alpha",
+                "alternateLink": "https://drive.google.com/s250/s251/s252/s253",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s260/s261"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA32",
+                "title": "beta gamma delta epsilon",
+                "alternateLink": "https://drive.google.com/s270/s271/s272/s273",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s280/s281"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA33",
+                "title": "článok prezentácia východisko úvod",
+                "alternateLink": "https://drive.google.com/s290/s291/s292/s293",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s300/s301"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA34",
+                "title": "delta",
+                "alternateLink": "https://drive.google.com/s310/s311/s312/s313",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s320/s321"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA35",
+                "title": "východisko",
+                "alternateLink": "https://drive.google.com/s330/s331/s332/s333",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s340/s341"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA36",
+                "title": "zeta eta theta",
+                "alternateLink": "https://drive.google.com/s350/s351/s352/s353",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s360/s361"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA37",
+                "title": "záver výsledky",
+                "alternateLink": "https://drive.google.com/s370/s371/s372/s373",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s380/s381"
+              },
+              "shareMode": "VIEW"
+            }
+          },
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA38",
+                "title": "theta",
+                "alternateLink": "https://drive.google.com/s390/s391/s392/s393",
+                "thumbnailUrl": "https://lh3.googleusercontent.com/s400/s401"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s410/s411/s412/s413/s414",
+        "creationTime": "2026-09-10T12:55:49.018Z",
+        "updateTime": "2026-09-10T12:56:49.710Z",
+        "creatorUserId": "000000000000000000026"
+      },
+      {
+        "courseId": "000000000004",
+        "id": "000000000039",
+        "title": "Šprint téma úloha písomka cvičenie poznámky zhrnutie článok prezentácia",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA40",
+                "title": "module chapter section",
+                "alternateLink": "https://docs.google.com/s420/s421/s422/s423",
+                "thumbnailUrl": "https://lh3.google.com/s430/s431"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s440/s441/s442/s443/s444",
+        "creationTime": "2026-09-10T12:33:46.256Z",
+        "updateTime": "2026-09-10T12:34:24.701Z",
+        "creatorUserId": "000000000000000000026"
+      },
+      {
+        "courseId": "000000000004",
+        "id": "000000000041",
+        "title": "úloha písomka cvičenie poznámky",
+        "description": "písomka cvičenie poznámky zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie poznámky zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka cvičenie poznámky zhrnutie článok prezentácia východisko úvod záver výsledky Šprint téma úloha písomka",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA42",
+                "title": "topic",
+                "alternateLink": "https://docs.google.com/s450/s451/s452/s453",
+                "thumbnailUrl": "https://lh3.google.com/s460/s461"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s470/s471/s472/s473/s474",
+        "creationTime": "2026-09-09T15:27:32.401Z",
+        "updateTime": "2026-09-09T15:29:56.319Z",
+        "creatorUserId": "000000000000000000043"
+      }
+    ],
+    "announcements": [],
+    "submissions": [
+      {
+        "courseId": "000000000004",
+        "courseWorkId": "000000000024",
+        "id": "AAAAAAAAAAAAAAAAAAAA44",
+        "userId": "000000000000000000022",
+        "creationTime": "2026-09-10T13:35:46.341Z",
+        "updateTime": "2026-09-10T13:35:41.782Z",
+        "state": "CREATED",
+        "alternateLink": "https://classroom.google.com/s480/s481/s482/s483/s484/s485/s486/s487/s488",
+        "courseWorkType": "ASSIGNMENT",
+        "assignmentSubmission": {
+          "attachments": [
+            {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA45",
+                "title": "poznámky zhrnutie článok prezentácia východisko úvod záver",
+                "alternateLink": "https://docs.google.com/s490/s491/s492/s493",
+                "thumbnailUrl": "https://lh3.google.com/s500/s501"
+              }
+            }
+          ]
+        }
+      },
+      {
+        "courseId": "000000000004",
+        "courseWorkId": "000000000027",
+        "id": "AAAAAAAAAAAAAAAAAAAA46",
+        "userId": "000000000000000000022",
+        "creationTime": "2026-09-09T08:41:59.810Z",
+        "updateTime": "2026-09-09T08:43:08.265Z",
+        "state": "TURNED_IN",
+        "alternateLink": "https://classroom.google.com/s510/s511/s512/s513/s514/s515/s516/s517/s518",
+        "courseWorkType": "ASSIGNMENT",
+        "assignmentSubmission": {}
+      }
+    ]
+  },
+  "000000000007": {
+    "topics": [
+      {
+        "courseId": "000000000007",
+        "topicId": "000000000047",
+        "name": "zhrnutie článok",
+        "updateTime": "2026-09-11T06:35:24.665Z"
+      }
+    ],
+    "courseWork": [
+      {
+        "courseId": "000000000007",
+        "id": "000000000048",
+        "title": "notes review",
+        "materials": [
+          {
+            "form": {
+              "formUrl": "https://docs.google.com/s520/s521/s522/s523/s524",
+              "title": "review practice",
+              "thumbnailUrl": "https://lh4.googleusercontent.com/s530"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s540/s541/s542/s543/s544",
+        "creationTime": "2026-09-11T06:19:11.873Z",
+        "updateTime": "2026-09-11T06:20:56.494Z",
+        "workType": "ASSIGNMENT",
+        "submissionModificationMode": "notes",
+        "creatorUserId": "000000000000000000008",
+        "topicId": "000000000047"
+      }
+    ],
+    "courseWorkMaterials": [
+      {
+        "courseId": "000000000007",
+        "id": "000000000049",
+        "title": "practice",
+        "materials": [
+          {
+            "driveFile": {
+              "driveFile": {
+                "id": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA50",
+                "title": "summary",
+                "alternateLink": "https://docs.google.com/s550/s551/s552/s553",
+                "thumbnailUrl": "https://lh3.google.com/s560/s561"
+              },
+              "shareMode": "VIEW"
+            }
+          }
+        ],
+        "state": "PUBLISHED",
+        "alternateLink": "https://classroom.google.com/s570/s571/s572/s573/s574",
+        "creationTime": "2026-09-08T09:44:19.347Z",
+        "updateTime": "2026-09-08T09:44:38.569Z",
+        "creatorUserId": "000000000000000000008"
+      }
+    ],
+    "announcements": [],
+    "submissions": [
+      {
+        "courseId": "000000000007",
+        "courseWorkId": "000000000048",
+        "id": "AAAAAAAAAAAAAAAAAAAA51",
+        "userId": "000000000000000000022",
+        "creationTime": "2026-09-11T06:21:07.845Z",
+        "updateTime": "2026-09-11T07:13:38.207Z",
+        "state": "TURNED_IN",
+        "alternateLink": "https://classroom.google.com/s580/s581/s582/s583/s584/s585/s586/s587/s588",
+        "courseWorkType": "ASSIGNMENT",
+        "assignmentSubmission": {}
+      }
+    ]
+  }
+}

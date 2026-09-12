@@ -22,6 +22,9 @@ scripts/screenshots/
 _*.json
 _*.mjs
 _*.py
+# The capture runbook writes the RAW Classroom snapshot here. Only the redactor
+# may produce anything committable from it, so the whole directory stays out.
+scratchpad/
 
 # Out-of-band gate results (machine-local, never committed)
 .gate/

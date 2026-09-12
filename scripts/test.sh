@@ -35,6 +35,12 @@ cd "$ROOT"
 # background dev-server process inherits it too.
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$ROOT/.pw-browsers}"
 
+# Windows consoles default stdout to cp1252, which cannot encode the ✓/✗ the
+# Python gates print — they raise UnicodeEncodeError AFTER their assertions have
+# already passed, so the gate fails on its own success message. No effect on
+# macOS/Linux, where stdout is UTF-8 anyway.
+export PYTHONIOENCODING="${PYTHONIOENCODING:-utf-8}"
+
 # ---------------------------------------------------------------------------
 # The table.
 #

@@ -101,11 +101,12 @@ test("Classroom fixtures contain no real free text", { skip: !present && `${DIR}
       if (isIdKey(key) || URL_KEYS.has(key) || PASS_THROUGH_STRINGS.has(key)) continue;
       if (value.trim() === "") continue;
       if (value === "student@example.edu") continue;
-      if (key === "section") {
-        assert.match(value, BARE_CLASS_DESIGNATION,
-          `${file} ${path}: section "${value}" is free text, not a bare class designation`);
-        continue;
-      }
+      // A bare designation ("3.A", "9") is kept verbatim by the redactor and
+      // identifies nothing. A longer section name is free text, so the redactor
+      // rewrites it to VOCAB like any other string — fall through to the word
+      // check rather than reject it, which still catches a real name sneaking
+      // through under this key.
+      if (key === "section" && BARE_CLASS_DESIGNATION.test(value)) continue;
       for (const word of value.trim().split(/\s+/)) {
         assert.ok(
           ALLOWED_WORDS.has(word),

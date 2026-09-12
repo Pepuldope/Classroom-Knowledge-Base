@@ -1,0 +1,31 @@
+{
+  "note": "Redacted from one real Classroom capture by scripts/redact-classroom.mjs. No real content.",
+  "capturedAt": "2026-09-12T17:47:32.483Z",
+  "pageSize": 100,
+  "courseCount": 3,
+  "facetCounts": {
+    "000000000001": {
+      "topics": 3,
+      "courseWork": 1,
+      "courseWorkMaterials": 2,
+      "announcements": 0,
+      "submissions": 1
+    },
+    "000000000004": {
+      "topics": 1,
+      "courseWork": 2,
+      "courseWorkMaterials": 4,
+      "announcements": 0,
+      "submissions": 2
+    },
+    "000000000007": {
+      "topics": 1,
+      "courseWork": 1,
+      "courseWorkMaterials": 1,
+      "announcements": 0,
+      "submissions": 1
+    }
+  },
+  "paginatedFacets": [],
+  "deniedFacets": []
+}
