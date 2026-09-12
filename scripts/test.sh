@@ -65,6 +65,8 @@ GATES=(
 "models|-|Classroom material inference model tests|node --test tests/related-materials.test.js"
 "models|-|Interrupted Classroom build privacy tests|node --test tests/archive-builder-abort.test.js"
 "models|-|Resumable Classroom build checkpoint tests|node --test tests/archive-builder-resume.test.js tests/kb-build-checkpoint.test.js"
+"models|-|Classroom live-shape tests (list keys, pagination, per-facet 403/404)|node --test tests/archive-builder-live-shape.test.js"
+"models|-|Classroom fixture privacy guard (public repo — skips until captured)|node --test tests/fixtures-privacy.test.js"
 "models,panel|-|Assignment panel model tests|node --test tests/assignment-panel.test.js"
 "models,api|-|Enrichment model chain fall-through tests|node --test tests/enrich-chain.test.js"
 "models,mobile|-|Session position + sheet drag model tests|node --test tests/session-position.test.js tests/sheet-drag.test.js"

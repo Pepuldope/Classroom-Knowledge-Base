@@ -431,12 +431,23 @@ function abortError() {
   return e;
 }
 
-// gFetch (app.js) throws `Error("Classroom API ${status}: ...")` on non-ok
-// responses — parsed back out here so per-facet 403/404s (some archived
-// courses deny specific endpoints) can be skipped instead of failing the
-// whole build. This is a light coupling to gFetch's error message shape,
-// not a re-implementation of its auth/retry logic.
+// Per-facet 403/404s (some archived courses deny specific endpoints) are
+// skipped instead of failing the whole build, so the status has to come back
+// out of the thrown error.
+//
+// Both throwers — gFetch in app.js and the fetch in api/kb-scrape.js — set
+// `err.status` AND format the message as `Classroom API ${status}: ...`. Read
+// the property first: it is the structured fact. The regex stays as a fallback
+// for an error that only carries the message.
+//
+// It used to be the regex alone, which made the graceful-skip path depend on
+// the wording of a string. Rewording that message — or any other caller raising
+// an error with a status but a different message — silently turned "skip this
+// facet" into "lose the whole course", because statusOf returned null and the
+// error propagated to the per-course catch.
 function statusOf(err) {
+  const direct = Number(err && err.status);
+  if (Number.isFinite(direct) && direct > 0) return direct;
   const m = /Classroom API (\d+)/.exec((err && err.message) || "");
   return m ? Number(m[1]) : null;
 }

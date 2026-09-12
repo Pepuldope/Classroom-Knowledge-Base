@@ -19,9 +19,12 @@ test("resumed Classroom build skips completed courses and completes from the loc
     if (!url.includes("courses/c2/")) throw new Error(`unexpected fetch: ${url}`);
     if (url.includes("/topics")) return { topic: [] };
     if (url.includes("/courseWork?")) return { courseWork: [{ id: "a2", title: "Motion" }] };
-    if (url.includes("/courseWorkMaterials")) return { courseWorkMaterials: [] };
+    // Singular/renamed on purpose — these are the keys Google actually returns.
+    // This stub used to say `courseWorkMaterials` and `submissions`, which the
+    // build reads as nothing at all; it passed only because both are empty here.
+    if (url.includes("/courseWorkMaterials")) return { courseWorkMaterial: [] };
     if (url.includes("/announcements")) return { announcements: [] };
-    if (url.includes("/studentSubmissions")) return { submissions: [] };
+    if (url.includes("/studentSubmissions")) return { studentSubmissions: [] };
     throw new Error(`unexpected URL: ${url}`);
   }, { checkpoint, saveCheckpoint: (next) => saved.push(next) });
 

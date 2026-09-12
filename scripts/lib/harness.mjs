@@ -21,6 +21,12 @@ export async function mockBackend(page, {
   submissions = [],
   announcements = [],
   materials = [],
+  // The build fetches six facets per course, and /topics is one of them
+  // (archive-builder.js:529). This stub had no branch for it, so every gate
+  // built on the harness saw topics:[] and the `topic` field in the note schema
+  // was never exercised from the ingest path — while kb_autosync_e2e_test.mjs
+  // hand-rolled its own /topics stub because it actually needed one.
+  topics = [],
   enrichments = [],
   chat = [],
   onChat = null,
@@ -39,11 +45,18 @@ export async function mockBackend(page, {
   await page.route("**/accounts.google.com/**", (r) => r.fulfill({ status: 204, body: "" }));
   await page.route("https://www.googleapis.com/oauth2/v3/userinfo", (r) =>
     json(r, { sub: "harness-user", email: "student@example.edu", name: "Test Student" }));
+  // The list key is NOT the path segment, for three of the six endpoints:
+  // /topics returns `topic`, /courseWorkMaterials returns `courseWorkMaterial`,
+  // /courseWork/-/studentSubmissions returns `studentSubmissions`. Getting one
+  // wrong does not fail — the facet just silently resolves to [] and the archive
+  // comes out quieter than it should. tests/archive-builder-live-shape.test.js
+  // pins all six.
   await page.route("https://classroom.googleapis.com/**", (r) => {
     const url = r.request().url();
-    if (url.includes("/courseWork?")) return json(r, { courseWork });
     if (url.includes("studentSubmissions")) return json(r, { studentSubmissions: submissions });
     if (url.includes("courseWorkMaterials")) return json(r, { courseWorkMaterial: materials });
+    if (url.includes("/courseWork?")) return json(r, { courseWork });
+    if (url.includes("/topics")) return json(r, { topic: topics });
     if (url.includes("/announcements")) return json(r, { announcements });
     if (url.includes("/courses?")) return json(r, { courses });
     return json(r, {});
