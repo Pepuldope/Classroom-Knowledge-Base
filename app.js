@@ -2260,6 +2260,12 @@ function assignmentCard(a) {
     kbBtn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       const topic = [a.courseName, a.title].filter(Boolean).join(" ");
+      // setView is the route, showKbView is only the reveal. Going straight to
+      // the reveal left BOTH views mounted: the Planner stayed visible, the nav
+      // still said Planner, and the Study surface rendered ~1290px below the
+      // fold — so the button looked like it did nothing at all, while having
+      // correctly run the search nobody could see.
+      setView("kb");
       import("./kb.js")
         .then((m) => m.kbSearchTopic(topic))
         .catch(() => {});

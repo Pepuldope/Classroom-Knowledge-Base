@@ -281,3 +281,28 @@ export function createDeltaStream({ onContent, onReasoning, onSources } = {}) {
     stats() { return { ...stats }; },
   };
 }
+
+/**
+ * Make a model's LaTeX readable without pulling in a maths typesetter.
+ *
+ * Models reach for LaTeX unprompted — `\(m\)`, `\[ f(x)=mx+b \]`,
+ * `\qquad\text{or}\qquad` — and with no KaTeX on the page a student reads the
+ * delimiters and the macro names as if they were part of the answer. Rendering
+ * it properly is a real dependency and a separate decision; unwrapping it costs
+ * nothing and turns noise back into the expression the model meant.
+ *
+ * Deliberately small: delimiters, spacing macros, and \text{...}. Anything else
+ * is left exactly as written rather than half-translated.
+ */
+export function unwrapMathDelimiters(text) {
+  if (typeof text !== "string" || !text) return "";
+  return text
+    // Display math on its own line stays on its own line.
+    .replace(/\\\[\s*([\s\S]*?)\s*\\\]/g, (_, body) => `\n${body.trim()}\n`)
+    .replace(/\\\(\s*([\s\S]*?)\s*\\\)/g, (_, body) => body.trim())
+    // \text{or} is prose the model wrapped for the typesetter's benefit.
+    .replace(/\\text\{([^}]*)\}/g, "$1")
+    .replace(/\\(?:qquad|quad|;|,|!)/g, " ")
+    // Collapse only the spacing this introduced, never the line structure.
+    .replace(/[ \t]{2,}/g, " ");
+}

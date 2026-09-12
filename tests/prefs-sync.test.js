@@ -235,3 +235,36 @@ test("a full merge is idempotent — syncing twice changes nothing", () => {
   assert.deepEqual(trackedIds(swapped.pinned, { now: NOW }).sort(),
     trackedIds(once.pinned, { now: NOW }).sort());
 });
+
+// --- a saved tutor answer is content, not a label --------------------------
+// MAX_FIELD (400) was sized for labels: a pinned note's title, a query string.
+// studyList.text is the answer itself, so the same cap silently ate two thirds
+// of every saved answer — and because the merge writes back to localStorage,
+// the truncated copy replaced the full local one on the next sync.
+
+const LONG_ANSWER = "Linear functions. ".repeat(120); // ~2160 chars
+
+test("a long saved answer survives trackedModel instead of being cut to 400", () => {
+  const at = Date.now();
+  const model = trackedModel(
+    { "ans-1": { at, text: LONG_ANSWER, savedAt: at } },
+    { fields: ["text", "savedAt"] },
+  );
+  assert.equal(model["ans-1"].text.length, LONG_ANSWER.trim().length,
+    "the saved answer was truncated on its way through the tracked model");
+});
+
+test("a long saved answer survives a full merge round-trip", () => {
+  const at = Date.now();
+  const local = { studyList: { "ans-1": { at, text: LONG_ANSWER, savedAt: at } } };
+  const merged = mergeSyncedPrefs(local, {});
+  assert.equal(merged.studyList["ans-1"].text.length, LONG_ANSWER.trim().length,
+    "the merge is what writes back to localStorage, so truncation here destroys the local copy");
+});
+
+test("label fields keep the tight cap", () => {
+  const at = Date.now();
+  const long = "x".repeat(1000);
+  const model = trackedModel({ "n-1": { at, title: long } }, { fields: ["title"] });
+  assert.equal(model["n-1"].title.length, 400, "a title is a label and stays capped at MAX_FIELD");
+});

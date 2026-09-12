@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   composerStateModel, shouldFollowOutput, streamEndModel, applyComposerState,
-  createSseFramer, createDeltaStream,
+  createSseFramer, createDeltaStream, unwrapMathDelimiters,
 } from "../chat-ux.js";
 
 test("while a reply streams, the input is closed and Send becomes Stop", () => {
@@ -276,3 +276,31 @@ test("a throwing callback loses that delta but not the rest of the stream", () =
   assert.equal(s.stats().callbackErrors, 1);
   assert.equal(s.stats().content, 3);
 });
+
+// --- LaTeX the page cannot typeset ------------------------------------------
+// Models emit LaTeX unprompted. With no maths typesetter on the page, a student
+// reads the delimiters and macro names as part of the answer — which is a large
+// part of what "the tutor's answers are nonsensical" actually looked like.
+
+test("inline and display math lose their delimiters, not their content", () => {
+  assert.equal(unwrapMathDelimiters("where \\(m\\) is the slope"), "where m is the slope");
+  assert.equal(
+    unwrapMathDelimiters("form\n\\[\nf(x)=mx+b\n\\]\nwhere").replace(/\n+/g, "|"),
+    "form|f(x)=mx+b|where",
+  );
+});
+
+test("spacing macros and text{} become the prose they stood for", () => {
+  assert.equal(
+    unwrapMathDelimiters("\\(f(x)=mx+b \\qquad\\text{or}\\qquad y=mx+b\\)"),
+    "f(x)=mx+b or y=mx+b",
+  );
+});
+
+test("text with no maths in it is returned untouched", () => {
+  const plain = "A linear function has a constant rate of change.";
+  assert.equal(unwrapMathDelimiters(plain), plain);
+  assert.equal(unwrapMathDelimiters(""), "");
+  assert.equal(unwrapMathDelimiters(null), "");
+});
+

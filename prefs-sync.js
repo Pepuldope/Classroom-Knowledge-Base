@@ -35,6 +35,14 @@ export const MAX_PROGRESS_ENTRIES = 5000;
 export const MAX_DATES = 1500;         // ~4 school years of streak
 export const MAX_TRACKED = 500;        // per set: pins, dismissed, study list
 export const MAX_FIELD = 400;
+
+// MAX_FIELD is sized for LABELS — a pinned note's title, a query string. A
+// saved tutor answer is the content itself, and the same cap cut two thirds off
+// every one of them. Worse than lossy: mergeSyncedPrefs writes back to
+// localStorage, so the truncated copy replaced the full local one on the next
+// sync. Fields that carry content name their own cap here.
+export const FIELD_MAX = { text: 8000 };
+const fieldMax = (field) => FIELD_MAX[field] || MAX_FIELD;
 /**
  * How long a deletion is remembered.
  *
@@ -159,7 +167,7 @@ export function trackedModel(value, { now = Date.now(), fields = [] } = {}) {
         const n = ms(entry.savedAt);
         if (n) record.savedAt = n;
       } else {
-        const text = str(entry[field]);
+        const text = str(entry[field], fieldMax(field));
         if (text) record[field] = text;
       }
     }
@@ -236,7 +244,7 @@ function cleanPayload(payload, fields) {
       const n = ms(payload.savedAt);
       if (n) out.savedAt = n;
     } else {
-      const text = str(payload[field]);
+      const text = str(payload[field], fieldMax(field));
       if (text) out[field] = text;
     }
   }

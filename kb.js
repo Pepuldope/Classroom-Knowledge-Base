@@ -15,11 +15,11 @@
 // KB request that leaves the browser, and it receives only bounded retrieved notes.
 
 import { highlightSnippet } from "./kb-highlight.js";
-import { renderLightMarkdown } from "./archive.js";
+import { renderLightMarkdown, renderRichMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, revealAnswer, markReasoning, createDeltaStream } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, revealAnswer, markReasoning, createDeltaStream, unwrapMathDelimiters } from "./chat-ux.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -796,6 +796,19 @@ let activeStudyTab = "search";
  * in the app ever read it back — the button reported "Saved" about something
  * the student could never reach again. This is the other half.
  */
+/**
+ * How a tutor answer becomes HTML.
+ *
+ * renderRichMarkdown, not renderLightMarkdown: models answer with tables and
+ * blockquotes, and the light renderer leaves both as raw pipes and ">". It
+ * escapes before it builds any markup, so this is not an injection surface.
+ * The math unwrap runs first, because the delimiters are not markdown and
+ * would otherwise survive into the output verbatim.
+ */
+function renderTutorAnswer(text) {
+  return renderRichMarkdown(unwrapMathDelimiters(text));
+}
+
 function renderStudyList() {
   const host = $("kbSavedList");
   if (!host) return;
@@ -815,7 +828,7 @@ function renderStudyList() {
     body.className = "kb-saved-text";
     // Same renderer as the tutor and the note bodies; it escapes before it
     // builds any HTML, so a saved answer cannot smuggle markup back in.
-    body.innerHTML = renderLightMarkdown(item.text);
+    body.innerHTML = renderTutorAnswer(item.text);
     const meta = document.createElement("div");
     meta.className = "kb-saved-meta";
     const when = document.createElement("span");
@@ -3349,7 +3362,7 @@ async function sendTutor(text, { retry = false } = {}) {
       revealAnswer(assistantEl);
       // renderLightMarkdown escapes the text before it builds any HTML, so this
       // is not an injection surface — it is the renderer the note bodies use.
-      assistantEl.innerHTML = renderLightMarkdown(acc);
+      assistantEl.innerHTML = renderTutorAnswer(acc);
       followOutput(wrap, stick);
     };
 
@@ -3383,6 +3396,11 @@ async function sendTutor(text, { retry = false } = {}) {
     addTutorStudyModeAction(assistantEl, acc);
     addTutorFeedbackActions(assistantEl, acc);
     addTutorAttribution(assistantEl, provider, model);
+    // The action row, the source chips and the study-mode panel are all added
+    // AFTER the last delta painted, so they grow the transcript below the last
+    // scroll. Following once more here is the difference between landing at the
+    // bottom and landing a row of buttons short of it.
+    followOutput(wrap, stick);
     tutorMessages.push({ role: "assistant", content: acc });
   } catch (e) {
     const aborted = e?.name === "AbortError";
@@ -3393,7 +3411,7 @@ async function sendTutor(text, { retry = false } = {}) {
       // An error line is plain prose; a stopped partial answer is markdown and
       // should read the same as a completed one.
       if (end.className.includes("error")) assistantEl.textContent = end.text;
-      else assistantEl.innerHTML = renderLightMarkdown(end.text);
+      else assistantEl.innerHTML = renderTutorAnswer(end.text);
       // A deliberate Stop is not a failure, so it gets no retry prompt.
       if (!aborted) addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
     }

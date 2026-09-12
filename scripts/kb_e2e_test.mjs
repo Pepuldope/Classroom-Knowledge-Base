@@ -1652,3 +1652,22 @@ test("model attribution is off unless it is deliberately turned on", () => {
   assert.equal(kbSettingsModel({ showModel: true }).showModel, true);
   assert.equal(kbSettingsModel({ showModel: "yes" }).showModel, false, "only a real boolean may enable it");
 });
+
+test("the Planner's KB button switches route, not just reveals the panel", async () => {
+  // Regression guard. This shipped as `import("./kb.js").then(m =>
+  // m.kbSearchTopic(topic))` with no route change: showKbView() only sets
+  // kbView.hidden = false, so BOTH views stayed mounted, the nav still read
+  // Planner, and the Study surface rendered ~1290px below the fold. The button
+  // looked completely dead while having run the search correctly.
+  //
+  // The browser gate could not catch it: it calls kbSearchTopic() directly
+  // against the KB harness, which has no Planner route to switch away from.
+  const app = await readFile(new URL("../app.js", import.meta.url), "utf8");
+  const handler = app.slice(app.indexOf("kbBtn.addEventListener"), app.indexOf("actions.appendChild(kbBtn)"));
+  assert.ok(handler.length > 0, "could not locate the KB button handler in app.js");
+  assert.match(handler, /setView\(\s*["']kb["']\s*\)/, "the KB button must go through setView, not straight to showKbView");
+  assert.ok(
+    handler.indexOf("setView") < handler.indexOf("kbSearchTopic"),
+    "the route must change before the search runs, or the results land on a hidden panel",
+  );
+});
