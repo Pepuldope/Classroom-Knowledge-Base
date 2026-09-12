@@ -1671,3 +1671,27 @@ test("the Planner's KB button switches route, not just reveals the panel", async
     "the route must change before the search runs, or the results land on a hidden panel",
   );
 });
+
+test("JS and CSS revalidate after a deploy instead of serving a stale copy", async () => {
+  // The app has no build step and no content-hashed filenames: index.html asks
+  // for /kb.js by that exact name forever. stale-while-revalidate=86400 on that
+  // meant a deploy could serve a DAY-old module against a fresh document —
+  // mixed versions, silently. It cost most of an afternoon on 2026-09-12:
+  // fixes were verified present in the deployed file with a cache-busted curl
+  // while the page kept running the previous build.
+  //
+  // must-revalidate + the ETag Vercel already sends makes the common case a
+  // cheap 304, and makes "deployed" and "running" the same thing.
+  const cfg = JSON.parse(await readFile(new URL("../vercel.json", import.meta.url), "utf8"));
+  const assetRules = cfg.headers.filter((h) => /\.js|\.css/.test(h.source));
+  assert.ok(assetRules.length >= 2, "expected cache rules for both .js and .css");
+  for (const rule of assetRules) {
+    const cache = rule.headers.find((h) => h.key.toLowerCase() === "cache-control");
+    assert.ok(cache, `${rule.source} has no Cache-Control`);
+    assert.doesNotMatch(
+      cache.value, /stale-while-revalidate/,
+      `${rule.source} may serve a stale module after a deploy`,
+    );
+    assert.match(cache.value, /must-revalidate/, `${rule.source} must revalidate`);
+  }
+});
