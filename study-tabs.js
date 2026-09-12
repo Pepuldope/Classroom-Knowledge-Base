@@ -6,7 +6,8 @@
 // panels are mutually exclusive and the model is pure — the previous
 // subview toggle lived inline in a DOM function and could not be tested.
 
-export const STUDY_TABS = ["search", "browse", "curriculum", "manage"];
+// "saved" sits before "manage": it is study material, not database admin.
+export const STUDY_TABS = ["search", "browse", "curriculum", "saved", "manage"];
 export const DEFAULT_STUDY_TAB = "search";
 
 /**

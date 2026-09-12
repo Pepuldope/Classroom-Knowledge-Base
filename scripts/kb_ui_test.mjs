@@ -686,16 +686,26 @@ try {
     await page.waitForSelector("#kbTutorModal:not([hidden])", { timeout: 8000 });
     await page.fill("#kbTutorInput", "how do I do interviews?");
     await page.click("#kbTutorForm button[type=submit]");
-    // Chips must appear.
-    await page.waitForSelector("#kbTutorSources .kb-source-chip", { timeout: 8000 });
+    // Grounding is collapsed by default — six two-line chips above the
+    // transcript is a wall of furniture in a panel meant for reading. The
+    // COUNT is what shows at a glance; the chips are one click away.
+    await page.waitForSelector("#kbTutorSources .kb-source-chips-label", { timeout: 8000 });
+    const summary = await page.locator("#kbTutorSources .kb-source-chips-label").textContent();
+    assert.ok(/\(2\)/.test(summary || ""), `summary should carry the source count, got: ${summary}`);
+    assert.equal(
+      await page.locator("#kbTutorSources .kb-source-chip").first().isVisible(),
+      false,
+      "sources must start collapsed",
+    );
+    // Opening it reveals the same clickable chips as before.
+    await page.locator("#kbTutorSources .kb-source-chips-label").click();
+    await page.waitForSelector("#kbTutorSources .kb-source-chip", { state: "visible", timeout: 8000 });
     const chipCount = await page.locator("#kbTutorSources .kb-source-chip").count();
     assert.ok(chipCount === 2, `expected 2 source chips, got ${chipCount}`);
     const firstTitle = await page.locator("#kbTutorSources .kb-source-chip .kb-chip-title").first().textContent();
     assert.ok(firstTitle && firstTitle.includes("STAR"), `chip title wrong: ${firstTitle}`);
     await page.waitForSelector("#kbTutorMessages .ai-copy-btn", { timeout: 8000 });
     assert.equal(await page.locator("#kbTutorMessages .ai-copy-btn").count(), 1, "each answer should expose one copy action");
-    await page.waitForSelector("#kbTutorMessages .ai-speak-btn", { timeout: 8000 });
-    assert.equal(await page.locator("#kbTutorMessages .ai-speak-btn").textContent(), "Read aloud", "each answer should expose read-aloud action");
     await page.waitForSelector("#kbTutorMessages .ai-save-btn", { timeout: 8000 });
     assert.equal(await page.locator("#kbTutorMessages .ai-save-btn").count(), 1, "each answer should expose one study-list action");
     await page.waitForSelector("#kbTutorMessages .ai-study-mode-btn", { timeout: 8000 });

@@ -1220,9 +1220,8 @@ async function configureKbSettingsUi() {
   set("kbPrefRelatedCountValue", s.relatedCount, "textContent");
   set("kbPrefDensity", s.density);
   set("kbPrefCopyFormat", s.copyFormat);
-  set("kbPrefSpeechRate", s.speechRate);
-  set("kbPrefSpeechRateValue", `${s.speechRate}×`, "textContent");
   set("kbPrefAutoBuild", s.autoBuild, "checked");
+  set("kbPrefShowModel", s.showModel, "checked");
   const pinnedList = $("kbPinnedCoursesList");
   if (pinnedList) {
     const bundle = await loadKbBundle().catch(() => null);
@@ -1258,8 +1257,6 @@ async function configureKbSettingsUi() {
   set("prefTheme", loadTheme());
   const relatedCount = $("kbPrefRelatedCount");
   if (relatedCount) relatedCount.oninput = (e) => { $("kbPrefRelatedCountValue").textContent = e.target.value; };
-  const speechRate = $("kbPrefSpeechRate");
-  if (speechRate) speechRate.oninput = (e) => { $("kbPrefSpeechRateValue").textContent = `${e.target.value}×`; };
   const exportButton = $("kbPrefExport");
   if (exportButton) exportButton.onclick = async () => {
     const bundle = await loadKbBundle();
@@ -1357,8 +1354,8 @@ async function saveSettingsAndReload() {
       relatedCount: $("kbPrefRelatedCount")?.value,
       density: $("kbPrefDensity")?.value,
       copyFormat: $("kbPrefCopyFormat")?.value,
-      speechRate: $("kbPrefSpeechRate")?.value,
       autoBuild: $("kbPrefAutoBuild")?.checked,
+      showModel: $("kbPrefShowModel")?.checked,
     });
     const pinned = [...($("kbPinnedCoursesList")?.querySelectorAll("input:checked") || [])].map((input) => input.value);
     kb.saveKbPinnedCourses(pinned);

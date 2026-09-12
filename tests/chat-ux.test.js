@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   composerStateModel, shouldFollowOutput, streamEndModel, applyComposerState,
-  createSseFramer,
+  createSseFramer, createDeltaStream,
 } from "../chat-ux.js";
 
 test("while a reply streams, the input is closed and Send becomes Stop", () => {
@@ -213,4 +213,66 @@ test("a stream that ends without a trailing newline still yields its last line",
   assert.deepEqual(f.push('data: {"n":1}'), []);
   assert.deepEqual(f.flush(), ['data: {"n":1}'], "the final delta was dropped");
   assert.deepEqual(f.flush(), [], "flush must not repeat itself");
+});
+
+// --- the whole delta pipeline ----------------------------------------------
+// Rebuilt from a REAL captured tutor response: 214 content deltas of a few
+// characters each. The reported symptom was words missing from the middle of an
+// answer while the raw stream was provably complete, so the property that
+// matters is total: every delta, whatever the chunking.
+
+const sse = (obj) => `data: ${JSON.stringify(obj)}\n`;
+const contentDelta = (s) => sse({ choices: [{ delta: { content: s } }] });
+
+function streamFor(text, { chunkSize = 7 } = {}) {
+  let body = sse({ type: "sources", notes: [{ t: "A note" }] });
+  for (let i = 0; i < text.length; i += chunkSize) {
+    body += contentDelta(text.slice(i, i + chunkSize));
+  }
+  return body + "data: [DONE]\n";
+}
+
+const ANSWER =
+  "A linear function is a function whose graph is a straight line, representing " +
+  "a constant rate of change between two variables. It is expressed as y = mx + b.";
+
+test("every content delta survives, whatever the network chunking", () => {
+  const body = streamFor(ANSWER);
+  // Network chunk sizes that deliberately do not align with line boundaries.
+  for (const size of [1, 3, 13, 64, 997, body.length]) {
+    let acc = "";
+    const s = createDeltaStream({ onContent: (c) => { acc += c; } });
+    for (let i = 0; i < body.length; i += size) s.push(body.slice(i, i + size));
+    s.end();
+    assert.equal(acc, ANSWER, `chunk size ${size} lost content`);
+    assert.equal(s.stats().unparsable, 0, `chunk size ${size} produced an unparsable data line`);
+  }
+});
+
+test("sources arrive once, and content is not confused for them", () => {
+  let sources = null, acc = "";
+  const s = createDeltaStream({ onContent: (c) => { acc += c; }, onSources: (n) => { sources = n; } });
+  s.push(streamFor("hello"));
+  s.end();
+  assert.deepEqual(sources, [{ t: "A note" }]);
+  assert.equal(acc, "hello");
+  assert.equal(s.stats().sources, 1);
+});
+
+test("an unparsable data line is counted, not silently dropped", () => {
+  const s = createDeltaStream({ onContent: () => {} });
+  s.push('data: {"choices":[{"delta":{"content":"ok"}}]}\ndata: {truncated\n');
+  s.end();
+  assert.equal(s.stats().unparsable, 1, "a broken data line must be visible in stats");
+  assert.equal(s.stats().content, 1);
+});
+
+test("a throwing callback loses that delta but not the rest of the stream", () => {
+  let seen = 0;
+  const s = createDeltaStream({ onContent: () => { seen++; if (seen === 2) throw new Error("render blew up"); } });
+  s.push(contentDelta("a") + contentDelta("b") + contentDelta("c"));
+  s.end();
+  assert.equal(seen, 3, "the stream stopped at the first failing render");
+  assert.equal(s.stats().callbackErrors, 1);
+  assert.equal(s.stats().content, 3);
 });

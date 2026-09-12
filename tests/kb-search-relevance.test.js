@@ -160,3 +160,39 @@ test("ordinary single-word queries still behave", () => {
   assert.equal(searchNotes(NOTES, "zzzznothing", { limit: 5 }).length, 0);
   assert.equal(searchNotes(NOTES, "", { limit: 5 }).length, 0);
 });
+
+// --- recency as part of relevance ------------------------------------------
+// Peter, 2026-09-12: results should be ranked by relevance AND by how recent
+// the material is. The note schema carries no posting date — only `y`, the
+// school year — so the blend is at year granularity, and it is deliberately
+// gentle: a better match from an older year must still beat a weak match from
+// this year. It breaks ties and nudges; it does not reorder on age alone.
+
+test("between equally good matches, the newer school year wins", () => {
+  const notes = [
+    { t: "Quadratic equations", course: "Math", y: "2023-24", s: "Solving quadratics", x: "Factor or use the formula." },
+    { t: "Quadratic equations", course: "Math", y: "2026-27", s: "Solving quadratics", x: "Factor or use the formula." },
+  ];
+  const hits = searchNotes(notes, "quadratic equations", { limit: 5 });
+  assert.equal(hits.length, 2);
+  assert.equal(hits[0].y, "2026-27", "the older copy of an identical note ranked first");
+});
+
+test("a strong old match still beats a weak new one", () => {
+  const notes = [
+    { t: "Quadratic equations", course: "Math", y: "2023-24", s: "Solving quadratics", x: "How to solve a quadratic equation step by step." },
+    { t: "Gym timetable", course: "PE", y: "2026-27", s: "Timetable", x: "Mentions one quadratic in passing." },
+  ];
+  const hits = searchNotes(notes, "quadratic equations", { limit: 5 });
+  assert.equal(hits[0].y, "2023-24", "recency overpowered match quality");
+});
+
+test("an undated note is ranked as oldest, not dropped", () => {
+  const notes = [
+    { t: "Quadratic equations", course: "Math", y: "", s: "Solving quadratics", x: "Factor or use the formula." },
+    { t: "Quadratic equations", course: "Math", y: "2026-27", s: "Solving quadratics", x: "Factor or use the formula." },
+  ];
+  const hits = searchNotes(notes, "quadratic equations", { limit: 5 });
+  assert.equal(hits.length, 2, "the undated note disappeared");
+  assert.equal(hits[0].y, "2026-27");
+});

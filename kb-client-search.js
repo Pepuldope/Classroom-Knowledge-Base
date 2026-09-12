@@ -142,6 +142,7 @@ function scoreNotes(notes, qTokens, query = "") {
   // "cover letter" should prefer the cover-letter task over a note that happens
   // to contain both words in unrelated sentences.
   const phrase = qTokens.length > 1 ? qTokens.join(" ") : "";
+  const newest = newestYear(notes);
   const results = [];
   for (const [i, rec] of scores) {
     let score = rec.score * coverageFactor(rec.matched.size, qTokens.length);
@@ -151,6 +152,7 @@ function scoreNotes(notes, qTokens, query = "") {
       else if (foldText(note.s).includes(phrase)) score *= 1.35;
       else if (foldText(note.x).includes(phrase)) score *= 1.15;
     }
+    score *= recencyFactor((notes[i] || {}).y, newest);
     results.push({ index: i, score: Math.round(score * 1000) / 1000, matched: rec.matched.size });
   }
 
@@ -584,4 +586,47 @@ export function deriveFamily(course = "") {
   ];
   for (const [re, family] of rules) if (re.test(c)) return family;
   return "";
+}
+
+// --- recency as part of relevance ------------------------------------------
+// What a student is studying now is usually what they are searching for, so a
+// note from this school year should edge out an identical one from three years
+// ago. The note schema carries no posting date — only `y`, a school year like
+// "2024-25" — so this works at year granularity.
+//
+// It is deliberately WEAK. Ranking is still relevance first: the decay tops out
+// at 20%, which is far less than the phrase (1.6x) and coverage factors, so a
+// genuinely better old match keeps its place. This breaks ties and nudges; it
+// must never turn search into "newest first", which is already its own sort.
+
+const RECENCY_DECAY_PER_YEAR = 0.04;
+const RECENCY_MAX_DECAY = 0.2;
+
+/** The leading calendar year of a school year string, or null if undated. */
+function yearOf(value) {
+  const m = /^(\d{4})/.exec(String(value == null ? "" : value).trim());
+  return m ? Number(m[1]) : null;
+}
+
+/** The most recent year present in the corpus — the baseline nothing decays from. */
+export function newestYear(notes) {
+  let newest = null;
+  for (const n of notes || []) {
+    const y = yearOf(n && n.y);
+    if (y != null && (newest == null || y > newest)) newest = y;
+  }
+  return newest;
+}
+
+/**
+ * A multiplier in [0.8, 1]: 1 for the newest year in the corpus, decaying with
+ * age. An undated note is treated as the oldest rather than dropped — it still
+ * matches, it just stops winning ties it cannot justify.
+ */
+export function recencyFactor(year, newest) {
+  if (newest == null) return 1;
+  const y = yearOf(year);
+  if (y == null) return 1 - RECENCY_MAX_DECAY;
+  const gap = Math.max(0, newest - y);
+  return 1 - Math.min(RECENCY_MAX_DECAY, gap * RECENCY_DECAY_PER_YEAR);
 }

@@ -219,3 +219,65 @@ export function createSseFramer() {
     },
   };
 }
+
+/**
+ * Consume an SSE tutor stream: framing, parsing and classification in one
+ * testable place.
+ *
+ * This used to live inline in the tutor's read loop, where it could not be
+ * unit-tested and where a bare `catch {}` made a dropped delta indistinguishable
+ * from a delta that never arrived. Both halves of that were real problems, so
+ * the counters below are part of the contract, not debug scaffolding: `stats()`
+ * reports what was skipped and what failed to parse, which is the evidence a
+ * future "the tutor lost a word" report needs.
+ *
+ * Callbacks are invoked in stream order. A throwing callback must not abort the
+ * stream or swallow later deltas, so it is counted and the stream carries on.
+ */
+export function createDeltaStream({ onContent, onReasoning, onSources } = {}) {
+  const framer = createSseFramer();
+  const stats = { lines: 0, data: 0, content: 0, reasoning: 0, sources: 0, done: 0, unparsable: 0, callbackErrors: 0 };
+
+  const call = (fn, value) => {
+    if (typeof fn !== "function") return;
+    try { fn(value); } catch { stats.callbackErrors++; }
+  };
+
+  const handleLine = (line) => {
+    stats.lines++;
+    const m = line.match(/^data:\s*(.*)$/);
+    if (!m) return;                       // comments, blank separators, event: lines
+    stats.data++;
+    const payload = m[1].trim();
+    if (payload === "[DONE]") { stats.done++; return; }
+    let json;
+    try {
+      json = JSON.parse(payload);
+    } catch {
+      // A `data:` line that will not parse is LOST CONTENT, not noise. Counting
+      // it is the whole point: silence here is what hid the original defect.
+      stats.unparsable++;
+      return;
+    }
+    if (json && json.type === "sources") {
+      stats.sources++;
+      call(onSources, Array.isArray(json.notes) ? json.notes : []);
+      return;
+    }
+    const choice = json?.choices?.[0];
+    const kind = deltaKind(choice);
+    if (kind === "content") {
+      stats.content++;
+      call(onContent, choice.delta.content);
+    } else if (kind === "reasoning") {
+      stats.reasoning++;
+      call(onReasoning, choice.delta.reasoning ?? choice.delta.reasoning_content);
+    }
+  };
+
+  return {
+    push(chunk) { for (const line of framer.push(chunk)) handleLine(line); },
+    end() { for (const line of framer.flush()) handleLine(line); },
+    stats() { return { ...stats }; },
+  };
+}

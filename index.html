@@ -196,6 +196,7 @@
         <button class="study-tab-btn active" data-tab="search" type="button" role="tab" aria-selected="true" aria-controls="studyPanel-search">Search</button>
         <button class="study-tab-btn" data-tab="browse" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-browse">Browse</button>
         <button class="study-tab-btn" data-tab="curriculum" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-curriculum">Curriculum</button>
+        <button class="study-tab-btn" data-tab="saved" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-saved">Saved</button>
         <button class="study-tab-btn" data-tab="manage" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-manage">Manage</button>
       </div>
 
@@ -267,6 +268,12 @@
       <div id="studyPanel-curriculum" class="study-panel" role="tabpanel" tabindex="-1" hidden>
         <p class="settings-hint">Every subject you've taken, across every year. Click a course to browse its notes. Tinted rows are subjects that ran across more than one year.</p>
         <div id="kbCurriculumGrid" class="curriculum-grid"></div>
+      </div>
+
+      <div id="studyPanel-saved" class="study-panel" role="tabpanel" tabindex="-1" hidden>
+        <h3 class="study-manage-title">Saved answers</h3>
+        <p class="settings-hint">Answers you saved from the AI tutor. Stored in this browser.</p>
+        <div id="kbSavedList" class="kb-saved-list"></div>
       </div>
 
       <div id="studyPanel-manage" class="study-panel" role="tabpanel" tabindex="-1" hidden>
@@ -475,8 +482,9 @@
         <label class="settings-row"><span>Related notes <output id="kbPrefRelatedCountValue">3</output></span><input id="kbPrefRelatedCount" type="range" min="1" max="8" value="3" /></label>
         <label class="settings-row"><span>Reading density</span><select class="settings-select" id="kbPrefDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
         <label class="settings-row"><span>Copied search context</span><select class="settings-select" id="kbPrefCopyFormat"><option value="lines">Titles and snippets on separate lines</option><option value="compact">One line per result</option></select></label>
-        <label class="settings-row"><span>Read-aloud speed <output id="kbPrefSpeechRateValue">1×</output></span><input id="kbPrefSpeechRate" type="range" min="0.5" max="2" step="0.25" value="1" /></label>
         <label class="settings-row settings-row-toggle"><span>Build automatically after Classroom sign-in</span><input type="checkbox" id="kbPrefAutoBuild" /></label>
+        <label class="settings-row settings-row-toggle"><span>Show which AI model answered</span><input type="checkbox" id="kbPrefShowModel" /></label>
+        <label class="settings-row settings-row-toggle"><span>Show which AI model answered</span><input type="checkbox" id="kbPrefShowModel" /></label>
         <div class="settings-row"><button id="kbPrefExport" type="button">Download my KB</button><button id="kbPrefExportBook" type="button">Download study book</button><button id="kbPrefClear" type="button">Clear local KB</button></div>
         <p class="settings-hint" id="kbPrefStatus" role="status" aria-live="polite" aria-atomic="true"></p>
       </section>

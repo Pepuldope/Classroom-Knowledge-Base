@@ -19,7 +19,7 @@ import { renderLightMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, deltaKind, revealAnswer, markReasoning, createSseFramer } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, revealAnswer, markReasoning, createDeltaStream } from "./chat-ux.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -483,7 +483,8 @@ const DEFAULT_KB_SETTINGS = Object.freeze({
   density: "comfortable",
   copyFormat: "lines",
   autoBuild: false,
-  speechRate: 1,
+  // Provider/model attribution is a developer's question, not a student's.
+  showModel: false,
 });
 
 /** Normalize browser-local KB controls; never sends these preferences to a server. */
@@ -492,7 +493,6 @@ export function kbSettingsModel(value = {}) {
   const efforts = new Set(["quick", "tutor", "hard"]);
   const scopes = new Set(["all", "current", "pinned"]);
   const sorts = new Set(["relevance", "recency", "course", "title"]);
-  const speechRate = Number(input.speechRate);
   const relatedCount = Number(input.relatedCount);
   return {
     tutorEnabled: input.tutorEnabled !== false,
@@ -503,7 +503,7 @@ export function kbSettingsModel(value = {}) {
     density: input.density === "compact" ? "compact" : DEFAULT_KB_SETTINGS.density,
     copyFormat: input.copyFormat === "compact" ? "compact" : DEFAULT_KB_SETTINGS.copyFormat,
     autoBuild: input.autoBuild === true,
-    speechRate: Number.isFinite(speechRate) ? Math.min(2, Math.max(0.5, speechRate)) : DEFAULT_KB_SETTINGS.speechRate,
+    showModel: input.showModel === true,
   };
 }
 
@@ -789,6 +789,51 @@ export async function maybeAutoBuildKb() {
 
 let activeStudyTab = "search";
 
+/**
+ * The Saved tab: tutor answers the student chose to keep.
+ *
+ * "Save to study list" wrote to localStorage and to the prefs sync, and nothing
+ * in the app ever read it back — the button reported "Saved" about something
+ * the student could never reach again. This is the other half.
+ */
+function renderStudyList() {
+  const host = $("kbSavedList");
+  if (!host) return;
+  const list = loadStudyList().slice().sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  host.textContent = "";
+  if (!list.length) {
+    const empty = document.createElement("p");
+    empty.className = "settings-hint";
+    empty.textContent = "Nothing saved yet. Use “Save to study list” under any tutor answer.";
+    host.appendChild(empty);
+    return;
+  }
+  for (const item of list) {
+    const card = document.createElement("article");
+    card.className = "kb-saved-item";
+    const body = document.createElement("div");
+    body.className = "kb-saved-text";
+    // Same renderer as the tutor and the note bodies; it escapes before it
+    // builds any HTML, so a saved answer cannot smuggle markup back in.
+    body.innerHTML = renderLightMarkdown(item.text);
+    const meta = document.createElement("div");
+    meta.className = "kb-saved-meta";
+    const when = document.createElement("span");
+    when.textContent = item.savedAt ? new Date(item.savedAt).toLocaleDateString() : "";
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "kb-saved-remove";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", () => {
+      saveStudyList(removeStudyAnswer(loadStudyList(), item.id));
+      renderStudyList();
+    });
+    meta.append(when, remove);
+    card.append(body, meta);
+    host.appendChild(card);
+  }
+}
+
 export function setStudyTab(requested) {
   const model = studyTabModel(requested);
   activeStudyTab = model.active;
@@ -809,6 +854,7 @@ export function setStudyTab(requested) {
   if (model.active === "browse") showBrowsePanel();
   else hideBrowsePanel();
   if (model.active === "curriculum") renderStudyCurriculum();
+  if (model.active === "saved") renderStudyList();
   return model.active;
 }
 
@@ -2962,19 +3008,6 @@ export function toggleStudyPrompt(completed, index, total) {
     : [...progress.completed, index].sort((a, b) => a - b);
 }
 
-export function tutorSpeechModel(text, speaking = false) {
-  const clean = copyableTutorText(text);
-  if (!clean) return null;
-  return speaking
-    ? { text: clean, label: "Stop", title: "Stop reading this answer" }
-    : { text: clean, label: "Read aloud", title: "Read this answer aloud" };
-}
-
-export function tutorSpeechRateModel(value) {
-  const rate = Number(value);
-  return Number.isFinite(rate) ? Math.min(2, Math.max(0.5, rate)) : 1;
-}
-
 export function formatTutorAttribution(provider, model) {
   const p = typeof provider === "string" ? provider.trim() : "";
   const m = typeof model === "string" ? model.trim() : "";
@@ -3037,6 +3070,10 @@ function addTutorFeedbackActions(messageEl, text) {
 }
 
 function addTutorAttribution(messageEl, provider, model) {
+  // "openrouter · nex-agi/nex-v2" answers a question a student never asked and
+  // cannot act on. It stays available for diagnosing routing, behind a setting
+  // that is off unless someone deliberately turns it on.
+  if (!loadKbSettings().showModel) return;
   const text = formatTutorAttribution(provider, model);
   if (!messageEl || !text || messageEl.querySelector(".ai-attribution")) return;
   const attribution = document.createElement("span");
@@ -3065,44 +3102,6 @@ function addTutorCopyAction(messageEl, text) {
   messageEl.appendChild(button);
 }
 
-function addTutorSpeechAction(messageEl, text) {
-  if (!messageEl || !tutorSpeechModel(text) || messageEl.querySelector(".ai-speak-btn")) return;
-  const button = document.createElement("button");
-  button.type = "button";
-  button.className = "ai-speak-btn msg-action";
-  let speaking = false;
-  const update = () => {
-    const model = tutorSpeechModel(text, speaking);
-    if (!model) return;
-    button.textContent = model.label;
-    button.title = model.title;
-    button.setAttribute("aria-label", model.title);
-    button.setAttribute("aria-pressed", speaking ? "true" : "false");
-  };
-  const finish = () => { speaking = false; update(); };
-  update();
-  button.addEventListener("click", () => {
-    if (typeof window === "undefined" || !window.speechSynthesis || typeof window.SpeechSynthesisUtterance !== "function") {
-      button.textContent = "Voice unavailable";
-      button.disabled = true;
-      return;
-    }
-    if (speaking) {
-      window.speechSynthesis.cancel();
-      finish();
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new window.SpeechSynthesisUtterance(copyableTutorText(text));
-    utterance.rate = tutorSpeechRateModel(loadKbSettings().speechRate);
-    utterance.onend = finish;
-    utterance.onerror = finish;
-    speaking = true;
-    update();
-    window.speechSynthesis.speak(utterance);
-  });
-  messageEl.appendChild(button);
-}
 function addTutorStudyAction(messageEl, text) {
   if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-save-btn")) return;
   const button = document.createElement("button");
@@ -3115,6 +3114,7 @@ function addTutorStudyAction(messageEl, text) {
     const after = saveStudyList(addStudyAnswer(before, text));
     button.textContent = after.length > before.length ? "Saved" : "Already saved";
     button.disabled = true;
+    renderStudyList();
   });
   messageEl.appendChild(button);
 }
@@ -3318,50 +3318,51 @@ async function sendTutor(text, { retry = false } = {}) {
     }
     const reader = r.body.getReader();
     const dec = new TextDecoder();
-    // Lines, not chunks: a `data:` line can straddle two reads, and handling
-    // the halves separately silently drops a delta at every chunk boundary.
-    const framer = createSseFramer();
-    // SSE: lines like "data: {...}" — accumulate the content deltas.
-    const handleLine = (line) => {
-      const m = line.match(/^data:\s*(.*)$/);
-      if (!m) return;
-      const payload = m[1].trim();
-      if (payload === "[DONE]") return;
-      try {
-        const j = JSON.parse(payload);
-        // A control event from the tutor route: sources used for grounding.
-        if (j && j.type === "sources") { sources = Array.isArray(j.notes) ? j.notes : []; return; }
-        const choice = j.choices?.[0];
-        const kind = deltaKind(choice);
-        if (kind === "reasoning") {
-          markReasoning(assistantEl);
-        } else if (kind === "content") {
-          acc += choice.delta.content;
-          if (assistantEl) {
-            revealAnswer(assistantEl);
-            // Position read BEFORE the text lands, or every chunk reads as
-            // "the user just scrolled away".
-            const following = isAtBottom(wrap);
-            // The model answers in markdown. renderLightMarkdown escapes the
-            // text before it builds any HTML, so this is not an injection
-            // surface — it is the same renderer the note bodies use.
-            assistantEl.innerHTML = renderLightMarkdown(acc);
-            followOutput(wrap, following);
-          }
-        }
-      } catch {}
+
+    // Follow the output while the reader is at the bottom — but decide that
+    // from actual scrolling, not by re-measuring on every delta. Re-measuring
+    // latched: one delta that failed to pin left the transcript >48px from the
+    // bottom, every later delta then read as "the reader scrolled away", and
+    // the answer streamed on off-screen for the rest of the reply.
+    let stick = true;
+    const onScroll = () => { stick = isAtBottom(wrap); };
+    if (wrap) wrap.addEventListener("scroll", onScroll, { passive: true });
+
+    const paint = () => {
+      if (!assistantEl) return;
+      revealAnswer(assistantEl);
+      // renderLightMarkdown escapes the text before it builds any HTML, so this
+      // is not an injection surface — it is the renderer the note bodies use.
+      assistantEl.innerHTML = renderLightMarkdown(acc);
+      followOutput(wrap, stick);
     };
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      for (const line of framer.push(dec.decode(value, { stream: true }))) handleLine(line);
+
+    const stream = createDeltaStream({
+      onSources: (notes) => { sources = notes; },
+      onReasoning: () => markReasoning(assistantEl),
+      onContent: (chunk) => { acc += chunk; paint(); },
+    });
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        stream.push(dec.decode(value, { stream: true }));
+      }
+      stream.end();
+    } finally {
+      if (wrap) wrap.removeEventListener("scroll", onScroll);
     }
-    // A stream that ended without a trailing newline still owes us its last line.
-    for (const line of framer.flush()) handleLine(line);
+
+    // The answer on screen must equal the answer we accumulated. Each delta
+    // paints optimistically and a paint can fail; this repaint is the one that
+    // is allowed to be authoritative, and it runs outside the per-delta path so
+    // a mid-stream failure cannot leave a half-drawn reply standing.
+    paint();
+
     // After streaming, render the source chips (clickable -> open the note).
     renderTutorSources(sourcesEl, sources);
     addTutorCopyAction(assistantEl, acc);
-    addTutorSpeechAction(assistantEl, acc);
     addTutorStudyAction(assistantEl, acc);
     addTutorStudyModeAction(assistantEl, acc);
     addTutorFeedbackActions(assistantEl, acc);
@@ -3392,12 +3393,15 @@ function renderTutorSources(container, notes) {
   if (!container) return;
   const chips = tutorSourceList(notes);
   if (!chips.length) return; // nothing to attribute
-  // Keep the "grounded in N notes" note, then append clickable chips.
-  const wrap = document.createElement("div");
+  // Collapsed by default. Grounding is worth being able to check, but six
+  // two-line chips above the transcript is a wall of furniture in a panel whose
+  // job is reading an answer — and it grew with every extra note retrieved.
+  // The count is the part worth seeing at a glance; the chips are on demand.
+  const wrap = document.createElement("details");
   wrap.className = "kb-source-chips";
-  const lbl = document.createElement("span");
+  const lbl = document.createElement("summary");
   lbl.className = "kb-source-chips-label";
-  lbl.textContent = "Sources used:";
+  lbl.textContent = `Sources used (${chips.length})`;
   wrap.appendChild(lbl);
   for (const c of chips) {
     const b = document.createElement("button");

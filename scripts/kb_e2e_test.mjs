@@ -28,7 +28,7 @@ import routerHealth from "../api/router-health.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { deriveFamily } from "../kb-client-search.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorSpeechModel, tutorSpeechRateModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
@@ -161,23 +161,6 @@ test("planner tutor grounding offers a compact copy action", async () => {
   assert.match(html, /id="aiGroundingCopy"/);
   assert.match(app, /navigator\.clipboard\.writeText/);
 });
-test("tutorSpeechModel gives read-aloud controls stable labels and safe text", () => {
-  assert.deepEqual(tutorSpeechModel("  Read this answer aloud.  ", false), {
-    text: "Read this answer aloud.", label: "Read aloud", title: "Read this answer aloud",
-  });
-  assert.deepEqual(tutorSpeechModel("Already speaking", true), {
-    text: "Already speaking", label: "Stop", title: "Stop reading this answer",
-  });
-  assert.deepEqual(tutorSpeechModel("   ", false), null);
-});
-
-test("tutorSpeechRateModel clamps and normalizes the local playback preference", () => {
-  assert.equal(tutorSpeechRateModel(), 1);
-  assert.equal(tutorSpeechRateModel(1.25), 1.25);
-  assert.equal(tutorSpeechRateModel("slow"), 1);
-  assert.equal(tutorSpeechRateModel(9), 2);
-  assert.equal(tutorSpeechRateModel(0), 0.5);
-});
 
 test("kbDensityClass maps the local reading-density setting to a view class", () => {
   assert.equal(kbDensityClass({ density: "compact" }), "kb-density-compact");
@@ -195,7 +178,7 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     density: "comfortable",
     copyFormat: "lines",
     autoBuild: false,
-    speechRate: 1,
+    showModel: false,
   });
   assert.deepEqual(kbSettingsModel({ tutorEffort: "invalid", relatedCount: 99, density: "compact", autoBuild: true }), {
     tutorEnabled: true,
@@ -206,7 +189,7 @@ test("kbSettingsModel normalizes KB controls and preserves local-only defaults",
     density: "compact",
     copyFormat: "lines",
     autoBuild: true,
-    speechRate: 1,
+    showModel: false,
   });
 });
 
@@ -1659,4 +1642,13 @@ test("renderAssignmentDescription escapes HTML in table cells", () => {
 
 test("interactive Classroom sign-in always requests the account chooser", () => {
   assert.equal(INTERACTIVE_OAUTH_PROMPT, "select_account");
+});
+
+test("model attribution is off unless it is deliberately turned on", () => {
+  // A provider/model line answers a developer's question, not a student's, so
+  // the default has to be off — a normalizer that let it default on would put
+  // "openrouter · nex-agi/nex-v2" under every answer again.
+  assert.equal(kbSettingsModel().showModel, false);
+  assert.equal(kbSettingsModel({ showModel: true }).showModel, true);
+  assert.equal(kbSettingsModel({ showModel: "yes" }).showModel, false, "only a real boolean may enable it");
 });

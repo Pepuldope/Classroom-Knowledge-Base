@@ -1182,6 +1182,23 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .modal-card-tall { max-width: 560px; max-height: 85vh; }
 
+/* The tutor is a READING surface, not a form. 560px is right for the note and
+   settings modals that share this class, but on a desktop it turns every answer
+   into a narrow ribbon with most of the screen unused. Scoped to the tutor so
+   the other two keep their width, and fenced above the mobile breakpoint
+   because #kbTutorModal outranks .modal-card-tall on specificity and would
+   otherwise beat the full-screen sheet rules further down this file. */
+@media (min-width: 901px) {
+  #kbTutorModal .modal-card-tall {
+    max-width: min(1100px, 92vw);
+    width: 100%;
+    /* Tall enough that the transcript is worth scrolling, without forcing a
+       short conversation to sit in a mostly empty box. */
+    min-height: min(60vh, 620px);
+    max-height: 90vh;
+  }
+}
+
 .settings-tabs {
   display: flex;
   padding: 0 1rem;
@@ -2849,8 +2866,18 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-course-meta { font-size: 0.76rem; color: var(--muted); }
 
 /* Tutor "sources used" chips — clickable, jump to the grounded note. */
-.kb-source-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-top: 0.45rem; }
-.kb-source-chips-label { font-size: 0.78rem; color: var(--muted); margin-right: 0.15rem; }
+/* A <details>, so the chips cost one line until someone wants to check them.
+   The flex row moves to [open] — a closed <details> must not lay its summary
+   out as a flex item, or the marker and the label separate. */
+.kb-source-chips { margin-top: 0.45rem; }
+.kb-source-chips[open] { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.kb-source-chips[open] .kb-source-chips-label { flex-basis: 100%; }
+.kb-source-chips-label {
+  font-size: 0.78rem; color: var(--muted); margin-right: 0.15rem;
+  cursor: pointer; list-style: revert; width: fit-content;
+}
+.kb-source-chips-label:hover { color: var(--fg); }
+.kb-source-chips-label:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
 .kb-source-chip { display: inline-flex; flex-direction: column; align-items: flex-start; text-align: left; line-height: 1.15; gap: 0.05rem; max-width: 220px; }
 .kb-chip-title { font-weight: 600; font-size: 0.82rem; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
 .kb-chip-sub { font-size: 0.72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
@@ -3063,3 +3090,36 @@ summary::-webkit-details-marker { color: var(--muted); }
   color: var(--muted);
   font-style: italic;
 }
+
+/* --- Saved answers (Study → Saved) ---------------------------------------- */
+.kb-saved-list { display: flex; flex-direction: column; gap: 0.75rem; }
+.kb-saved-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+.kb-saved-text { font-size: 0.9rem; line-height: 1.5; }
+.kb-saved-text > :first-child { margin-top: 0; }
+.kb-saved-text > :last-child { margin-bottom: 0; }
+.kb-saved-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-top: 0.6rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.kb-saved-remove {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.6rem;
+  cursor: pointer;
+}
+.kb-saved-remove:hover { color: var(--fg); border-color: var(--muted); }
+.kb-saved-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
