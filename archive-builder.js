@@ -267,6 +267,7 @@ export function bundleFromRaw(raw) {
       const topicName = (cw.topicId && topicNameById.get(cw.topicId)) || "Uncategorized";
       const title = (cw.title || "").trim();
       const basePath = `${year}/vault/${courseNameSan}/${sanitizeSegment(topicName)}/${sanitizeSegment(title)}`;
+      const body = courseWorkBody(cw, subByCwId.get(cw.id));
       notes.push({
         p: makeUniquePath(basePath, usedPaths),
         t: title,
@@ -275,8 +276,8 @@ export function bundleFromRaw(raw) {
         y: year,
         topic: topicName,
         kind: "note",
-        s: null,
-        x: courseWorkBody(cw, subByCwId.get(cw.id)),
+        s: deriveSummary(title, body, course.name, topicName),
+        x: body,
       });
       noteCount++;
     }
@@ -285,6 +286,7 @@ export function bundleFromRaw(raw) {
       const topicName = (m.topicId && topicNameById.get(m.topicId)) || "Uncategorized";
       const title = (m.title || "").trim();
       const basePath = `${year}/vault/${courseNameSan}/${sanitizeSegment(topicName)}/${sanitizeSegment(title)}`;
+      const body = materialBody(m);
       notes.push({
         p: makeUniquePath(basePath, usedPaths),
         t: title,
@@ -293,8 +295,8 @@ export function bundleFromRaw(raw) {
         y: year,
         topic: topicName,
         kind: "note",
-        s: null,
-        x: materialBody(m),
+        s: deriveSummary(title, body, course.name, topicName),
+        x: body,
       });
       noteCount++;
     }
@@ -303,6 +305,7 @@ export function bundleFromRaw(raw) {
     if (announcements.length > 0) {
       const title = `${course.name} - Announcements`;
       const basePath = `${year}/vault/${courseNameSan}/${sanitizeSegment(title)}`;
+      const body = announcementsBody(announcements);
       notes.push({
         p: makeUniquePath(basePath, usedPaths),
         t: title,
@@ -311,8 +314,8 @@ export function bundleFromRaw(raw) {
         y: year,
         topic: null,
         kind: "announcements",
-        s: null,
-        x: announcementsBody(announcements),
+        s: deriveSummary(title, body, course.name, null),
+        x: body,
       });
       noteCount++;
     }

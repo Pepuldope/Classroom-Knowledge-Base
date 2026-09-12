@@ -185,6 +185,72 @@ test("a 500 is not swallowed — the course is skipped, not silently emptied", a
   );
 });
 
+// ---------------------------------------------------------------------------
+// 4. Derived summaries
+//
+// bundleFromVault has always called deriveSummary; the Classroom path hardcoded
+// `s: null` for all three note kinds and never did. So for every student who
+// builds their KB by clicking "Scrape my Classroom" — which is everyone except
+// Peter, whose corpus is vault-seeded — the ×3 summary weight in search could
+// never fire and snippets had no summary to fall back on. AGENTS.md §2 lists
+// deriving `s` as a top-priority requirement.
+// ---------------------------------------------------------------------------
+
+test("every Classroom note gets a derived summary", async () => {
+  const bundle = await buildArchiveFromClassroom(fakeFetch([
+    ["/courses?", { courses: [COURSE] }],
+    ["/topics", { topic: [{ topicId: "t1", name: "Quadratics" }] }],
+    ["/courseWork?", { courseWork: [{
+      id: "w1", title: "Factorising", topicId: "t1",
+      description: "Work through questions 1 to 12 on page 48. Show every step.",
+    }] }],
+    ["/courseWorkMaterials", { courseWorkMaterial: [{
+      id: "m1", title: "Worked examples", topicId: "t1",
+      description: "Six worked examples covering the discriminant.",
+    }] }],
+    ["/announcements", { announcements: [{ id: "a1", text: "The test is on Friday. Revise chapters 4 and 5.", creationTime: "2025-09-10T00:00:00Z" }] }],
+    ["/studentSubmissions", { studentSubmissions: [] }],
+  ]));
+
+  assert.equal(bundle.notes.length, 3);
+  for (const note of bundle.notes) {
+    assert.equal(typeof note.s, "string", `note "${note.t}" has a non-string summary`);
+    assert.ok(note.s.trim() !== "", `note "${note.t}" has an empty summary`);
+  }
+});
+
+test("a note with a usable body summarises from the body, not the title", async () => {
+  const bundle = await buildArchiveFromClassroom(fakeFetch([
+    ["/courses?", { courses: [COURSE] }],
+    ["/topics", { topic: [] }],
+    ["/courseWork?", { courseWork: [{
+      id: "w1", title: "Factorising",
+      description: "Work through questions 1 to 12 on page 48.",
+    }] }],
+    ["/courseWorkMaterials", { courseWorkMaterial: [] }],
+    ["/announcements", { announcements: [] }],
+    ["/studentSubmissions", { studentSubmissions: [] }],
+  ]));
+
+  assert.match(bundle.notes[0].s, /questions 1 to 12/);
+});
+
+test("a note with no usable body falls back to course, topic and title", async () => {
+  const bundle = await buildArchiveFromClassroom(fakeFetch([
+    ["/courses?", { courses: [COURSE] }],
+    ["/topics", { topic: [{ topicId: "t1", name: "Quadratics" }] }],
+    // No description at all — the common case for a bare Classroom assignment.
+    ["/courseWork?", { courseWork: [{ id: "w1", title: "Factorising", topicId: "t1" }] }],
+    ["/courseWorkMaterials", { courseWorkMaterial: [] }],
+    ["/announcements", { announcements: [] }],
+    ["/studentSubmissions", { studentSubmissions: [] }],
+  ]));
+
+  const { s } = bundle.notes[0];
+  assert.ok(s.includes("Algebra"), `summary should name the course; got "${s}"`);
+  assert.ok(s.includes("Factorising"), `summary should name the note; got "${s}"`);
+});
+
 // RED before the fix. statusOf() read the status out of the error *message*
 // only, although both throwers (app.js gFetch and api/kb-scrape.js) also set
 // `err.status`. Any reword of that message — or any other caller raising a
