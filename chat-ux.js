@@ -300,6 +300,13 @@ export function unwrapMathDelimiters(text) {
     // Display math on its own line stays on its own line.
     .replace(/\\\[\s*([\s\S]*?)\s*\\\]/g, (_, body) => `\n${body.trim()}\n`)
     .replace(/\\\(\s*([\s\S]*?)\s*\\\)/g, (_, body) => body.trim())
+    // $$…$$ and $…$ are the other half of what models emit. $$ first, or the
+    // single-dollar rule would eat the opening pair and strand the closing one.
+    .replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, body) => `\n${body.trim()}\n`)
+    .replace(/\$(?!\d)\s*([^$\n]+?)\s*\$/g, (_, body) => body.trim())
+    // A fraction is the one macro common enough to be worth spelling out; the
+    // parentheses keep "a/b + c" from reading as "a/(b + c)".
+    .replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, num, den) => `(${num.trim()})/(${den.trim()})`)
     // \text{or} is prose the model wrapped for the typesetter's benefit.
     .replace(/\\text\{([^}]*)\}/g, "$1")
     .replace(/\\(?:qquad|quad|;|,|!)/g, " ")

@@ -297,6 +297,27 @@ test("spacing macros and text{} become the prose they stood for", () => {
   );
 });
 
+test("dollar-delimited maths is unwrapped too", () => {
+  assert.equal(
+    unwrapMathDelimiters("The slope is $$m = 2$$ here").replace(/\n+/g, "|"),
+    "The slope is |m = 2| here",
+  );
+  assert.equal(unwrapMathDelimiters("a $x$ b"), "a x b");
+});
+
+test("a fraction becomes something a student can read", () => {
+  assert.equal(
+    unwrapMathDelimiters("$$m = \\frac{y_2 - y_1}{x_2 - x_1}$$").trim(),
+    "m = (y_2 - y_1)/(x_2 - x_1)",
+  );
+});
+
+test("a price is not mistaken for maths", () => {
+  // The single-dollar rule must not fire on money, which is why it refuses a
+  // digit immediately after the opening $.
+  assert.equal(unwrapMathDelimiters("it costs $5 and $10"), "it costs $5 and $10");
+});
+
 test("text with no maths in it is returned untouched", () => {
   const plain = "A linear function has a constant rate of change.";
   assert.equal(unwrapMathDelimiters(plain), plain);
