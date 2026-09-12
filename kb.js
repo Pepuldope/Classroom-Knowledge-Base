@@ -3289,12 +3289,25 @@ async function sendTutor(text, { retry = false } = {}) {
     const retrieved = tutorRequestNotesModel(
       buildTutorRetrievedNotes(localKbBundle, text, { focusNote: focus }),
     );
-    const r = await fetch("/api/tutor", {
+    const body = JSON.stringify({ messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage() });
+    const send = () => fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
       signal,
-      body: JSON.stringify({ messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage() }),
+      body,
     });
+
+    let r = await send();
+    // /api/tutor authenticates by calling Google's userinfo with the access
+    // token this request carries, so an hour into a session it starts answering
+    // 401 "unauthorized". The Classroom paths already recover by refreshing off
+    // the httpOnly cookie; the tutor did not, and its Retry button re-sent the
+    // same dead token — which is how one question produced three identical
+    // failures. Refresh once, then retry once.
+    if (r.status === 401 && typeof window !== "undefined" && typeof window.__cwaRefreshToken === "function") {
+      const fresh = await window.__cwaRefreshToken().catch(() => null);
+      if (fresh) r = await send();
+    }
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       acc = `❌ ${err.error || err.message || r.status}`;
@@ -3302,6 +3315,9 @@ async function sendTutor(text, { retry = false } = {}) {
         assistantEl.textContent = acc;
         addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
       }
+      // Otherwise the header sits on "Thinking… (searching the knowledge base)"
+      // under a failed answer, for the rest of the thread.
+      if (sourcesEl) sourcesEl.innerHTML = "";
       return;
     }
     const notesUsed = Number(r.headers.get("X-KB-Notes") || "0");

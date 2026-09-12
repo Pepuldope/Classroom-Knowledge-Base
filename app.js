@@ -190,6 +190,10 @@ window.addEventListener("pagehide", () => {
 // Sibling modules (kb.js) change synced state too, and must not reach into
 // app.js internals to say so.
 window.__cwaPushPrefs = pushPrefsToServer;
+// kb.js cannot import app.js (app.js imports kb.js), and /api/tutor needs a
+// live Google access token. Exposing the DEDUPED refresh — not the raw endpoint
+// — so a 401 there recovers the same way the Classroom paths already do.
+window.__cwaRefreshToken = () => serverRefreshAccessToken();
 
 const SORT_KEY = "cwa_sort";
 let currentSort = sessionStorage.getItem(SORT_KEY) || "default";
