@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   composerStateModel, shouldFollowOutput, streamEndModel, applyComposerState,
+  createSseFramer,
 } from "../chat-ux.js";
 
 test("while a reply streams, the input is closed and Send becomes Stop", () => {
@@ -177,4 +178,39 @@ test("once the answer starts, reasoning can no longer relabel the bubble", () =>
   revealAnswer(el);
   assert.equal(markReasoning(el, stubDoc), false, "a late reasoning token overwrote the answer");
   assert.equal(el.children.length, 0);
+});
+
+// --- SSE framing -----------------------------------------------------------
+// The Study tutor dropped a word at every network chunk boundary: it split each
+// decoded chunk on "\n" on its own, so a line straddling two reads was parsed
+// as two fragments. The half that failed /^data:/ was skipped by `continue`,
+// and the half that matched produced truncated JSON that a bare `catch {}`
+// swallowed — silently, which is why nothing ever reached the console.
+
+test("a data line split across two reads survives as one line", () => {
+  const f = createSseFramer();
+  assert.deepEqual(f.push('data: {"a":'), [], "half a line is not a line yet");
+  assert.deepEqual(f.push('1}\n'), ['data: {"a":1}']);
+});
+
+test("no delta is lost however the stream is chopped up", () => {
+  const payload =
+    'data: {"n":1}\ndata: {"n":2}\ndata: {"n":3}\ndata: {"n":4}\ndata: [DONE]\n';
+  // Every possible split point must reassemble to the same lines.
+  for (let cut = 1; cut < payload.length; cut++) {
+    const f = createSseFramer();
+    const got = [...f.push(payload.slice(0, cut)), ...f.push(payload.slice(cut)), ...f.flush()];
+    assert.deepEqual(
+      got,
+      payload.split("\n").slice(0, -1),
+      `split at ${cut} lost or mangled a line`,
+    );
+  }
+});
+
+test("a stream that ends without a trailing newline still yields its last line", () => {
+  const f = createSseFramer();
+  assert.deepEqual(f.push('data: {"n":1}'), []);
+  assert.deepEqual(f.flush(), ['data: {"n":1}'], "the final delta was dropped");
+  assert.deepEqual(f.flush(), [], "flush must not repeat itself");
 });

@@ -185,3 +185,37 @@ export function isAtBottom(container, threshold = 48) {
     threshold,
   });
 }
+
+/**
+ * Frame an SSE byte stream into whole lines across chunk boundaries.
+ *
+ * `reader.read()` hands back network chunks, not lines: a single
+ * `data: {...}` can straddle two reads. Splitting each chunk on its own
+ * therefore yields two fragments, and both are lost — the tail fails
+ * `/^data:/` and is skipped, while the head parses as truncated JSON that a
+ * `catch` swallows. The result is a reply missing a word wherever the network
+ * happened to divide it.
+ *
+ * So keep the trailing partial line and prepend it to the next chunk. `push`
+ * returns only lines known to be complete; `flush` yields whatever the stream
+ * ended on if it had no final newline.
+ */
+export function createSseFramer() {
+  let buffer = "";
+  return {
+    push(chunk) {
+      buffer += chunk;
+      const parts = buffer.split("\n");
+      // The last element is either "" (chunk ended on a newline) or a partial
+      // line. Either way it is not safe to emit yet.
+      buffer = parts.pop();
+      return parts;
+    },
+    flush() {
+      if (!buffer) return [];
+      const last = buffer;
+      buffer = "";
+      return [last];
+    },
+  };
+}

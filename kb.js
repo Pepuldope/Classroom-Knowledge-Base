@@ -19,7 +19,7 @@ import { renderLightMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, deltaKind, revealAnswer, markReasoning } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, deltaKind, revealAnswer, markReasoning, createSseFramer } from "./chat-ux.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -3318,38 +3318,46 @@ async function sendTutor(text, { retry = false } = {}) {
     }
     const reader = r.body.getReader();
     const dec = new TextDecoder();
+    // Lines, not chunks: a `data:` line can straddle two reads, and handling
+    // the halves separately silently drops a delta at every chunk boundary.
+    const framer = createSseFramer();
+    // SSE: lines like "data: {...}" — accumulate the content deltas.
+    const handleLine = (line) => {
+      const m = line.match(/^data:\s*(.*)$/);
+      if (!m) return;
+      const payload = m[1].trim();
+      if (payload === "[DONE]") return;
+      try {
+        const j = JSON.parse(payload);
+        // A control event from the tutor route: sources used for grounding.
+        if (j && j.type === "sources") { sources = Array.isArray(j.notes) ? j.notes : []; return; }
+        const choice = j.choices?.[0];
+        const kind = deltaKind(choice);
+        if (kind === "reasoning") {
+          markReasoning(assistantEl);
+        } else if (kind === "content") {
+          acc += choice.delta.content;
+          if (assistantEl) {
+            revealAnswer(assistantEl);
+            // Position read BEFORE the text lands, or every chunk reads as
+            // "the user just scrolled away".
+            const following = isAtBottom(wrap);
+            // The model answers in markdown. renderLightMarkdown escapes the
+            // text before it builds any HTML, so this is not an injection
+            // surface — it is the same renderer the note bodies use.
+            assistantEl.innerHTML = renderLightMarkdown(acc);
+            followOutput(wrap, following);
+          }
+        }
+      } catch {}
+    };
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
-      const chunk = dec.decode(value, { stream: true });
-      // SSE: lines like "data: {...}" — accumulate the content deltas.
-      for (const line of chunk.split("\n")) {
-        const m = line.match(/^data:\s*(.*)$/);
-        if (!m) continue;
-        const payload = m[1].trim();
-        if (payload === "[DONE]") continue;
-        try {
-          const j = JSON.parse(payload);
-          // A control event from the tutor route: sources used for grounding.
-          if (j && j.type === "sources") { sources = Array.isArray(j.notes) ? j.notes : []; continue; }
-          const choice = j.choices?.[0];
-          const kind = deltaKind(choice);
-          if (kind === "reasoning") {
-            markReasoning(assistantEl);
-          } else if (kind === "content") {
-            acc += choice.delta.content;
-            if (assistantEl) {
-              revealAnswer(assistantEl);
-              // Position read BEFORE the text lands, or every chunk reads as
-              // "the user just scrolled away".
-              const following = isAtBottom(wrap);
-              assistantEl.textContent = acc;
-              followOutput(wrap, following);
-            }
-          }
-        } catch {}
-      }
+      for (const line of framer.push(dec.decode(value, { stream: true }))) handleLine(line);
     }
+    // A stream that ended without a trailing newline still owes us its last line.
+    for (const line of framer.flush()) handleLine(line);
     // After streaming, render the source chips (clickable -> open the note).
     renderTutorSources(sourcesEl, sources);
     addTutorCopyAction(assistantEl, acc);
@@ -3365,7 +3373,10 @@ async function sendTutor(text, { retry = false } = {}) {
     if (assistantEl) {
       assistantEl.classList.remove("ai-thinking");
       assistantEl.className = `ai-msg ai-msg-assistant${end.className.includes("error") ? " error" : ""}`;
-      assistantEl.textContent = end.text;
+      // An error line is plain prose; a stopped partial answer is markdown and
+      // should read the same as a completed one.
+      if (end.className.includes("error")) assistantEl.textContent = end.text;
+      else assistantEl.innerHTML = renderLightMarkdown(end.text);
       // A deliberate Stop is not a failure, so it gets no retry prompt.
       if (!aborted) addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
     }
