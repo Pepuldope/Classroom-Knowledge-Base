@@ -1351,6 +1351,26 @@ test("relatedNotes ranks a genuinely related same-course note above generic boil
   );
 });
 
+// Regression (2026-09-13): on the real vault, 1,595 of 2,000 related links from
+// maths notes pointed at other subjects, because the score was a raw count of
+// shared words and five giant files (a JSON dump, an annual report, two
+// spreadsheets) contain nearly every word. Length must not buy relatedness.
+test("a giant off-subject document does not become related to everything", () => {
+  const filler = Array.from({ length: 60 }, (_, i) => `word${i}`).join(" ");
+  const notes = [];
+  for (let i = 0; i < 30; i++) {
+    notes.push({ t: `Quadratic function homework ${i}`, s: "", x: `quadratic function graph vertex parabola ${filler}`, course: "Y2 MAT", y: "2024-25" });
+    notes.push({ t: `Animal idioms ${i}`, s: "", x: `idioms animals vocabulary expressions ${filler}`, course: "ELA Year 2", y: "2024-25" });
+  }
+  const giant = Array.from({ length: 200 }, (_, i) => `quadratic parabola vertex idioms vocabulary annual report revenue ${i}`).join(" ");
+  notes.push({ t: "LEGO Annual Report 2024.pdf", s: "", x: giant, course: "Business Y3", y: "2025-26" });
+  for (let i = 0; i < 20; i += 2) {
+    const rel = relatedNotes(notes, notes[i], { limit: 5 });
+    assert.equal(rel.length, 5);
+    for (const r of rel) assert.equal(r.course, "Y2 MAT", `maths note ${i} linked to "${r.t}" [${r.course}]`);
+  }
+});
+
 test("bundleToCsv includes body + summary columns carrying real content", async () => {
   const { bundleToCsv } = await import("../kb.js");
   assert.ok(typeof bundleToCsv === "function", "bundleToCsv is exported");

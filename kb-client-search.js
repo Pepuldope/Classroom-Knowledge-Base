@@ -371,6 +371,8 @@ export function formatRelatedPreviewTimingStats(stats = {}) {
 /** Clear local related-preview tokens and content-free diagnostics. */
 export function resetRelatedTokenCache() {
   relatedTokenCache = new WeakMap();
+  relatedSetCache = new WeakMap();
+  relatedCorpusCache = new WeakMap();
   relatedTokenCacheHits = 0;
   relatedTokenCacheMisses = 0;
   relatedPreviewTimings = [];
@@ -392,26 +394,66 @@ export function formatRelatedTokenCacheStats(stats = {}) {
   return `Related-preview cache: ${count(stats.hits)} hits · ${count(stats.misses)} misses`;
 }
 
-function relatedTokens(note) {
+// `count` is off for the corpus pass, which touches every note: the hit/miss
+// diagnostics describe the preview's own lookup, not the weighting behind it.
+function relatedTokens(note, { count = true } = {}) {
   if (!note || typeof note !== "object") return dropStopwords(tokenize("")).filter(Boolean);
   const cached = relatedTokenCache.get(note);
   if (cached) {
-    relatedTokenCacheHits += 1;
+    if (count) relatedTokenCacheHits += 1;
     return cached;
   }
-  relatedTokenCacheMisses += 1;
+  if (count) relatedTokenCacheMisses += 1;
   const tokens = dropStopwords(tokenize([note.t, note.s, note.x].filter(Boolean).join(" ")));
   relatedTokenCache.set(note, tokens);
   return tokens;
 }
 
+// Distinct tokens per note, and the corpus statistics that weight them. Both
+// are cached: the Set per note object, the stats per notes array (re-derived
+// when the array's length changes, which is what a rebuild or merge does).
+let relatedSetCache = new WeakMap();
+let relatedCorpusCache = new WeakMap();
+
+function relatedTokenSet(note) {
+  let set = relatedSetCache.get(note);
+  if (!set) {
+    // Bare numbers and one- or two-letter fragments ("0", "12", "y2")
+    // are shared by accident — "Homework 3" and "Chapter 3" are not related.
+    set = new Set(relatedTokens(note, { count: false }).filter((t) => t.length > 2 && !/^\d+$/.test(t)));
+    if (note && typeof note === "object") relatedSetCache.set(note, set);
+  }
+  return set;
+}
+
+function relatedCorpus(notes) {
+  const cached = relatedCorpusCache.get(notes);
+  if (cached && cached.size === notes.length) return cached;
+  const df = new Map();
+  for (const n of notes) for (const t of relatedTokenSet(n)) df.set(t, (df.get(t) || 0) + 1);
+  const corpus = { size: notes.length, df, norms: new WeakMap() };
+  relatedCorpusCache.set(notes, corpus);
+  return corpus;
+}
+
+// Sharing a course or topic is a nudge on top of shared vocabulary, and on its
+// own is still enough to count as related.
+const RELATED_COURSE_BONUS = 0.15;
+const RELATED_TOPIC_BONUS = 0.15;
+const RELATED_MIN_SCORE = 0.08;
+
 /**
- * Find notes related to a given target note. A note relates if it shares the
- * target's course, shares its topic, or contains overlapping query tokens from
- * the target's title/summary/body. The target itself is never returned.
- * Results are ranked (course/topic first, then token overlap) and capped to
- * `limit`. Each result carries the same shape as searchNotes so the UI can
- * reuse the same rendering (t, course, y, topic, p, noteIndex, _score, _snippet).
+ * Find notes related to a given target note, ranked by how much distinctive
+ * vocabulary they share (IDF-weighted cosine over distinct tokens), nudged up
+ * for a shared course or topic. The target itself is never returned. Each
+ * result carries the same shape as searchNotes so the UI can reuse the same
+ * rendering (t, course, y, topic, p, noteIndex, _score, _snippet).
+ *
+ * Why cosine and not a count of shared words: a count grows with document
+ * length, so on the real vault five giant files (a JSON dump, an annual report,
+ * two spreadsheets) were "related" to nearly every maths note — 1,595 of 2,000
+ * links crossed subjects. Normalising by length is what stops a long note
+ * matching everything merely by containing every word.
  */
 export function relatedNotes(notes, target, { limit = 5 } = {}) {
   // Course-wide "Announcements" bulletins are structural boilerplate (a
@@ -422,39 +464,60 @@ export function relatedNotes(notes, target, { limit = 5 } = {}) {
     const t = (n && n.t) || "";
     return /(^|\s)[-–]?\s*announcements?\s*$/i.test(t) || /^announcements?$/i.test(t);
   };
-  const scored = [];
-  // Drop stopwords from the target's tokens so common Classroom phrasing
-  // ("please submit the assignment on Classroom") can't produce false overlap
-  // with boilerplate. Specific vocabulary ("quantum", "entanglement") survives.
+  if (!Array.isArray(notes) || !target) return [];
   const targetTokens = relatedTokens(target);
-  const targetTokenSet = new Set(targetTokens);
+  const targetSet = relatedTokenSet(target);
   const targetCourse = target.course || "";
   const targetTopic = target.topic || "";
 
+  const corpus = relatedCorpus(notes);
+  const size = Math.max(1, corpus.size);
+  // No hard cut for common words: IDF already makes Classroom furniture cheap,
+  // and a cut would also delete a subject's own vocabulary whenever that
+  // subject is a large share of the corpus.
+  const weight = (t) => {
+    const df = corpus.df.get(t) || 0;
+    const idf = Math.log(1 + size / Math.max(1, df));
+    return idf * idf;
+  };
+  const norm = (n, set) => {
+    let v = corpus.norms.get(n);
+    if (v === undefined) {
+      v = 0;
+      for (const t of set) v += weight(t);
+      v = Math.sqrt(v);
+      if (n && typeof n === "object") corpus.norms.set(n, v);
+    }
+    return v;
+  };
+  const targetNorm = norm(target, targetSet);
+
+  const scored = [];
   for (let i = 0; i < notes.length; i++) {
     const n = notes[i];
     if (n === target) continue; // never relate a note to itself (reference)
     if (isBulletin(n)) continue; // skip course bulletins — not related content
     let score = 0;
-    if (targetCourse && n.course === targetCourse) score += 3;
-    if (targetTopic && n.topic && n.topic === targetTopic) score += 3;
-    // Exact token overlap with the target's own text (fast + precise). Both
-    // sides are stopword-filtered so boilerplate can't inflate the score.
-    if (targetTokens.length) {
-      const nTokens = relatedTokens(n);
-      let overlap = 0;
-      for (const t of nTokens) if (targetTokenSet.has(t)) overlap++;
-      score += overlap;
+    if (targetNorm > 0) {
+      const set = relatedTokenSet(n);
+      const nNorm = norm(n, set);
+      if (nNorm > 0) {
+        const [small, big] = targetSet.size <= set.size ? [targetSet, set] : [set, targetSet];
+        let dot = 0;
+        for (const t of small) if (big.has(t)) dot += weight(t);
+        score = dot / (targetNorm * nNorm);
+      }
     }
-    if (score <= 0) continue; // unrelated — skip
+    if (targetCourse && n.course === targetCourse) score += RELATED_COURSE_BONUS;
+    if (targetTopic && n.topic && n.topic === targetTopic) score += RELATED_TOPIC_BONUS;
+    if (score < RELATED_MIN_SCORE) continue; // unrelated — skip
     scored.push({ index: i, score, note: n });
   }
 
   // Rank by score, then by stable index for deterministic output.
   scored.sort((a, b) => b.score - a.score || a.index - b.index);
   const out = [];
-  const snippetTokens = targetTokens.length ? targetTokens : [];
-  for (const { index, score, note } of scored) {
+  for (const { index, score, note } of scored.slice(0, limit)) {
     out.push({
       t: note.t || "",
       course: note.course || "",
@@ -462,10 +525,9 @@ export function relatedNotes(notes, target, { limit = 5 } = {}) {
       topic: note.topic || null,
       p: note.p || "",
       noteIndex: index,
-      _score: score,
-      _snippet: buildSnippet(note, snippetTokens),
+      _score: Math.round(score * 1000) / 1000,
+      _snippet: buildSnippet(note, targetTokens),
     });
-    if (out.length >= limit) break;
   }
   return out;
 }
