@@ -124,3 +124,59 @@ test("the Planner tutor sends note content, not just the titles of its related n
   assert.match(block, /tutorRequestNotesModel\(/);
   assert.match(block, /bundleNotes\[n\.noteIndex\]/, "relatedNotes results carry no body; they must be resolved to the full note");
 });
+
+import { currentSchoolYear, matchPendingWork } from "../kb-tutor-context.js";
+
+// Peter's transcript, 2026-09-13: "Need help learning for my quiz i have next
+// week from english" got English quizzes from ELA Y3, BEng Y1, ELA 1 Gama and
+// BEng Y2 — and a question back. The quiz was ELA Y4 Omega's, on Tuesday.
+const TODAY = "2026-09-13"; // a Sunday
+const PENDING = [
+  { title: "Vocabulary quiz", course: "ELA Y4 Omega", dueDate: "2026-09-15", description: "Units 1-2 vocabulary" },
+  { title: "Kvadratické rovnice - test", course: "MAT SEM1 Y4", dueDate: "2026-09-16", description: "" },
+  { title: "Essay: my summer", course: "ELA Y4 Omega", dueDate: "2026-09-25", description: "" },
+  { title: "Business plan draft", course: "Business planning Y4", dueDate: "", description: "" },
+];
+
+test("the quiz next week from English is ELA Y4's Tuesday quiz, not a maths test or an essay", () => {
+  const { match, candidates } = matchPendingWork("Need help learning for my quiz i have next week from english. Can you help me find what i am supposed to learn?", PENDING, TODAY);
+  assert.equal(match?.title, "Vocabulary quiz");
+  assert.ok(!candidates.some((c) => c.course.startsWith("MAT")), "a named subject must rule other classes out");
+  assert.equal(matchPendingWork("čo mám na test z matiky v utorok?", PENDING, TODAY).match, null, "Tuesday has no maths test; Wednesday does");
+  assert.equal(matchPendingWork("čo mám na test z matiky v stredu?", PENDING, TODAY).match?.course, "MAT SEM1 Y4");
+  assert.equal(matchPendingWork("help with my English homework", [], TODAY).match, null);
+  // Two English items and nothing to tell them apart: ask, do not guess.
+  assert.equal(matchPendingWork("help with English", PENDING, TODAY).match, null);
+});
+
+const yearNote = (t, course, y, x = "") => ({ t, course, y, s: "", x: x || t, topic: "" });
+
+test("the current school year is the one today is in, when the notes have it", () => {
+  const notes = [yearNote("a", "C", "2024-25"), yearNote("b", "C", "2026-27")];
+  assert.equal(currentSchoolYear(notes, new Date("2026-09-13")), "2026-27");
+  assert.equal(currentSchoolYear(notes, new Date("2027-03-01")), "2026-27", "spring belongs to the year that started in autumn");
+  assert.equal(currentSchoolYear([yearNote("a", "C", "2024-25")], new Date("2026-09-13")), "2024-25", "else the newest year there is");
+  assert.equal(currentSchoolYear([], new Date("2026-09-13")), null);
+});
+
+test("retrieval stays in the current year unless an older note is a near-exact match", () => {
+  const notes = [
+    yearNote("Environment - VOCABULARY QUIZ", "ELA Year 2", "2024-25", "vocabulary quiz words"),
+    yearNote("(GA) Vocabulary quiz", "BEng Y1", "2023-24", "vocabulary quiz"),
+    yearNote("Adjectives - Synonyms", "ELA Y4 Omega", "2026-27", "vocabulary for the quiz: big, large"),
+    yearNote("Lineárne lomená funkcia", "MAT Y4", "2026-27", "lomená funkcia"),
+    yearNote("Lineárna funkcia - vlastnosti", "Y2 MAT", "2024-25", "lineárna funkcia vlastnosti graf"),
+  ];
+  // The class is known (the Planner item) and this year has notes from it: the
+  // strong title matches from ELA Year 2 and BEng Y1 are exactly what went wrong.
+  const quiz = buildTutorRetrievedNotes({ notes }, "vocabulary quiz", { currentYear: "2026-27", focusNote: { course: "ELA Y4 Omega", y: "2026-27" }, limit: 3 });
+  assert.equal(quiz[0].course, "ELA Y4 Omega");
+  assert.ok(quiz.every((n) => n.y === "2026-27"), `older years came back: ${quiz.map((n) => `${n.course} ${n.y}`)}`);
+  // With nothing current at all, older notes are all there is.
+  const animal = buildTutorRetrievedNotes({ notes: [yearNote("Animal Farm - Chapter 1", "ELA Year 2", "2024-25")] }, "Animal Farm", { currentYear: "2026-27" });
+  assert.equal(animal.length, 1);
+  // Re-learning a topic: last year's exact note comes in beside this year's weak one.
+  const linear = buildTutorRetrievedNotes({ notes }, "lineárna funkcia", { currentYear: "2026-27", limit: 3 });
+  assert.ok(linear.some((n) => n.y === "2024-25"), "a near-exact older note was kept out");
+  assert.ok(linear.every((n) => !Object.hasOwn(n, "_score")), "scores are internal and must not be sent");
+});

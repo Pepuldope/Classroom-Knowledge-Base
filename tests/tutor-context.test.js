@@ -344,3 +344,46 @@ test("inferred material is bounded like everything else", () => {
   assert.equal(focus.relatedMaterials.length, 5);
   assert.equal(focus.relatedMaterials[0].why.length, 120);
 });
+
+// --- the current year and the Planner (Peter, 2026-09-13) ------------------
+import { pendingWorkModel, MAX_PENDING_WORK } from "../api/tutor.js";
+
+test("the prompt names the current year and marks notes from finished classes", () => {
+  const text = prompt([
+    { t: "Vocabulary quiz", course: "BEng Y1", y: "2023-24", x: "old" },
+    { t: "Adjectives - Synonyms", course: "ELA Y4 Omega", y: "2026-27", x: "new" },
+  ], { currentYear: "2026-27" });
+  assert.match(text, /CURRENT school year is 2026-27/);
+  assert.match(text, /Never offer finished classes as options/);
+  assert.match(text, /\[1\] "Vocabulary quiz" \(BEng Y1, 2023-24\) — OLDER YEAR/);
+  assert.doesNotMatch(text, /\[2\][^\n]*OLDER YEAR/);
+  // No year known: no rule, no markers.
+  assert.doesNotMatch(prompt([{ t: "x", y: "2023-24" }], {}), /OLDER YEAR|CURRENT school year/);
+  assert.doesNotMatch(prompt([], { currentYear: "last year" }), /CURRENT school year/);
+});
+
+test("pending work reaches the prompt with real dates, and the likely item is named", () => {
+  const text = prompt([], {
+    today: "2026-09-13",
+    pendingWork: [
+      { title: "Vocabulary quiz", course: "ELA Y4 Omega", dueDate: "2026-09-15", description: "Units 1-2" },
+      { title: "Old essay", course: "ELA Y4 Omega", dueDate: "2026-09-10" },
+      { title: "Sketchbook", course: "Art", dueDate: "" },
+    ],
+    likelyWork: { title: "Vocabulary quiz", course: "ELA Y4 Omega", dueDate: "2026-09-15" },
+  });
+  assert.match(text, /MOST LIKELY WHAT THIS QUESTION IS ABOUT: "Vocabulary quiz" — ELA Y4 Omega — due Tuesday 2026-09-15 \(in 2 days\)/);
+  assert.match(text, /"Old essay" — ELA Y4 Omega — due Thursday 2026-09-10 \(3 day\(s\) OVERDUE\)/);
+  assert.match(text, /"Sketchbook" — Art — no due date/);
+  assert.match(text, /Do not ask which one they mean unless two items genuinely fit/);
+  assert.doesNotMatch(prompt([], {}), /PENDING WORK/, "no Planner, no block");
+});
+
+test("pending work from the browser is bounded", () => {
+  const many = Array.from({ length: 200 }, (_, i) => ({ title: `T${i}`.repeat(100), course: "C", dueDate: "not a date", description: "d".repeat(5000) }));
+  const model = pendingWorkModel(many);
+  assert.equal(model.length, MAX_PENDING_WORK);
+  assert.ok(model[0].title.length <= 200 && model[0].description.length <= 300);
+  assert.equal(model[0].dueDate, "");
+  assert.deepEqual(pendingWorkModel("nope"), []);
+});

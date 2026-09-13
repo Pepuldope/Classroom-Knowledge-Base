@@ -28,7 +28,7 @@ import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 import { kbBuildProgressStatusModel, kbBuildCheckpointModel, kbBuildResumeSummaryModel } from "./kb-local-status.js";
-import { buildTutorRetrievedNotes, tutorRequestNotesModel, verifyTutorQuotes } from "./kb-tutor-context.js";
+import { buildTutorRetrievedNotes, tutorRequestNotesModel, verifyTutorQuotes, currentSchoolYear, matchPendingWork } from "./kb-tutor-context.js";
 import { noteKey, noteKeyIndex, parseNoteKey, encodeSources, answerCourse, renameAnswer, notebookModel, defaultAnswerTitle } from "./notebook.js";
 import { noteHref, linkTo } from "./deep-links.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
@@ -3594,12 +3594,26 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
   let acc = "";
   try {
     const focus = openTutorFocus();
+    // Which school year is "now", and which Planner item — if any — the
+    // question is about. A matched item steers retrieval into its class and
+    // adds its title and description to what is searched for.
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+    const currentYear = currentSchoolYear(localKbBundle?.notes, now);
+    const pendingWork = typeof window.__cwaPendingWork === "function" ? window.__cwaPendingWork() : [];
+    const planned = matchPendingWork(text, pendingWork, today);
     const retrieved = tutorRequestNotesModel(
-      buildTutorRetrievedNotes(localKbBundle, text, { focusNote: focus }),
-      { query: text },
+      buildTutorRetrievedNotes(localKbBundle, text, {
+        focusNote: focus || (planned.match ? { course: planned.match.course, y: currentYear } : null),
+        currentYear,
+        extraQuery: planned.match ? `${planned.match.title} ${planned.match.description || ""}` : "",
+      }),
+      { query: planned.match ? `${text} ${planned.match.title}` : text },
     );
     const body = JSON.stringify({
       messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage(),
+      today, currentYear, pendingWork,
+      ...(planned.match ? { likelyWork: { title: planned.match.title, course: planned.match.course, dueDate: planned.match.dueDate } } : {}),
       ...(avoidModel ? { avoidModel } : {}),
     });
     const send = () => fetch("/api/tutor", {

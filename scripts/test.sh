@@ -113,6 +113,7 @@ GATES=(
 "kb|srv|Notebook: save selection/answer, group, rename, search, sources, undo|node scripts/notebook_test.mjs"
 "kb,panel|srv|New-tab links, pending by date, note meta, centred close|node scripts/deep_links_test.mjs"
 "models|-|Deep link model tests|node --test tests/deep-links.test.js"
+"kb|srv|Tutor knows the current year and the Planner (the ELA Y4 quiz transcript)|node scripts/tutor_planner_context_test.mjs"
 "models,kb|-|Notebook model tests|node --test tests/notebook.test.js"
 "theme|seed|Theme contrast browser tests|node scripts/theme_contrast_test.mjs"
 "theme|seed|Visual common-sense browser gate (light + dark)|node scripts/visual_common_sense_test.mjs"

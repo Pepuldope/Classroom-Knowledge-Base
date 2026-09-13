@@ -159,10 +159,13 @@ export function renderFocusBlock(focus, today = "") {
   return lines.join("\n");
 }
 
-function renderNotesBlock(notes, hasFocus) {
+function renderNotesBlock(notes, hasFocus, currentYear = "") {
   const ctx = notes
     .map((n, i) => {
-      const head = `[${i + 1}] "${n.t}"${n.course ? ` (${n.course}${n.y ? `, ${n.y}` : ""})` : ""}${n.topic ? ` · topic: ${n.topic}` : ""}`;
+      // Say it on the note itself: a model reading [3] should not have to work
+      // out from a year string that the class is two years finished.
+      const older = currentYear && n.y && n.y !== currentYear ? ` — OLDER YEAR (${n.y}), not their current class` : "";
+      const head = `[${i + 1}] "${n.t}"${n.course ? ` (${n.course}${n.y ? `, ${n.y}` : ""})` : ""}${n.topic ? ` · topic: ${n.topic}` : ""}${older}`;
       const body = (n.x || n.s || "").slice(0, NOTE_BODY_MAX);
       return `${head}\n${body}`;
     })
@@ -178,7 +181,7 @@ function renderNotesBlock(notes, hasFocus) {
   return `${heading}\n${excerpt}\n\n${ctx || "(no notes retrieved)"}`;
 }
 
-function buildSystemPrompt(notes, { focus = null, language = "en", today = "" } = {}) {
+function buildSystemPrompt(notes, { focus = null, language = "en", today = "", currentYear = "", pendingWork = [], likelyWork = null } = {}) {
   const rules = [
     "You are a friendly, encouraging study tutor for a student using their private Classroom knowledge base.",
     "",
@@ -191,6 +194,9 @@ function buildSystemPrompt(notes, { focus = null, language = "en", today = "" } 
     "- EXPLAINING A CONCEPT is different. If the material names something and the student asks what it IS, explain it properly using your own knowledge. Do not refuse to teach because the note is terse.",
     "- Keep the two visibly apart. Course facts can be attributed ('your quiz note lists…'); general explanation should read as general explanation.",
     "- Never invent a due date, a grade, a task requirement or an attachment. Those are facts, and a wrong one costs the student marks.",
+    ...(currentYear ? [
+      `- The student's CURRENT school year is ${currentYear}. Their classes this year are what matters. Notes marked OLDER YEAR are from classes they already finished: use one only when nothing from ${currentYear} covers the question or it is clearly the same topic being re-learned, and then say which class and year it is from. Never offer finished classes as options for something they have now.`,
+    ] : []),
     "",
     "CITING AND QUOTING THEIR NOTES:",
     "- When you rely on a note, cite it with its number in square brackets, like [2]. Cite the note, not the conversation.",
@@ -205,11 +211,14 @@ function buildSystemPrompt(notes, { focus = null, language = "en", today = "" } 
   ].filter(Boolean);
 
   const focusBlock = renderFocusBlock(focus, today);
+  const workBlock = renderPendingWorkBlock(pendingWork, likelyWork, today);
   return [
     rules.join("\n"),
     focusBlock,
     focusBlock ? "" : null,
-    renderNotesBlock(notes, !!focus),
+    workBlock || null,
+    workBlock ? "" : null,
+    renderNotesBlock(notes, !!focus, currentYear),
   ].filter((part) => part !== null).join("\n");
 }
 
@@ -226,10 +235,60 @@ export function buildTutorMessages(messages, notes, options = {}) {
   const focus = tutorFocusModel(opts.focus);
   const language = opts.language === "sk" ? "sk" : "en";
   const today = typeof opts.today === "string" ? opts.today : "";
+  const currentYear = schoolYearModel(opts.currentYear);
+  const pendingWork = pendingWorkModel(opts.pendingWork);
+  const likelyWork = pendingWorkModel(opts.likelyWork ? [opts.likelyWork] : [])[0] || null;
   return [
-    { role: "system", content: buildSystemPrompt(safeNotes, { focus, language, today }) },
+    { role: "system", content: buildSystemPrompt(safeNotes, { focus, language, today, currentYear, pendingWork, likelyWork }) },
     ...safeMessages,
   ];
+}
+
+/** "2026-27", or "" for anything else. */
+export function schoolYearModel(value) {
+  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value.trim()) ? value.trim() : "";
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+export const MAX_PENDING_WORK = 60;
+
+/** The Planner's pending work, bounded: the browser sends it, so the server caps it. */
+export function pendingWorkModel(value) {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, MAX_PENDING_WORK).map((w) => ({
+    title: str(w?.title, 200),
+    course: str(w?.course, 120),
+    dueDate: typeof w?.dueDate === "string" && ISO_DATE.test(w.dueDate) ? w.dueDate : "",
+    description: str(w?.description, 300),
+  })).filter((w) => w.title);
+}
+
+function relativeDue(dueDate, today) {
+  if (!dueDate) return "no due date";
+  const days = today && ISO_DATE.test(today)
+    ? Math.round((Date.parse(`${dueDate}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000)
+    : null;
+  const weekday = new Date(`${dueDate}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
+  if (days == null) return `due ${weekday} ${dueDate}`;
+  const when = days < 0 ? `${-days} day(s) OVERDUE` : days === 0 ? "TODAY" : days === 1 ? "TOMORROW" : `in ${days} days`;
+  return `due ${weekday} ${dueDate} (${when})`;
+}
+
+function renderPendingWorkBlock(pendingWork, likelyWork, today) {
+  if (!pendingWork.length) return "";
+  const lines = [
+    "=== THE STUDENT'S PENDING WORK (their Planner — everything not yet handed in) ===",
+    "When they mention upcoming work — \"my quiz next week\", \"the English test\", \"what's due Friday\" — it is one of these.",
+    "Match it by class and date and answer about THAT item. Do not ask which one they mean unless two items genuinely fit.",
+    "",
+  ];
+  if (likelyWork) {
+    lines.push(`MOST LIKELY WHAT THIS QUESTION IS ABOUT: "${likelyWork.title}" — ${likelyWork.course} — ${relativeDue(likelyWork.dueDate, today)}`, "");
+  }
+  for (const w of pendingWork) {
+    lines.push(`- "${w.title}" — ${w.course || "class not recorded"} — ${relativeDue(w.dueDate, today)}${w.description ? ` — ${w.description}` : ""}`);
+  }
+  return lines.join("\n");
 }
 
 // Questions whose answer is COPIED OUT of the context we already supplied:
@@ -309,7 +368,12 @@ export default async function handler(req) {
   const messages = buildTutorMessages(body.messages, notes, {
     language,
     focus: body.focus,
-    today: new Date().toISOString().slice(0, 10),
+    // The student's own date when it looks like one: "due tomorrow" is about
+    // their evening, not UTC's.
+    today: typeof body.today === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.today) ? body.today : new Date().toISOString().slice(0, 10),
+    currentYear: body.currentYear,
+    pendingWork: body.pendingWork,
+    likelyWork: body.likelyWork,
   });
 
   // Build the source descriptors we'll surface as clickable chips (noteIndex

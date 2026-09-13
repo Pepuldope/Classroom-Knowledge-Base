@@ -243,7 +243,43 @@ export function tutorSearchQuery(text) {
   return content.length ? content.join(" ") : raw.trim();
 }
 
-export function buildTutorRetrievedNotes(bundle, query, { limit = DEFAULT_LIMIT, focusNote = null } = {}) {
+// --- the student's current school year ------------------------------------
+// Peter, 2026-09-13: "point me to my current year and not one i finished 2
+// years ago". Asked about "my quiz next week from English", the tutor listed
+// English quizzes from four classes across three years and asked which he
+// meant — ELA Y3, BEng Y1, ELA 1 Gama, BEng Y2 — none of them this year's.
+
+const yearStart = (y) => { const m = /^(\d{4})/.exec(String(y || "")); return m ? Number(m[1]) : null; };
+
+/**
+ * The school year the student is in: the one today falls in (a year runs from
+ * August), when the notes have it, else the newest year they do have.
+ */
+export function currentSchoolYear(notes, today = new Date()) {
+  const list = Array.isArray(notes) ? notes : [];
+  const start = today.getMonth() >= 7 ? today.getFullYear() : today.getFullYear() - 1;
+  const label = `${start}-${String((start + 1) % 100).padStart(2, "0")}`;
+  let newest = null;
+  for (const note of list) {
+    if (note?.y === label) return label;
+    if (yearStart(note?.y) != null && (newest == null || yearStart(note.y) > yearStart(newest))) newest = note.y;
+  }
+  return newest;
+}
+
+// An older note is let in beside current ones only when it is a near-exact
+// match — re-learning linear functions from last year's notes is fine — and
+// "near-exact" is measured against this year's best, not in absolute points,
+// because scores depend on the corpus. Measured on the vault: a title match
+// scores ~60-75, a passing mention under 35. "lineárna funkcia" found this
+// year's "lineárne lomená funkcia" at 29.5 and last year's "Lineárna funkcia"
+// at 72.7 (included); "kvadratická funkcia" found 72.6 this year and 69.7 last
+// year (not included).
+const NEAR_EXACT_OVER_CURRENT = 2;
+const NEAR_EXACT_OF_BEST = 0.9;
+const MAX_OLDER_BESIDE_CURRENT = 2;
+
+export function buildTutorRetrievedNotes(bundle, query, { limit = DEFAULT_LIMIT, focusNote = null, currentYear = null, extraQuery = "" } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const numericLimit = Number(limit);
   const boundedLimit = Number.isFinite(numericLimit)
@@ -251,13 +287,124 @@ export function buildTutorRetrievedNotes(bundle, query, { limit = DEFAULT_LIMIT,
     : DEFAULT_LIMIT;
   if (!notes.length || !String(query || "").trim()) return [];
 
-  // Search wider than we need when there is a focus, so the re-rank has
-  // same-course candidates to promote rather than only the top few keyword
-  // hits — which is exactly the set that was all from the wrong classes.
-  const searchLimit = focusNote ? Math.min(notes.length, boundedLimit * 4) : boundedLimit;
-  const hits = searchNotes(notes, tutorSearchQuery(query), { limit: searchLimit }).map((result) => ({
+  // Search wider than we need when there is a focus or a year to prefer, so the
+  // re-rank has candidates to promote rather than only the top few keyword hits.
+  const searchLimit = focusNote || currentYear ? Math.min(notes.length, Math.max(boundedLimit * 5, 30)) : boundedLimit;
+  const q = [tutorSearchQuery(query), tutorSearchQuery(extraQuery)].filter(Boolean).join(" ");
+  const hits = searchNotes(notes, q, { limit: searchLimit }).map((result) => ({
     ...notes[result.noteIndex],
     noteIndex: result.noteIndex,
+    _score: result._score,
   }));
-  return rankByCourseAffinity(hits, focusNote).slice(0, boundedLimit);
+  const strip = ({ _score, ...note }) => note;
+  if (!currentYear) return rankByCourseAffinity(hits, focusNote).slice(0, boundedLimit).map(strip);
+
+  const current = hits.filter((n) => n.y === currentYear);
+  const older = hits.filter((n) => n.y !== currentYear);
+  if (!current.length) return rankByCourseAffinity(older, focusNote).slice(0, boundedLimit).map(strip);
+
+  const bestCurrent = Math.max(...current.map((n) => n._score));
+  const best = Math.max(bestCurrent, ...older.map((n) => n._score));
+  // When the question is about a class this year (a note is open, or it named a
+  // Planner item) and this year's notes from that class matched, older years
+  // stay out: last year's "Vocabulary quiz" is exactly the wrong answer to
+  // "what is on my quiz".
+  const focusCourse = String(focusNote?.course || "").trim().toLowerCase();
+  const focusCovered = focusCourse && current.some((n) => String(n.course || "").trim().toLowerCase() === focusCourse);
+  const nearExact = focusCovered ? [] : older
+    .filter((n) => n._score >= bestCurrent * NEAR_EXACT_OVER_CURRENT && n._score >= best * NEAR_EXACT_OF_BEST)
+    .slice(0, MAX_OLDER_BESIDE_CURRENT);
+  const ranked = rankByCourseAffinity(current, focusNote).slice(0, boundedLimit - nearExact.length);
+  return [...ranked, ...nearExact].map(strip);
+}
+
+// --- the student's pending work --------------------------------------------
+// The tutor had no idea what was on the student's Planner, so "my quiz next
+// week" meant nothing to it. The Planner's pending work is sent with every
+// question; this picks the item a question is about, so retrieval can look in
+// that class and the prompt can name it.
+
+const SUBJECTS = [
+  { ask: /\b(english|anglick\w*|anglin\w*|angli\w*|ela|eng)\b/, course: /\b(ela|eng\w*|beng|aj)\b/i },
+  { ask: /\b(slovak|slovensk\w*|slovin\w*|sjl|kuj)\b/, course: /\b(sjl|slov\w*|kuj)\b/i },
+  { ask: /\b(maths?|matik\w*|matematik\w*|mat)\b/, course: /\b(mat\w*|math\w*)\b/i },
+  { ask: /\b(physics|fyzik\w*)\b/, course: /fyz|phys/i },
+  { ask: /\b(chemistry|chemi\w*)\b/, course: /chem/i },
+  { ask: /\b(biology|biologi\w*)\b/, course: /bio/i },
+  { ask: /\b(databases?|databaz\w*|sql)\b/, course: /datab/i },
+  { ask: /\b(programming|programovani\w*|prog)\b/, course: /prog|digi/i },
+  { ask: /\b(business|podnikani\w*|pak)\b/, course: /business|pak|podnik|nae/i },
+  { ask: /\b(history|dejepis\w*|glost|global studies)\b/, course: /glost|dejep|hist/i },
+];
+const KINDS = /\b(quiz\w*|test\w*|exam\w*|pisomk\w*|skusk\w*|assessment|essay|esej\w*|homework|du|ulohy?|presentation|prezentac\w*|project|projekt\w*)\b/g;
+const WEEKDAYS = [
+  /\b(sunday|nedel\w*)\b/, /\b(monday|pondel\w*)\b/, /\b(tuesday|utor\w*)\b/, /\b(wednesday|stred\w*)\b/,
+  /\b(thursday|stvrt\w*)\b/, /\b(friday|piatok|piatk\w*)\b/, /\b(saturday|sobot\w*)\b/,
+];
+const kindRoot = (word) => {
+  const w = passageFold(word);
+  if (/^(quiz|test|exam|pisomk|skusk|assessment)/.test(w)) return "test";
+  if (/^(essay|esej)/.test(w)) return "essay";
+  if (/^(homework|du$|uloh)/.test(w)) return "homework";
+  if (/^(presentation|prezentac)/.test(w)) return "presentation";
+  if (/^(project|projekt)/.test(w)) return "project";
+  return w;
+};
+const kindsIn = (text) => new Set((passageFold(text).match(KINDS) || []).map(kindRoot));
+
+function daysBetween(fromIso, toIso) {
+  const a = Date.parse(`${fromIso}T00:00:00Z`);
+  const b = Date.parse(`${toIso}T00:00:00Z`);
+  return Number.isFinite(a) && Number.isFinite(b) ? Math.round((b - a) / 86400000) : null;
+}
+
+/**
+ * Rank pending work against a question. Returns the candidates with a positive
+ * score, best first, and `match` when one is clearly the one meant.
+ *
+ * A subject the question names is a filter, not a hint: "from English" rules
+ * out a maths quiz however well its date fits. A time phrase ("next week",
+ * "tomorrow", "on Tuesday") and a kind of work ("quiz", "essay") add weight.
+ */
+export function matchPendingWork(question, work = [], today = new Date().toISOString().slice(0, 10)) {
+  const q = passageFold(question);
+  const items = Array.isArray(work) ? work : [];
+  const subjects = SUBJECTS.filter((s) => s.ask.test(q));
+  const askedKinds = kindsIn(q);
+  const weekday = WEEKDAYS.findIndex((re) => re.test(q));
+  const time = /\b(tomorrow|zajtra)\b/.test(q) ? "tomorrow"
+    : /\b(today|dnes)\b/.test(q) ? "today"
+      : /\b(next week|buduci tyzden|dalsi tyzden)\b/.test(q) ? "next-week"
+        : /\b(this week|tento tyzden)\b/.test(q) ? "this-week"
+          : weekday >= 0 ? "weekday" : "";
+  const words = new Set(tutorSearchQuery(question).split(/\s+/).map(passageFold).filter((w) => w.length > 2));
+
+  const scored = [];
+  for (const item of items) {
+    const course = String(item?.course || "");
+    const title = String(item?.title || "");
+    if (!title) continue;
+    if (subjects.length && !subjects.some((s) => s.course.test(course))) continue;
+    let score = subjects.length ? 3 : 0;
+    const itemKinds = kindsIn(`${title} ${item.description || ""}`);
+    for (const k of askedKinds) if (itemKinds.has(k)) score += 2;
+    for (const w of passageFold(`${title} ${course}`).match(/[a-z0-9]+/g) || []) if (words.has(w)) score += 1;
+    const days = item.dueDate ? daysBetween(today, item.dueDate) : null;
+    if (time && days != null) {
+      const dueDay = new Date(`${item.dueDate}T00:00:00Z`).getUTCDay();
+      const fits = time === "today" ? days === 0
+        : time === "tomorrow" ? days === 1
+          : time === "this-week" ? days >= 0 && days <= 7
+            : time === "next-week" ? days >= 1 && days <= 14
+              : dueDay === weekday && days >= 0 && days <= 7;
+      // A named day that does not fit rules the item out; a week is looser.
+      if (!fits && (time === "today" || time === "tomorrow" || time === "weekday")) continue;
+      score += fits ? 2 : -2;
+    }
+    if (score > 0) scored.push({ ...item, score, days });
+  }
+  scored.sort((a, b) => b.score - a.score || (a.days ?? 999) - (b.days ?? 999));
+  const [first, second] = scored;
+  const clear = first && first.score >= 3 && (!second || first.score > second.score);
+  return { candidates: scored.slice(0, 5), match: clear ? first : null };
 }

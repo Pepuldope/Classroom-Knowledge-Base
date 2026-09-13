@@ -197,6 +197,23 @@ window.__cwaPushPrefs = pushPrefsToServer;
 // live Google access token. Exposing the DEDUPED refresh — not the raw endpoint
 // — so a 401 there recovers the same way the Classroom paths already do.
 window.__cwaRefreshToken = () => serverRefreshAccessToken();
+// The Study tutor's view of the Planner: everything still to hand in, as the
+// Planner itself lists it. Without it, "my quiz next week" meant nothing to the
+// tutor, which answered with English quizzes from three past school years.
+const localIsoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+window.__cwaPendingWork = () => allAssignments
+  .filter((a) => a.kind === "assignment" && isPending(a) && !isStale(a) && !dismissedIds.has(a.id))
+  .map((a) => {
+    const due = dueDateObj(a);
+    return {
+      title: a.title || "",
+      course: a.courseName || "",
+      dueDate: due ? localIsoDate(due) : "",
+      description: String(a.enrichment?.oneLineSummary || a.description || "").replace(/\s+/g, " ").trim().slice(0, 300),
+    };
+  })
+  .sort((x, y) => (x.dueDate || "9999").localeCompare(y.dueDate || "9999"))
+  .slice(0, 60);
 
 const SORT_KEY = "cwa_sort";
 let currentSort = sessionStorage.getItem(SORT_KEY) || "default";
