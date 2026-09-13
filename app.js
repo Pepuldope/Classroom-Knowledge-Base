@@ -20,7 +20,7 @@ import { kbLocalStatusModel } from "./kb-local-status.js";
 import { kbViewTransitionFocusTargetModel, kbViewTransitionFocusAnnouncementModel, routeTransitionFocusPrivacyModel } from "./route-transition.js";
 import { loadStoredAuthSession, storeAuthSession, clearAuthSession, sessionResumeModel } from "./auth-session.js";
 import { readLocalPrefsDoc, applySyncedPrefs, mergeLocally, STORAGE_KEYS } from "./prefs-sync-local.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, deltaKind, revealAnswer, markReasoning } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, deltaKind, revealAnswer, markReasoning, renderTutorAnswer } from "./chat-ux.js";
 import { relatedCourseMaterials } from "./related-materials.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
@@ -2583,20 +2583,6 @@ function renderMaterialsList(mats) {
   return `<div class="materials-strip">${items}</div>`;
 }
 
-let markedLoadPromise = null;
-function ensureMarked() {
-  if (window.marked) return Promise.resolve();
-  if (markedLoadPromise) return markedLoadPromise;
-  markedLoadPromise = new Promise((resolve, reject) => {
-    const s = document.createElement("script");
-    s.src = "https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js";
-    s.async = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error("Failed to load marked.min.js"));
-    document.head.appendChild(s);
-  });
-  return markedLoadPromise;
-}
 
 /**
  * Open the assignment panel.
@@ -2694,8 +2680,6 @@ async function openAi(a) {
   // Not on a touch device: raising the keyboard covers half the sheet before
   // the reader has seen any of it. A pointer user gets the caret for free.
   if (!prefersNoAutoFocus()) $("aiInput").focus();
-
-  if (!window.marked) ensureMarked().then(() => renderChatHistory()).catch(() => {});
 
   // The saved conversation arrives afterwards. Guard on activeAssignment: the
   // panel may have been closed, or another assignment opened, while it loaded.
@@ -3177,12 +3161,6 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-function renderMarkdown(text) {
-  if (window.marked) {
-    return window.marked.parse(text, { breaks: true, gfm: true });
-  }
-  return escapeHtml(text).replace(/\n/g, "<br>");
-}
 
 function lastUserMsgIndex() {
   for (let i = aiHistory.length - 1; i >= 0; i--) {
@@ -3199,7 +3177,7 @@ function addMsg(role, text, index) {
   const content = document.createElement("div");
   content.className = "msg-content";
   if (role === "assistant") {
-    content.innerHTML = renderMarkdown(text);
+    content.innerHTML = renderTutorAnswer(text);
   } else {
     content.textContent = text;
   }
@@ -3384,7 +3362,7 @@ async function sendAi(userText) {
       // chunk looks like the reader has just been pushed off the bottom.
       const scroller = $("aiScroll")?.scrollHeight > $("aiScroll")?.clientHeight ? $("aiScroll") : $("aiMessages");
       const following = isAtBottom(scroller);
-      thinking.innerHTML = renderMarkdown(accumulated);
+      thinking.innerHTML = renderTutorAnswer(accumulated);
       followOutput(scroller, following);
     };
 
@@ -3419,7 +3397,7 @@ async function sendAi(userText) {
     if (!accumulated) {
       const end = streamEndModel({ text: "" });
       thinking.className = end.className;
-      thinking.innerHTML = renderMarkdown(end.text);
+      thinking.innerHTML = renderTutorAnswer(end.text);
     } else {
       aiHistory.push({ role: "assistant", content: accumulated });
       renderChatHistory();
@@ -3432,7 +3410,7 @@ async function sendAi(userText) {
     const aborted = e?.name === "AbortError";
     const end = streamEndModel({ text: accumulated, aborted, error: aborted ? "" : e.message });
     thinking.className = end.className;
-    thinking.innerHTML = renderMarkdown(end.text);
+    thinking.innerHTML = renderTutorAnswer(end.text);
     if (aborted && accumulated.trim()) {
       aiHistory.push({ role: "assistant", content: accumulated });
       saveChatHistory(activeAssignment.id, aiHistory);

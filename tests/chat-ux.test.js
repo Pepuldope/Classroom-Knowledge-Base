@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   composerStateModel, shouldFollowOutput, streamEndModel, applyComposerState,
-  createSseFramer, createDeltaStream, unwrapMathDelimiters,
+  createSseFramer, createDeltaStream, unwrapMathDelimiters, renderTutorAnswer,
 } from "../chat-ux.js";
 
 test("while a reply streams, the input is closed and Send becomes Stop", () => {
@@ -325,3 +326,32 @@ test("text with no maths in it is returned untouched", () => {
   assert.equal(unwrapMathDelimiters(null), "");
 });
 
+
+// Both tutors render answers through one escaping renderer. The Planner used to
+// feed marked's output to innerHTML, and marked passes raw HTML through.
+test("a tutor answer cannot inject markup, whatever the model writes", () => {
+  const html = renderTutorAnswer('Here <img src=x onerror="alert(1)"> and <script>alert(2)</script>');
+  assert.ok(!/<img|<script/i.test(html), `raw HTML survived: ${html}`);
+  assert.match(html, /&lt;img/);
+});
+
+test("a tutor answer renders tables and unwraps maths", () => {
+  const html = renderTutorAnswer("| x | y |\n|---|---|\n| 1 | 2 |\n\nSlope: \\(\\frac{a}{b}\\)");
+  assert.match(html, /<table class="md-table">/);
+  assert.match(html, /\(a\)\/\(b\)/);
+  assert.equal(renderTutorAnswer(null), "");
+});
+
+test("both tutors use the shared renderer, and Study answers get the answer styles", () => {
+  const app = readFileSync(new URL("../app.js", import.meta.url), "utf8");
+  const kb = readFileSync(new URL("../kb.js", import.meta.url), "utf8");
+  assert.ok(!/window\.marked|marked\.min\.js/.test(app), "the Planner is back on the unsanitised CDN renderer");
+  assert.match(app, /renderTutorAnswer\(/);
+  assert.match(kb, /renderTutorAnswer\(/);
+  // The Study bubble is .ai-msg-assistant, the Planner's is .ai-msg.assistant;
+  // table and heading rules written for only one left Study answers unstyled.
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  for (const el of ["table", "pre", "h3", "blockquote"]) {
+    assert.ok(css.includes(`:is(.ai-msg.assistant, .ai-msg-assistant) ${el} `), `no shared ${el} rule`);
+  }
+});

@@ -19,7 +19,7 @@ import { renderLightMarkdown, renderRichMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, revealAnswer, markReasoning, createDeltaStream, unwrapMathDelimiters } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, revealAnswer, markReasoning, createDeltaStream, renderTutorAnswer } from "./chat-ux.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -796,19 +796,6 @@ let activeStudyTab = "search";
  * in the app ever read it back — the button reported "Saved" about something
  * the student could never reach again. This is the other half.
  */
-/**
- * How a tutor answer becomes HTML.
- *
- * renderRichMarkdown, not renderLightMarkdown: models answer with tables and
- * blockquotes, and the light renderer leaves both as raw pipes and ">". It
- * escapes before it builds any markup, so this is not an injection surface.
- * The math unwrap runs first, because the delimiters are not markdown and
- * would otherwise survive into the output verbatim.
- */
-function renderTutorAnswer(text) {
-  return renderRichMarkdown(unwrapMathDelimiters(text));
-}
-
 function renderStudyList() {
   const host = $("kbSavedList");
   if (!host) return;

@@ -10,6 +10,8 @@
 // The models here are pure so they can be tested without a browser; the DOM
 // helpers below them are deliberately thin.
 
+import { renderRichMarkdown } from "./archive.js";
+
 /**
  * What the composer should look like right now.
  *
@@ -312,4 +314,23 @@ export function unwrapMathDelimiters(text) {
     .replace(/\\(?:qquad|quad|;|,|!)/g, " ")
     // Collapse only the spacing this introduced, never the line structure.
     .replace(/[ \t]{2,}/g, " ");
+}
+
+/**
+ * How a tutor answer becomes HTML — for both tutors, the Planner popup and the
+ * Study tab.
+ *
+ * renderRichMarkdown, not renderLightMarkdown: models answer with tables and
+ * blockquotes, and the light renderer leaves both as raw pipes and ">". It
+ * escapes before it builds any markup, so this is not an injection surface.
+ * The math unwrap runs first, because the delimiters are not markdown and
+ * would otherwise survive into the output verbatim.
+ *
+ * The Planner used to pull `marked` from a CDN and hand its output straight
+ * to innerHTML. marked does not sanitise, so any HTML a model emitted — or was
+ * steered into emitting by text inside a Classroom material — ran in the
+ * signed-in page. One renderer for both tutors closes that and drops the CDN.
+ */
+export function renderTutorAnswer(text) {
+  return renderRichMarkdown(unwrapMathDelimiters(text == null ? "" : String(text)));
 }
