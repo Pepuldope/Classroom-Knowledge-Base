@@ -852,6 +852,40 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-radius: 4px;
 }
 .msg-action:hover { background: rgba(0,0,0,0.08); color: var(--fg); }
+/* An answer's actions: one row under the answer, every button the same height. */
+.ai-answer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+  padding-top: 0.6rem;
+  border-top: 1px solid var(--border);
+}
+.ai-answer-actions .msg-action {
+  display: inline-flex;
+  align-items: center;
+  height: 1.9rem;
+  padding: 0 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  line-height: 1;
+  color: var(--fg);
+  background: transparent;
+}
+.ai-answer-actions .msg-action:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.ai-answer-actions .ai-attribution { margin: 0 0 0 auto; }
+/* Nothing to say yet is no reason to draw an empty tinted strip. */
+.ai-context:empty { display: none; }
+.ai-welcome {
+  margin: auto 0;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--muted);
+}
+.ai-welcome h4 { margin: 0 0 0.6rem; font-size: 1.1rem; font-weight: 600; color: var(--fg); }
+.ai-welcome p { margin: 0.35rem auto; max-width: 62ch; line-height: 1.5; }
 .ai-study-mode-panel {
   margin-top: 0.45rem;
   padding: 0.55rem 0.7rem;
@@ -950,7 +984,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   padding: 0.75rem 1rem;
   border-top: 1px solid var(--border);
 }
-.ai-form input {
+.ai-form :is(input, textarea) {
   font: inherit;
   font-size: 16px;
   padding: 0.6rem 0.75rem;
@@ -959,7 +993,11 @@ summary::-webkit-details-marker { color: var(--muted); }
   min-width: 0;
   width: 100%;
 }
-.ai-form input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+/* A textarea composer grows with the question (see autoGrow in chat-ux.js). */
+.ai-form textarea { resize: none; line-height: 1.4; max-height: 10rem; overflow-y: hidden; display: block; }
+/* Buttons stay their own height at the bottom while the composer grows. */
+.ai-form:has(textarea) { align-items: end; }
+.ai-form :is(input, textarea):focus { outline: 2px solid var(--accent); border-color: var(--accent); }
 .ai-form button[type="submit"] {
   background: var(--accent);
   color: #fff;
@@ -1160,6 +1198,25 @@ summary::-webkit-details-marker { color: var(--muted); }
   padding: 0.35rem 0.5rem;
   white-space: nowrap;
 }
+/* Header actions that are real buttons, not underlined links: they change the
+   thread, so they should look like controls. Outranks `.modal-card header
+   button`, which strips borders for the close ×. */
+.modal-card header .modal-header-btn {
+  font-size: 0.8rem;
+  line-height: 1;
+  padding: 0.4rem 0.75rem;
+  margin-left: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  color: var(--fg);
+  white-space: nowrap;
+}
+.modal-card header .modal-header-btn:hover {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--accent);
+}
 .modal-sub {
   margin: 1rem 1.25rem 0.75rem;
   color: var(--muted);
@@ -1200,10 +1257,11 @@ summary::-webkit-details-marker { color: var(--muted); }
   #kbTutorModal .modal-card-tall {
     max-width: min(1100px, 92vw);
     width: 100%;
-    /* Tall enough that the transcript is worth scrolling, without forcing a
-       short conversation to sit in a mostly empty box. */
-    min-height: min(60vh, 620px);
-    max-height: 90vh;
+    /* One fixed height. A min/max pair let the window grow with each answer —
+       600px empty, 900px after one long reply — so the frame moved under the
+       reader's eyes while they were reading. The transcript scrolls instead. */
+    height: min(88vh, 1000px);
+    max-height: 88vh;
   }
 }
 
@@ -1791,7 +1849,7 @@ summary::-webkit-details-marker { color: var(--muted); }
     padding-bottom: 0.6rem;
     row-gap: 0.5rem;
   }
-  .ai-form input { grid-column: 1 / -1; }
+  .ai-form :is(input, textarea) { grid-column: 1 / -1; }
   /* Every button, not a hardcoded two — the tutor form has three. */
   .ai-form button { width: 100%; padding: 0.7rem 0.5rem; font-size: 0.95rem; }
   #aiClearBtn { font-size: 0.9rem; }
@@ -2483,7 +2541,16 @@ summary::-webkit-details-marker { color: var(--muted); }
    shared with the older .archive-* names so one rule styles both; the Archive
    view is gone but the class names remain in the note-modal markup. */
 .study-tabs,
-.archive-tabs { display: flex; gap: 0.4rem; margin-bottom: 1rem; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.archive-tabs {
+  display: flex; gap: 0.4rem; margin-bottom: 1rem;
+  /* The rule is an inset shadow, not a border: a tab's underline has to cover
+     it, and a -1px margin onto a real border overflowed this scroll box by one
+     pixel, which overflow-x: auto turned into a vertical micro scrollbar. */
+  box-shadow: inset 0 -1px 0 var(--border);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none;
+}
+.study-tabs::-webkit-scrollbar,
+.archive-tabs::-webkit-scrollbar { display: none; }
 .study-tab-btn,
 .archive-tab-btn {
   background: none;
@@ -2494,10 +2561,9 @@ summary::-webkit-details-marker { color: var(--muted); }
      instead of reading as a straight line under the label. */
   border-radius: 0;
   padding: 0.55rem 0.2rem;
-  /* Sit the underline ON the strip's own 1px rule rather than 1px above it.
-     Two nearly-touching horizontal lines is the other half of what made this
-     look bent. */
-  margin-bottom: -1px;
+  /* The underline sits ON the strip's 1px rule (an inset shadow at the strip's
+     bottom edge) rather than 1px above it — two nearly-touching lines is what
+     made this look bent. */
   margin-right: 1rem;
   font-size: 0.9rem;
   color: var(--muted);
@@ -2758,7 +2824,13 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-tutor-wrap { margin-top: 1.5rem; text-align: center; }
 .ai-context-note { display: block; font-size: 0.8rem; color: var(--muted); padding: 0.4rem 0.6rem; background: var(--accent-bg); border-radius: 8px; margin-bottom: 0.5rem; }
 .ai-attribution { display: block; margin-top: 0.55rem; color: var(--muted); font-size: 0.72rem; }
-#kbTutorSources { margin-bottom: 0.5rem; }
+/* One quiet line above the transcript. It was a tinted .ai-context band, with a
+   second tinted note box inside it and a margin on the <details>, which made
+   "Sources used (1)" a 64px coloured slab with the label at its bottom edge. */
+#kbTutorSources { margin: 0; padding: 0.45rem 1rem; background: transparent; }
+#kbTutorSources .ai-context-note { background: none; padding: 0; margin: 0; }
+#kbTutorSources .kb-source-chips { margin-top: 0; }
+#kbTutorSources .kb-source-chips[open] { padding-bottom: 0.25rem; }
 .ai-msg { padding: 0.6rem 0.8rem; border-radius: 12px; margin-bottom: 0.6rem; max-width: 92%; white-space: pre-wrap; }
 .ai-msg-user { background: var(--accent); color: #fff; margin-left: auto; }
 .ai-msg-assistant { background: var(--card); border: 1px solid var(--border); }
@@ -3081,7 +3153,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   vertical-align: -1px;
 }
 /* A disabled composer should read as "not now", not as broken. */
-.ai-form input:disabled,
+.ai-form :is(input, textarea):disabled,
 .ai-form button:disabled,
 .ai-quick button:disabled {
   opacity: 0.55;

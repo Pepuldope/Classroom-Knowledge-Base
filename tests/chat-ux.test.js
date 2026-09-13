@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   composerStateModel, shouldFollowOutput, streamEndModel, applyComposerState,
   createSseFramer, createDeltaStream, unwrapMathDelimiters, renderTutorAnswer,
+  tutorWelcomeModel, composerKeyAction,
 } from "../chat-ux.js";
 
 test("while a reply streams, the input is closed and Send becomes Stop", () => {
@@ -354,4 +355,25 @@ test("both tutors use the shared renderer, and Study answers get the answer styl
   for (const el of ["table", "pre", "h3", "blockquote"]) {
     assert.ok(css.includes(`:is(.ai-msg.assistant, .ai-msg-assistant) ${el} `), `no shared ${el} rule`);
   }
+});
+
+test("the tutor's welcome says what it answers from, and names what is open", () => {
+  const w = tutorWelcomeModel({ noteCount: 1185, courseCount: 45, focusTitle: "Kvadratická funkcia" });
+  assert.equal(w.title, "Hi, I'm your study tutor.");
+  assert.match(w.lines[0], /1,185 notes across 45 courses/);
+  assert.match(w.lines.join(" "), /say so and point you to the material/);
+  assert.match(w.lines.at(-1), /“Kvadratická funkcia” open/);
+  // Nothing open, nothing claimed about it; nothing built, no invented count.
+  const bare = tutorWelcomeModel();
+  assert.equal(bare.lines.length, 2);
+  assert.doesNotMatch(bare.lines.join(" "), /\d/);
+  assert.match(tutorWelcomeModel({ noteCount: 3, courseCount: 1 }).lines[0], /1 course\./);
+  assert.match(tutorWelcomeModel({ language: "sk" }).title, /tútor/);
+});
+
+test("Enter sends, Shift+Enter is a new line, and an IME keeps its Enter", () => {
+  assert.equal(composerKeyAction({ key: "Enter" }), "send");
+  assert.equal(composerKeyAction({ key: "Enter", shiftKey: true }), "newline");
+  assert.equal(composerKeyAction({ key: "Enter", isComposing: true }), "none");
+  assert.equal(composerKeyAction({ key: "a" }), "none");
 });

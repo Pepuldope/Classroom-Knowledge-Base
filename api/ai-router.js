@@ -182,13 +182,18 @@ export function providerModelEntries(p) {
  * model gives the student a worse explanation. So ties break UPWARD — when two
  * models are equally far from the target, the stronger one goes first.
  */
-export function providerModels(p, { tier = null } = {}) {
+export function providerModels(p, { tier = null, avoid = null } = {}) {
   const entries = providerModelEntries(p);
-  if (!tier) return entries.map((e) => e.id);
-  return entries
+  const ids = !tier ? entries.map((e) => e.id) : entries
     .map((e, i) => ({ e, i, gap: Math.abs(e.strength - tier) }))
     .sort((a, b) => a.gap - b.gap || b.e.strength - a.e.strength || a.i - b.i)
     .map(({ e }) => e.id);
+  // "Try again" asks for a different model than the one that just answered.
+  // Same rule as the tier: the avoided model moves to the back, never off the
+  // list, so a retry on a chain where it is the only one alive still answers.
+  const avoided = new Set(Array.isArray(avoid) ? avoid : []);
+  if (!avoided.size) return ids;
+  return [...ids.filter((id) => !avoided.has(id)), ...ids.filter((id) => avoided.has(id))];
 }
 
 /** The id to report when nothing has been attempted yet. */
@@ -540,7 +545,7 @@ export function getRouterMetrics() {
  * The error thrown when the chain is exhausted carries every model tried, so
  * the 502 a user eventually sees names all of them rather than only the last.
  */
-async function callProviderOnce(p, { messages, max_tokens, temperature, stream, tier = null }) {
+async function callProviderOnce(p, { messages, max_tokens, temperature, stream, tier = null, avoid = null }) {
   if (_forcedFail.has(p.name)) {
     const e = new Error(`${p.name} forced-fail (drill)`);
     e.provider = p.name;
@@ -552,7 +557,7 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream, 
     "Content-Type": "application/json",
     ...(p.headers || {}),
   };
-  const chain = providerModels(p, { tier });
+  const chain = providerModels(p, { tier, avoid });
   if (chain.length === 0) {
     const e = new Error(`${p.name} has no model configured`);
     e.provider = p.name;
@@ -717,6 +722,7 @@ export async function routeChat(messages, opts = {}) {
     effortMin = 1,
     classify = true,
     requires = null,
+    avoid = null,
   } = opts;
 
   const TASK_PROFILES = {
@@ -815,7 +821,7 @@ export async function routeChat(messages, opts = {}) {
     const isProbe = getHealth(p.name).state === "half_open";
     if (isProbe) beginProbe(p); // count this as a limited recovery probe
     try {
-      const r = await callProviderOnce(p, { messages, max_tokens: MT, temperature: TEMP, stream, tier });
+      const r = await callProviderOnce(p, { messages, max_tokens: MT, temperature: TEMP, stream, tier, avoid });
       const latency = Date.now() - pt0;
       recordOutcome(p, true);
       bump(_metrics.byProvider, p.name);

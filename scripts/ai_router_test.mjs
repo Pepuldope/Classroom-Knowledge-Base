@@ -439,3 +439,22 @@ test("every provider resolves to at least one model, chain or not", () => {
   assert.ok(providerModels(or).length >= 3,
     "openrouter is the only configured provider in production; a short chain is an outage waiting for a retirement");
 });
+
+test("Try again moves the model that answered to the back of the chain, never off it", () => {
+  const chain = providerModels(OR(), { tier: 2 });
+  assert.ok(chain.length >= 2, "needs a chain to reorder");
+  const retried = providerModels(OR(), { tier: 2, avoid: [chain[0]] });
+  assert.notEqual(retried[0], chain[0], "the retry asked the same model first");
+  assert.equal(retried[retried.length - 1], chain[0]);
+  assert.deepEqual([...retried].sort(), [...chain].sort(), "a model was dropped");
+  assert.deepEqual(providerModels(OR(), { tier: 2, avoid: ["not-a-model"] }), chain);
+});
+
+test("Try again reaches a different model on the wire", () => onlyOpenRouter(async () => {
+  const chain = providerModels(OR(), { tier: 2 });
+  const asked = [];
+  installFetch({ onRequest: (name, model) => { if (name === "openrouter") asked.push(model); } });
+  const r = await completeChat([{ role: "user", content: "hi" }], { task: "tutor", avoid: [chain[0]] });
+  assert.equal(asked[0], chain[1]);
+  assert.equal(r.model, chain[1]);
+}));

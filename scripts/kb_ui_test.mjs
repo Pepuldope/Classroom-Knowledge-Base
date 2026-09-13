@@ -435,7 +435,8 @@ try {
     });
     await page.click("#kbTutorClearChat");
     assert.equal(await page.locator("#kbTutorMessages .ai-msg").count(), 0);
-    assert.match(await page.locator("#kbTutorSources").textContent(), /still use your knowledge base/i);
+    // The welcome comes back, and it is what says answers use the notes.
+    assert.match(await page.locator("#kbTutorMessages .ai-welcome").textContent(), /your own class notes/i);
     await page.click("#kbTutorClose");
   });
 

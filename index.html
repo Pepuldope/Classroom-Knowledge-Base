@@ -308,15 +308,15 @@
   <div class="modal-card modal-card-tall">
     <header>
       <h3>AI Tutor — <span id="kbTutorThreadTitle">New tutor thread</span></h3>
-      <button id="kbTutorRenameThread" class="link-btn" type="button" title="Rename this tutor thread">Rename</button>
-      <button id="kbTutorArchiveThread" class="link-btn" type="button" title="Archive this tutor thread locally">Archive</button>
+      <button id="kbTutorRenameThread" class="modal-header-btn" type="button" title="Rename this tutor thread">Rename</button>
+      <button id="kbTutorArchiveThread" class="modal-header-btn" type="button" title="Archive this tutor thread locally">Archive</button>
       <button id="kbTutorClose" aria-label="Close">×</button>
     </header>
     <div id="kbTutorSources" class="ai-context"></div>
     <div id="kbTutorThreadArchive" class="kb-tutor-thread-archive" aria-label="Archived tutor threads" hidden></div>
     <div id="kbTutorMessages" class="ai-messages"></div>
     <form id="kbTutorForm" class="ai-form">
-      <input id="kbTutorInput" type="text" placeholder="Ask about anything in the knowledge base…" autocomplete="off" />
+      <textarea id="kbTutorInput" rows="1" placeholder="Ask about anything in your notes…  (Shift+Enter for a new line)" autocomplete="off"></textarea>
       <button type="submit">Send</button>
       <button id="kbTutorClearChat" type="button" title="Clear the current chat">Clear chat</button>
       <button id="kbTutorNewTopic" type="button" title="Start a fresh tutor conversation">New topic</button>

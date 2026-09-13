@@ -311,7 +311,12 @@ export default async function handler(req) {
   try {
     // Per-question routing. With one provider configured, the tier no longer
     // selects a provider — it selects a model inside that provider's chain.
-    routed = await routeChat(messages, { task, stream: true });
+    // `avoidModel` is set by the tutor's "Try again": the student did not like
+    // the answer, so the model that gave it goes to the back of the chain.
+    const avoid = typeof body.avoidModel === "string" && body.avoidModel.trim()
+      ? [body.avoidModel.trim().slice(0, 200)]
+      : null;
+    routed = await routeChat(messages, { task, stream: true, avoid });
   } catch (e) {
     return jsonResponse({ error: "AI request failed", details: e.message }, 502);
   }

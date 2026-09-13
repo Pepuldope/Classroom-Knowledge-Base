@@ -19,7 +19,7 @@ import { renderLightMarkdown, renderRichMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
-import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, revealAnswer, markReasoning, createDeltaStream, renderTutorAnswer } from "./chat-ux.js";
+import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel, isAtBottom, followOutput, revealAnswer, markReasoning, createDeltaStream, renderTutorAnswer, tutorWelcomeModel, composerKeyAction, autoGrow } from "./chat-ux.js";
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
@@ -1531,7 +1531,12 @@ export function wireKbEvents() {
   $("kbManageLoadFileLink")?.addEventListener("click", () => fileInput?.click());
   $("kbBuildCancelBtn")?.addEventListener("click", () => cancelKbBuild());
 
-  tutorOpen?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = false; });
+  tutorOpen?.addEventListener("click", () => {
+    const m = $("kbTutorModal");
+    if (m) m.hidden = false;
+    renderTutorWelcome();
+    autoGrow(tutorInput);
+  });
   tutorClose?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = true; });
   tutorClearChat?.addEventListener("click", clearTutorUi);
   tutorNewTopic?.addEventListener("click", resetTutorUi);
@@ -1542,7 +1547,15 @@ export function wireKbEvents() {
     const v = tutorInput?.value.trim();
     if (v) { sendTutor(v); setTutorBusy(true); }
   });
-  tutorInput?.addEventListener("input", () => { if (!tutorStreamController) setTutorBusy(false); });
+  tutorInput?.addEventListener("input", () => {
+    autoGrow(tutorInput);
+    if (!tutorStreamController) setTutorBusy(false);
+  });
+  tutorInput?.addEventListener("keydown", (e) => {
+    if (composerKeyAction(e) !== "send") return;
+    e.preventDefault();
+    tutorForm?.requestSubmit();
+  });
   setTutorBusy(false);
   document.querySelectorAll("#kbTutorModal .ai-quick button").forEach((b) =>
     b.addEventListener("click", () => { const p = b.dataset.prompt; if (p) sendTutor(p); })
@@ -3014,59 +3027,56 @@ export function formatTutorAttribution(provider, model) {
   return p && m ? `Answered by ${p} · ${m}` : "";
 }
 
-export function tutorFeedbackModel(current = {}, change) {
-  if (change === undefined && current && typeof current === "object" && !Array.isArray(current) && "answerId" in current) {
-    change = current;
-    current = {};
-  }
-  const next = current && typeof current === "object" && !Array.isArray(current) ? { ...current } : {};
-  const answerId = typeof change?.answerId === "string" ? change.answerId.trim() : "";
-  const rating = change?.rating;
-  if (!answerId || !["up", "down"].includes(rating)) return next;
-  if (next[answerId] === rating) delete next[answerId];
-  else next[answerId] = rating;
-  return next;
-}
-
 function tutorAnswerId(text) {
   let hash = 2166136261;
   for (const char of copyableTutorText(text)) hash = Math.imul(hash ^ char.charCodeAt(0), 16777619);
   return `answer-${(hash >>> 0).toString(16)}`;
 }
 
-function loadTutorFeedback() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem("cwa_tutor_feedback") || "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch { return {}; }
-}
-
-function saveTutorFeedback(feedback) {
-  try { localStorage.setItem("cwa_tutor_feedback", JSON.stringify(feedback)); } catch {}
-}
-
-function addTutorFeedbackActions(messageEl, text) {
-  if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-feedback")) return;
-  const answerId = tutorAnswerId(text);
-  const wrap = document.createElement("span");
-  wrap.className = "ai-feedback";
-  wrap.title = "Rate this answer locally in this browser";
-  const current = loadTutorFeedback();
-  for (const [rating, label] of [["up", "Helpful"], ["down", "Not helpful"]]) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = `ai-feedback-btn ai-feedback-${rating} msg-action`;
-    button.textContent = rating === "up" ? "👍" : "👎";
-    button.setAttribute("aria-label", label);
-    button.setAttribute("aria-pressed", current[answerId] === rating ? "true" : "false");
-    button.addEventListener("click", () => {
-      const next = tutorFeedbackModel(loadTutorFeedback(), { answerId, rating });
-      saveTutorFeedback(next);
-      for (const sibling of wrap.querySelectorAll("button")) sibling.setAttribute("aria-pressed", next[answerId] === (sibling === button ? rating : sibling.classList.contains("ai-feedback-up") ? "up" : "down") ? "true" : "false");
-    });
-    wrap.appendChild(button);
+/**
+ * The row an answer's actions live in, created on first use.
+ *
+ * The buttons used to be appended straight into the bubble one by one, so they
+ * sat on the answer's last text line with whatever height each label happened
+ * to render at — emoji thumbs next to text buttons were not the same height.
+ * One row with one button height fixes both.
+ */
+function answerActionRow(messageEl) {
+  let row = messageEl.querySelector(":scope > .ai-answer-actions");
+  if (!row) {
+    row = document.createElement("div");
+    row.className = "ai-answer-actions";
+    messageEl.appendChild(row);
   }
-  messageEl.appendChild(wrap);
+  return row;
+}
+
+/**
+ * Ask the same question again, of a different model.
+ *
+ * Replaces the thumbs, which saved a rating to this browser that nothing ever
+ * read. Only the latest answer offers it: re-asking an older question would
+ * answer it below newer ones, out of order.
+ */
+function addTutorTryAgainAction(messageEl, answer, model) {
+  if (!messageEl || !copyableTutorText(answer)) return;
+  const wrap = $("kbTutorMessages");
+  wrap?.querySelectorAll(".ai-tryagain-btn").forEach((b) => b.remove());
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "ai-tryagain-btn msg-action";
+  button.textContent = "Try again";
+  button.title = "Ask this again, answered by a different model";
+  button.addEventListener("click", () => {
+    if (tutorStreamController) return;
+    const last = tutorMessages[tutorMessages.length - 1];
+    if (last?.role === "assistant" && last.content === answer) tutorMessages.pop();
+    const prompt = getTutorRetryPrompt(tutorMessages);
+    if (!prompt) return;
+    messageEl.remove();
+    sendTutor(prompt, { retry: true, avoidModel: model });
+  });
+  answerActionRow(messageEl).appendChild(button);
 }
 
 function addTutorAttribution(messageEl, provider, model) {
@@ -3080,7 +3090,7 @@ function addTutorAttribution(messageEl, provider, model) {
   attribution.className = "ai-attribution";
   attribution.textContent = text;
   attribution.title = "The provider and model selected by the tutor router for this answer";
-  messageEl.appendChild(attribution);
+  answerActionRow(messageEl).appendChild(attribution);
 }
 
 function addTutorCopyAction(messageEl, text) {
@@ -3099,7 +3109,7 @@ function addTutorCopyAction(messageEl, text) {
       button.textContent = "Copy unavailable";
     }
   });
-  messageEl.appendChild(button);
+  answerActionRow(messageEl).appendChild(button);
 }
 
 function addTutorStudyAction(messageEl, text) {
@@ -3116,7 +3126,7 @@ function addTutorStudyAction(messageEl, text) {
     button.disabled = true;
     renderStudyList();
   });
-  messageEl.appendChild(button);
+  answerActionRow(messageEl).appendChild(button);
 }
 
 function addTutorStudyModeAction(messageEl, text) {
@@ -3174,7 +3184,8 @@ function addTutorStudyModeAction(messageEl, text) {
     if (!panel.hidden) renderProgress();
   });
   button.setAttribute("aria-expanded", "false");
-  messageEl.append(button, panel);
+  answerActionRow(messageEl).appendChild(button);
+  messageEl.appendChild(panel);
 }
 
 function addTutorRetryAction(messageEl, prompt) {
@@ -3189,7 +3200,31 @@ function addTutorRetryAction(messageEl, prompt) {
     button.textContent = "Retrying…";
     sendTutor(prompt, { retry: true });
   });
-  messageEl.appendChild(button);
+  answerActionRow(messageEl).appendChild(button);
+}
+
+/** Show the tutor's opening message in an empty transcript. */
+function renderTutorWelcome() {
+  const wrap = $("kbTutorMessages");
+  if (!wrap || wrap.querySelector(".ai-msg")) return;
+  const notes = Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [];
+  const model = tutorWelcomeModel({
+    noteCount: notes.length,
+    courseCount: new Set(notes.map((n) => n?.course).filter(Boolean)).size,
+    focusTitle: openTutorFocus()?.title || "",
+    language: preferredTutorLanguage(),
+  });
+  const el = document.createElement("div");
+  el.className = "ai-welcome";
+  const title = document.createElement("h4");
+  title.textContent = model.title;
+  el.appendChild(title);
+  for (const line of model.lines) {
+    const p = document.createElement("p");
+    p.textContent = line;
+    el.appendChild(p);
+  }
+  wrap.replaceChildren(el);
 }
 
 function resetTutorUi() {
@@ -3197,8 +3232,8 @@ function resetTutorUi() {
   saveTutorThreadTitle("New tutor thread");
   const messages = $("kbTutorMessages");
   if (messages) messages.replaceChildren();
-  const sources = $("kbTutorSources");
-  if (sources) sources.innerHTML = '<span class="ai-context-note">New topic — answers will still use your knowledge base.</span>';
+  $("kbTutorSources")?.replaceChildren();
+  renderTutorWelcome();
   $("kbTutorInput")?.focus();
 }
 
@@ -3206,8 +3241,8 @@ function clearTutorUi() {
   tutorMessages = resetTutorConversation();
   const messages = $("kbTutorMessages");
   if (messages) messages.replaceChildren();
-  const sources = $("kbTutorSources");
-  if (sources) sources.innerHTML = '<span class="ai-context-note">Chat cleared — answers will still use your knowledge base.</span>';
+  $("kbTutorSources")?.replaceChildren();
+  renderTutorWelcome();
   $("kbTutorInput")?.focus();
 }
 
@@ -3264,12 +3299,13 @@ function stopTutorStream() {
   return true;
 }
 
-async function sendTutor(text, { retry = false } = {}) {
+async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
   // One reply at a time. The quick-prompt buttons call straight in here, so
   // the disabled composer alone is not enough of a guard.
   if (tutorStreamController) return;
   const input = $("kbTutorInput");
-  if (input) input.value = "";
+  if (input) { input.value = ""; autoGrow(input); }
+  $("kbTutorMessages")?.querySelector(".ai-welcome")?.remove();
   if (!retry) {
     tutorMessages.push({ role: "user", content: text });
     addTutorMessage("user", text);
@@ -3289,7 +3325,10 @@ async function sendTutor(text, { retry = false } = {}) {
     const retrieved = tutorRequestNotesModel(
       buildTutorRetrievedNotes(localKbBundle, text, { focusNote: focus }),
     );
-    const body = JSON.stringify({ messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage() });
+    const body = JSON.stringify({
+      messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage(),
+      ...(avoidModel ? { avoidModel } : {}),
+    });
     const send = () => fetch("/api/tutor", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: currentAccessToken() ? `Bearer ${currentAccessToken()}` : "" },
@@ -3381,7 +3420,7 @@ async function sendTutor(text, { retry = false } = {}) {
     addTutorCopyAction(assistantEl, acc);
     addTutorStudyAction(assistantEl, acc);
     addTutorStudyModeAction(assistantEl, acc);
-    addTutorFeedbackActions(assistantEl, acc);
+    addTutorTryAgainAction(assistantEl, acc, model);
     addTutorAttribution(assistantEl, provider, model);
     // The action row, the source chips and the study-mode panel are all added
     // AFTER the last delta painted, so they grow the transcript below the last
@@ -3435,7 +3474,9 @@ function renderTutorSources(container, notes) {
     b.addEventListener("click", () => openKbNote(c.noteIndex));
     wrap.appendChild(b);
   }
-  container.appendChild(wrap);
+  // Replaces the "Grounded in N notes" line rather than stacking under it —
+  // the summary already carries the count, and the two said the same thing.
+  container.replaceChildren(wrap);
 }
 
 // ---------------------------------------------------------------------------

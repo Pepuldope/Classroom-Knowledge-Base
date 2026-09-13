@@ -28,7 +28,7 @@ import routerHealth from "../api/router-health.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { deriveFamily } from "../kb-client-search.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, tutorFeedbackModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
@@ -715,14 +715,6 @@ test("copySearchContextHistoryEntryModel describes copied result metadata withou
 
 test("copySearchContextHistoryDismissModel clears the local metadata and payload", () => {
   assert.deepEqual(copySearchContextHistoryDismissModel(), { text: "", count: 0 });
-});
-
-test("tutorFeedbackModel keeps only local thumbs ratings and toggles the same rating off", () => {
-  assert.deepEqual(tutorFeedbackModel(), {});
-  assert.deepEqual(tutorFeedbackModel({ answerId: "a1", rating: "up" }), { a1: "up" });
-  assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "a1", rating: "up" }), {});
-  assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "a1", rating: "down" }), { a1: "down" });
-  assert.deepEqual(tutorFeedbackModel({ a1: "up" }, { answerId: "", rating: "down" }), { a1: "up" });
 });
 
 test("studyModeModel turns a grounded answer into three local quiz prompts", () => {

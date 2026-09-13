@@ -334,3 +334,62 @@ export function unwrapMathDelimiters(text) {
 export function renderTutorAnswer(text) {
   return renderRichMarkdown(unwrapMathDelimiters(text == null ? "" : String(text)));
 }
+
+/**
+ * What the tutor says before anyone has asked anything.
+ *
+ * An empty transcript under a bare input read as broken — nothing said what
+ * this is, what it knows, or that it can be wrong. The welcome answers those
+ * three and nothing else: the quick prompts under the input already offer
+ * things to click, so it does not repeat them.
+ */
+export function tutorWelcomeModel({ noteCount = 0, courseCount = 0, focusTitle = "", language = "en" } = {}) {
+  const notes = Number.isFinite(noteCount) && noteCount > 0 ? Math.floor(noteCount) : 0;
+  const courses = Number.isFinite(courseCount) && courseCount > 0 ? Math.floor(courseCount) : 0;
+  const focus = typeof focusTitle === "string" ? focusTitle.trim().slice(0, 120) : "";
+  if (language === "sk") {
+    return {
+      title: "Ahoj, som tvoj študijný tútor.",
+      lines: [
+        notes
+          ? `Odpovedám z tvojich vlastných poznámok z hodín — ${notes.toLocaleString("sk")} poznámok z ${courses} predmetov.`
+          : "Odpovedám z tvojich vlastných poznámok z hodín.",
+        "Pri odpovedi ukážem, z ktorých poznámok vychádzam. Keď v nich niečo nie je, poviem ti to a odporučím materiál, kde to pravdepodobne nájdeš.",
+        ...(focus ? [`Máš otvorené „${focus}“, tak začnem odtiaľ.`] : []),
+      ],
+    };
+  }
+  return {
+    title: "Hi, I'm your study tutor.",
+    lines: [
+      notes
+        ? `I answer from your own class notes — ${notes.toLocaleString("en")} notes across ${courses} course${courses === 1 ? "" : "s"}.`
+        : "I answer from your own class notes.",
+      "I show which notes I used. If they don't cover something, I'll say so and point you to the material most likely to have it.",
+      ...(focus ? [`You have “${focus}” open, so I'll start there.`] : []),
+    ],
+  };
+}
+
+/**
+ * What a key press in the composer means. Enter sends, Shift+Enter is a new
+ * line — and Enter while an IME is composing (Slovak diacritics on some
+ * layouts, any CJK input) confirms the character rather than sending half a word.
+ */
+export function composerKeyAction({ key, shiftKey = false, isComposing = false } = {}) {
+  if (key !== "Enter" || isComposing) return "none";
+  return shiftKey ? "newline" : "send";
+}
+
+/**
+ * Grow a textarea with its content up to `maxPx`, then scroll inside it.
+ * A single-line input showed a long question as one line scrolled sideways,
+ * with most of it out of sight while the student was still editing it.
+ */
+export function autoGrow(textarea, maxPx = 160) {
+  if (!textarea) return;
+  textarea.style.height = "auto";
+  const next = Math.min(textarea.scrollHeight, maxPx);
+  textarea.style.height = `${next}px`;
+  textarea.style.overflowY = textarea.scrollHeight > maxPx ? "auto" : "hidden";
+}
