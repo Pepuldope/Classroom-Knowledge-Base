@@ -105,65 +105,44 @@ try {
   await page.waitForFunction(() => !document.getElementById("kbView")?.hidden, null, { timeout: 10000 });
   await openStudy(page);
 
-  // --- 3. the filters are collapsed, and never a horizontal scroller -------
+  // --- 3. the filters fit the phone: dropdowns that wrap, never a scroller ---
+  // (2026-09-13: labelled dropdowns replaced the chip panel.)
   await page.fill("#kbSearchInput", "logarithms");
-  await page.waitForSelector("#kbFilterPanel:not([hidden]) .kb-chip", { timeout: 10000 });
-  // A closed <details> hides its content through the shadow slot, so ask the
-  // browser whether the chip is actually rendered rather than measuring a rect
-  // that Chrome answers from the last layout it did.
-  const chipVisible = await page.locator("#kbFilterChips .kb-chip").first().isVisible();
-  const collapsed = await page.evaluate(() => {
-    const panel = document.getElementById("kbFilterPanel");
-    const chips = document.getElementById("kbFilterChips");
+  await page.waitForSelector("#kbFilterFields:not([hidden])", { timeout: 10000 });
+  const bar = await page.evaluate(() => {
+    const el = document.getElementById("kbFilterBar");
+    const controls = [...el.querySelectorAll("select, button")].filter((c) => c.offsetParent);
     return {
-      open: panel.open,
-      panelHeight: Math.round(panel.getBoundingClientRect().height),
-      chipCount: chips.querySelectorAll(".kb-chip").length,
+      height: Math.round(el.getBoundingClientRect().height),
+      scrolls: document.documentElement.scrollWidth > window.innerWidth + 1 || el.scrollWidth > el.clientWidth + 1,
+      overflowing: controls.filter((c) => c.getBoundingClientRect().right > window.innerWidth + 1).map((c) => c.id),
+      minTap: Math.min(...controls.map((c) => Math.round(c.getBoundingClientRect().height))),
+      courses: document.querySelectorAll("#kbFilterCourse option").length - 1,
     };
   });
-  assert.equal(collapsed.open, false, "the filter panel starts closed");
-  assert.equal(chipVisible, false, "a closed panel shows no chips");
-  assert.ok(collapsed.panelHeight <= 56,
-    `closed, the filters should cost one row, took ${collapsed.panelHeight}px`);
-  assert.ok(collapsed.chipCount > 20,
-    `every facet is still rendered, only hidden — saw ${collapsed.chipCount} chips`);
+  assert.equal(bar.scrolls, false, "the filter row scrolls sideways on a phone");
+  assert.deepEqual(bar.overflowing, [], "a filter control runs off the screen");
+  assert.ok(bar.minTap >= 38, `filter controls are too small to tap: ${bar.minTap}px`);
+  assert.ok(bar.height <= 140, `the filter row took ${bar.height}px — two rows is the budget`);
+  assert.equal(bar.courses, COURSES.length, "every course is still a choice");
+  console.log(`✓ filters: ${bar.height}px of dropdowns, no sideways scroll, ${bar.courses} courses listed`);
 
-  const opened = await page.evaluate(() => {
-    const panel = document.getElementById("kbFilterPanel");
-    panel.open = true;
-    const chips = document.getElementById("kbFilterChips");
-    return {
-      scrolls: chips.scrollWidth > chips.clientWidth + 1,
-      overflowX: getComputedStyle(chips).overflowX,
-      rows: new Set([...chips.querySelectorAll(".kb-chip")]
-        .map((c) => Math.round(c.getBoundingClientRect().top))).size,
-    };
-  });
-  assert.equal(opened.scrolls, false, "the chips wrap; they must not scroll sideways");
-  assert.notEqual(opened.overflowX, "auto", "the horizontal scroller is what was wrong with this");
-  assert.ok(opened.rows > 1, "wrapping means more than one row of chips");
-  console.log(`✓ filters: one ${collapsed.panelHeight}px row closed, ${opened.rows} wrapped rows open`);
-
-  // --- ...and what is ON still shows while it is closed --------------------
-  await page.evaluate(() => {
-    document.getElementById("kbFilterPanel").open = true;
-    document.querySelector("#kbFilterChips .kb-chip:not(.active)").click();
-  });
-  await page.waitForTimeout(700);
-  const active = await page.evaluate(() => ({
-    tags: [...document.querySelectorAll(".kb-filter-tag")].map((t) => t.textContent),
-    clears: document.querySelectorAll("#kbFilterPanel .kb-clear-filters").length,
-  }));
-  assert.ok(active.tags.length >= 1, "an active facet appears on the summary line");
-  assert.equal(active.clears, 1, "exactly one Clear control, not one per render");
-  // Rendering again must not stack a second Clear onto the summary.
+  // --- ...and what is ON is visible, with one Clear ------------------------
+  const chosen = await page.evaluate(() => [...document.querySelectorAll("#kbFilterCourse option")].find((o) => o.value).value);
+  await page.selectOption("#kbFilterCourse", chosen);
+  await page.waitForSelector("#kbClearFilters:not([hidden])", { timeout: 5000 });
   await page.fill("#kbSearchInput", "quadratics");
   await page.waitForTimeout(700);
-  assert.equal(
-    await page.locator("#kbFilterPanel .kb-clear-filters").count(), 1,
-    "Clear is replaced on re-render, not appended",
-  );
-  console.log(`✓ filters: active facet shown while closed (${active.tags.join(", ")}), one Clear`);
+  const active = await page.evaluate(() => ({
+    value: document.getElementById("kbFilterCourse").value,
+    marked: document.getElementById("kbFilterCourse").classList.contains("is-active"),
+    clears: document.querySelectorAll("#kbClearFilters").length,
+  }));
+  assert.equal(active.value, chosen, "a re-render dropped the chosen course");
+  assert.ok(active.marked, "a set filter does not look set");
+  assert.equal(active.clears, 1);
+  await page.click("#kbClearFilters");
+  console.log(`✓ filters: "${chosen}" stays selected and marked across searches; Clear resets it`);
 
   // --- 6. focusing the search box lifts it to the TOP of the screen --------
   // The browser's own answer to the keyboard opening is to scroll the focused

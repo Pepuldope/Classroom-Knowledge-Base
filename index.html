@@ -206,22 +206,35 @@
         <div id="kbExamples" class="kb-examples" hidden>
           <span class="kb-examples-label">Try:</span>
         </div>
-        <details id="kbFilterPanel" class="kb-filter-panel" hidden>
-          <summary class="kb-filter-summary">
-            <span class="kb-filter-summary-icon" aria-hidden="true">⚙</span>
-            <span class="kb-filter-summary-label">Filters</span>
-            <span id="kbFilterSummaryChips" class="kb-filter-summary-chips"></span>
-          </summary>
-          <div id="kbFilterChips" class="kb-filter-chips"></div>
-        </details>
-        <div class="kb-sort-row">
-          <label class="kb-sort-label" for="kbSort">Sort:</label>
-          <select id="kbSort" class="kb-sort-select">
-            <option value="relevance">Relevance</option>
-            <option value="recency">Newest first</option>
-            <option value="course">By course</option>
-            <option value="title">By title</option>
-          </select>
+        <div id="kbFilterBar" class="kb-filter-bar" role="group" aria-label="Filter and sort results">
+          <div id="kbFilterFields" class="kb-filter-fields" hidden>
+            <label class="kb-filter-field">
+              <span class="kb-filter-label">Year</span>
+              <select id="kbFilterYear" class="kb-filter-select"></select>
+            </label>
+            <label class="kb-filter-field">
+              <span class="kb-filter-label">Subject</span>
+              <select id="kbFilterFamily" class="kb-filter-select"></select>
+            </label>
+            <label class="kb-filter-field kb-filter-field-course">
+              <span class="kb-filter-label">Course</span>
+              <select id="kbFilterCourse" class="kb-filter-select"></select>
+            </label>
+            <label id="kbFilterKindField" class="kb-filter-field" hidden>
+              <span class="kb-filter-label">Type</span>
+              <select id="kbFilterKind" class="kb-filter-select"></select>
+            </label>
+          </div>
+          <label class="kb-filter-field">
+            <span class="kb-filter-label">Sort</span>
+            <select id="kbSort" class="kb-filter-select kb-sort-select">
+              <option value="relevance">Relevance</option>
+              <option value="recency">Newest first</option>
+              <option value="course">By course</option>
+              <option value="title">By title</option>
+            </select>
+          </label>
+          <button id="kbClearFilters" type="button" class="kb-clear-filters" hidden>✕ Clear filters</button>
         </div>
         <div id="kbResultCount" class="kb-result-count" hidden></div>
         <div id="kbFilterStatus" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>

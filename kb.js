@@ -49,30 +49,6 @@ export function kbResultNavigationIndex(current, key, count) {
   return (index + delta + count) % count;
 }
 
-// ---------------------------------------------------------------------------
-// Pure filter model (no DOM): turn the raw facet lists from local retrieval
-// into a complete, untruncated list of courses + years with the active
-// selection passed through. The UI renders from this so EVERY course is
-// reachable as a filter (owner request #2) — no silent top-N truncation.
-// ---------------------------------------------------------------------------
-export function kbFilterModel(filters, active = {}) {
-  const courses = Array.isArray(filters?.courses) ? filters.courses : [];
-  const years = Array.isArray(filters?.years) ? filters.years : [];
-  const kinds = Array.isArray(filters?.kinds) ? filters.kinds : [];
-  const families = Array.isArray(filters?.families) ? filters.families : [];
-  return {
-    courses,
-    years,
-    kinds,
-    families,
-    activeCourse: active.course || "",
-    activeYear: active.year || "",
-    activeKind: active.kind || "",
-    activeFamily: active.family || "",
-    sort: active.sort || "relevance",
-  };
-}
-
 /** Search a cached private bundle without a network round-trip. */
 export function buildLocalSearchResponse(bundle, query, {
   course = "", courses = [], year = "", kind = "", family = "", sort = "relevance", limit = 8,
@@ -1607,6 +1583,16 @@ export function wireKbEvents() {
   // with the chosen sort (default relevance, which is omitted server-side).
   const sortSel = $("kbSort");
   if (sortSel) sortSel.value = kbActiveSort;
+  $("kbFilterYear")?.addEventListener("change", (e) => setKbFilter({ year: e.target.value }));
+  $("kbFilterFamily")?.addEventListener("change", (e) => setKbFilter({ family: e.target.value }));
+  $("kbFilterCourse")?.addEventListener("change", (e) => setKbFilter({ course: e.target.value }));
+  $("kbFilterKind")?.addEventListener("change", (e) => setKbFilter({ kind: e.target.value }));
+  // Clears the filters, not the sort: Sort is its own control, and resetting it
+  // here is what made "Clear filters" appear with no filter set.
+  $("kbClearFilters")?.addEventListener("click", () => {
+    setKbFilter({ year: "", family: "", course: "", kind: "" });
+    $("kbFilterYear")?.focus();
+  });
   sortSel?.addEventListener("change", () => {
     kbSortExplicit = true;
     kbActiveSort = sortSel.value || "relevance";
@@ -1932,6 +1918,10 @@ async function runKbSearch(query) {
     renderExamples();
     return;
   }
+  // "Try: …" is for an empty box. Nothing hid it again, so it sat between the
+  // search box and the filters for the whole of every search.
+  const examples = $("kbExamples");
+  if (examples) examples.hidden = true;
   // Typing while on Browse or Curriculum would otherwise search a panel the
   // user cannot see.
   if (activeStudyTab !== "search") setStudyTab(studyTabForAction("search", activeStudyTab));
@@ -2599,152 +2589,117 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
 }
 
 /**
- * Empty the summary line.
+ * The filter row: one dropdown per facet, instead of every value as a chip.
  *
- * The tags live in their own span and are replaced wholesale, but the Clear
- * button is a direct child of the <summary> — deliberately, so a long course
- * name in the tag strip cannot clip it out of reach — and so has to be removed
- * by hand or one accumulates per render.
+ * The chip panel put ~60 buttons — 45 courses, 4 years, the subjects and a
+ * one-value Type — into one wrapping block behind a full-width "Filters" bar
+ * whose "Clear filters" showed whenever Sort was not Relevance, so it offered
+ * to clear filters that were not set.
+ *
+ * Pure. `notes` is the bundle, used only to place each course under the school
+ * years it has notes in. Courses narrow to the chosen year and subject, but the
+ * active course always stays listed, or the select could not show it.
  */
-function clearFilterSummary() {
-  const summary = $("kbFilterSummaryChips");
-  if (summary) summary.replaceChildren();
-  $("kbFilterPanel")?.querySelectorAll(".kb-clear-filters").forEach((button) => button.remove());
+export function kbFilterBarModel(filters = {}, active = {}, notes = []) {
+  const list = (value) => (Array.isArray(value) ? value.filter(Boolean).map(String) : []);
+  const years = [...new Set(list(filters.years))].sort((a, b) => b.localeCompare(a));
+  const families = [...new Set(list(filters.families))].sort((a, b) => a.localeCompare(b));
+  const kinds = [...new Set(list(filters.kinds))].sort((a, b) => a.localeCompare(b));
+  const courses = [...new Set(list(filters.courses))];
+  const activeYear = active.year || "";
+  const activeFamily = active.family || "";
+  const activeCourse = active.course || "";
+  const activeKind = active.kind || "";
+
+  const yearsByCourse = new Map();
+  const familyByCourse = new Map();
+  for (const note of Array.isArray(notes) ? notes : []) {
+    const course = note?.course;
+    if (!course) continue;
+    if (!yearsByCourse.has(course)) yearsByCourse.set(course, new Set());
+    if (note.y) yearsByCourse.get(course).add(String(note.y));
+    if (!familyByCourse.has(course)) familyByCourse.set(course, note.family || deriveFamily(course) || "");
+  }
+  const inScope = (course) =>
+    course === activeCourse || (
+      (!activeYear || yearsByCourse.get(course)?.has(activeYear)) &&
+      (!activeFamily || familyByCourse.get(course) === activeFamily)
+    );
+  const groups = new Map();
+  for (const course of courses.filter(inScope)) {
+    const courseYears = [...(yearsByCourse.get(course) || [])].sort((a, b) => b.localeCompare(a));
+    const label = activeYear && courseYears.includes(activeYear) ? activeYear : (courseYears[0] || "Other");
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push(course);
+  }
+  const courseGroups = [...groups.entries()]
+    .sort(([a], [b]) => (a === "Other") - (b === "Other") || b.localeCompare(a))
+    .map(([label, items]) => ({ label, courses: items.sort((a, b) => a.localeCompare(b)) }));
+
+  return {
+    visible: years.length + families.length + courses.length > 0,
+    years,
+    families,
+    kinds,
+    showKind: kinds.length > 1 || !!activeKind,
+    courseGroups,
+    active: { year: activeYear, family: activeFamily, course: activeCourse, kind: activeKind },
+    hasActive: !!(activeYear || activeFamily || activeCourse || activeKind),
+  };
 }
 
-/** Hide the whole filter surface, panel and summary together. */
+/** Hide the facet dropdowns (Sort stays: it applies with or without a query). */
 function hideFilterPanel() {
-  const panel = $("kbFilterPanel");
-  if (panel) panel.hidden = true;
-  const chips = $("kbFilterChips");
-  if (chips) chips.innerHTML = "";
-  clearFilterSummary();
+  const fields = $("kbFilterFields");
+  if (fields) fields.hidden = true;
+  const clear = $("kbClearFilters");
+  if (clear) clear.hidden = true;
+}
+
+function fillSelect(select, { anyLabel, options = [], groups = null, value = "" }) {
+  if (!select) return;
+  const nodes = [new Option(anyLabel, "")];
+  if (groups) {
+    for (const group of groups) {
+      const optgroup = document.createElement("optgroup");
+      optgroup.label = group.label;
+      for (const course of group.courses) optgroup.appendChild(new Option(course, course));
+      nodes.push(optgroup);
+    }
+  } else {
+    for (const option of options) nodes.push(new Option(option, option));
+  }
+  select.replaceChildren(...nodes);
+  select.value = value;
+  select.classList.toggle("is-active", !!value);
+}
+
+function setKbFilter(patch) {
+  if ("year" in patch) kbActiveYear = patch.year;
+  if ("family" in patch) kbActiveFamily = patch.family;
+  if ("course" in patch) kbActiveCourse = patch.course;
+  if ("kind" in patch) kbActiveKind = patch.kind;
+  saveKbSearchState({ course: kbActiveCourse, year: kbActiveYear, kind: kbActiveKind, family: kbActiveFamily, sort: kbActiveSort });
+  const input = $("kbSearchInput");
+  runKbSearch(input ? input.value : "");
 }
 
 function renderFilterChips(filters) {
-  const chips = $("kbFilterChips");
-  const panel = $("kbFilterPanel");
-  const summaryChips = $("kbFilterSummaryChips");
-  if (!chips || !panel) return;
-  // Pure model: returns ALL courses + years + kinds + families (no truncation)
-  // and the active selection, so every facet is reachable as a filter
-  // (owner request #2 + focus area 7).
-  const model = kbFilterModel(filters, {
-    course: kbActiveCourse,
-    year: kbActiveYear,
-    kind: kbActiveKind,
-    family: kbActiveFamily,
-    sort: kbActiveSort,
-  });
-  const courses = model.courses;
-  const years = model.years;
-  const kinds = model.kinds;
-  const families = model.families;
-  if (courses.length === 0 && years.length === 0 && kinds.length === 0 && families.length === 0) {
-    hideFilterPanel(); return;
-  }
-  panel.hidden = false;
-  chips.innerHTML = "";
-  clearFilterSummary();
-
-  const makeChip = (label, kind, value, active) => {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "kb-chip" + (active ? " active" : "");
-    b.textContent = label;
-    b.title = active ? `Remove filter: ${label}` : `Filter by ${label}`;
-    b.addEventListener("click", () => {
-      if (kind === "course") kbActiveCourse = active ? "" : value;
-      else if (kind === "year") kbActiveYear = active ? "" : value;
-      else if (kind === "kind") kbActiveKind = active ? "" : value;
-      else if (kind === "family") kbActiveFamily = active ? "" : value;
-      saveKbSearchState({ course: kbActiveCourse, year: kbActiveYear, kind: kbActiveKind, family: kbActiveFamily, sort: kbActiveSort });
-      const input = $("kbSearchInput");
-      runKbSearch(input ? input.value : "");
-    });
-    return b;
-  };
-
-  if (years.length) {
-    const lbl = document.createElement("span");
-    lbl.className = "kb-chip-group-label";
-    lbl.textContent = "Year:";
-    chips.appendChild(lbl);
-    for (const y of years) chips.appendChild(makeChip(y, "year", y, model.activeYear === y));
-  }
-  if (courses.length) {
-    const lbl = document.createElement("span");
-    lbl.className = "kb-chip-group-label";
-    lbl.textContent = "Course:";
-    chips.appendChild(lbl);
-    // Every course is rendered (no top-N cap) so none is unreachable. They
-    // wrap inside the collapsed panel rather than extending a one-line
-    // horizontal scroller, which at 43 courses was most of a screen of sideways
-    // dragging to reach the last one.
-    for (const c of courses) chips.appendChild(makeChip(c, "course", c, model.activeCourse === c));
-  }
-  // Focus area 7: Type + Class-type facets join course + year.
-  if (kinds.length) {
-    const lbl = document.createElement("span");
-    lbl.className = "kb-chip-group-label";
-    lbl.textContent = "Type:";
-    chips.appendChild(lbl);
-    for (const k of kinds) chips.appendChild(makeChip(k, "kind", k, model.activeKind === k));
-  }
-  if (families.length) {
-    const lbl = document.createElement("span");
-    lbl.className = "kb-chip-group-label";
-    lbl.textContent = "Class type:";
-    chips.appendChild(lbl);
-    for (const f of families) chips.appendChild(makeChip(f, "family", f, model.activeFamily === f));
-  }
-
-  // What is ON shows on the summary line, so a collapsed panel still answers
-  // "why am I only seeing these results?" without being opened.
-  const activeTags = [
-    [model.activeYear, "Year"],
-    [model.activeCourse, "Course"],
-    [model.activeKind, "Type"],
-    [model.activeFamily, "Class type"],
-  ].filter(([value]) => value);
-  if (summaryChips) {
-    for (const [value, group] of activeTags) {
-      const tag = document.createElement("span");
-      tag.className = "kb-filter-tag";
-      tag.textContent = value;
-      tag.title = `${group}: ${value}`;
-      summaryChips.appendChild(tag);
-    }
-  }
-
-  // ROADMAP #55: a "Clear filters" control appears only when a facet is active,
-  // so the student can reset the course/year selection without retyping.
-  if (kbActiveCourse || kbActiveYear || kbActiveKind || kbActiveFamily || kbActiveSort !== "relevance") {
-    const clear = document.createElement("button");
-    clear.type = "button";
-    clear.className = "kb-chip kb-clear-filters";
-    clear.textContent = "✕ Clear filters";
-    clear.title = "Remove the active filters and sort";
-    // It lives inside the <summary>, where a click would otherwise toggle the
-    // disclosure as well as clear the filters.
-    clear.addEventListener("click", (event) => { event.preventDefault(); event.stopPropagation(); });
-    clear.addEventListener("click", () => {
-      kbActiveCourse = "";
-      kbActiveYear = "";
-      kbActiveKind = "";
-      kbActiveFamily = "";
-      // Also reset the explicit sort so the control disappears and the dropdown
-      // stays in sync (a persistent non-default sort would otherwise keep the
-      // clear button visible even with no facet active).
-      kbActiveSort = "relevance";
-      saveKbSearchState({ course: kbActiveCourse, year: kbActiveYear, kind: kbActiveKind, family: kbActiveFamily, sort: kbActiveSort });
-      const sortSel = $("kbSort");
-      if (sortSel) sortSel.value = "relevance";
-      const input = $("kbSearchInput");
-      runKbSearch(input ? input.value : "");
-    });
-    (panel.querySelector(".kb-filter-summary") || chips).appendChild(clear);
-  }
+  const fields = $("kbFilterFields");
+  if (!fields) return;
+  const model = kbFilterBarModel(filters, {
+    year: kbActiveYear, family: kbActiveFamily, course: kbActiveCourse, kind: kbActiveKind,
+  }, localKbBundle?.notes);
+  if (!model.visible) { hideFilterPanel(); return; }
+  fields.hidden = false;
+  fillSelect($("kbFilterYear"), { anyLabel: "All", options: model.years, value: model.active.year });
+  fillSelect($("kbFilterFamily"), { anyLabel: "All", options: model.families, value: model.active.family });
+  fillSelect($("kbFilterCourse"), { anyLabel: "All courses", groups: model.courseGroups, value: model.active.course });
+  const kindField = $("kbFilterKindField");
+  if (kindField) kindField.hidden = !model.showKind;
+  if (model.showKind) fillSelect($("kbFilterKind"), { anyLabel: "All", options: model.kinds, value: model.active.kind });
+  const clear = $("kbClearFilters");
+  if (clear) clear.hidden = !model.hasActive;
 }
 
 // ROADMAP #55: show "Showing N of M notes" above the results, narrowing M when

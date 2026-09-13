@@ -28,7 +28,7 @@ import routerHealth from "../api/router-health.js";
 import { saveBundle, getBundle, readShardedSlices } from "../api/kb-store.js";
 import { bundleFromVault } from "../archive-builder.js";
 import { deriveFamily } from "../kb-client-search.js";
-import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
+import { highlightSnippet, tutorSourceList, resetTutorConversation, copyableTutorText, copySearchContextFormatModel, studyModeModel, latestTutorAnswer, studyModeProgressModel, toggleStudyPrompt, copySearchContext, copySearchContextHistoryModel, copySearchContextHistoryEntryModel, copySearchContextHistoryDismissModel, kbFilterBarModel, kbSettingsModel, kbDensityClass, kbSearchStateModel, initialKbSearchState, relatedNotesLimit, shouldAutoBuildKb, kbBuildSurfaceModel, kbBuildStartModel, groupCourseNotesBySprint, buildLocalSearchResponse, kbSortForQuery, kbScopeFilters, kbPinnedCoursesModel, localNoteFromBundle, localRelatedFromBundle, detectClassroomChanges, exportBundlePayload, INTERACTIVE_OAUTH_PROMPT, kbResultNavigationIndex, buildFilterAnnouncement, relatedPreviewSurfaceModel, relatedPreviewRetryModel, relatedPreviewErrorModel } from "../kb.js";
 import { renderRichMarkdown, renderAssignmentDescription } from "../archive.js";
 import { relatedNotesPreview as clientRelatedNotesPreview, relatedTokenCacheStats, resetRelatedTokenCache, relatedPreviewTimingModel, formatRelatedPreviewTimingStats, relatedPreviewTimingPercentiles } from "../kb-client-search.js";
 import { plannerTutorContextModel, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
@@ -1390,56 +1390,46 @@ test("bundleToCsv includes body + summary columns carrying real content", async 
 
 // ---------------------------------------------------------------------------
 // Regression (owner request #2 — every course must be reachable as a filter):
-// the filter UI used to hard-cap at the first 24 courses, so a ~38-course KB
-// left ~14 courses (e.g. the alphabetically-later ones) UNREACHABLE as a
-// course filter. kbFilterModel must return ALL courses (no silent truncation)
-// plus the years, so the filter UI can render a complete course selector.
-// This is a pure model function (no DOM) so it stays unit-testable.
+// the filter UI once hard-capped at 24 courses, leaving the rest unreachable.
+// The dropdown row (2026-09-13) keeps that rule: nothing is truncated.
 // ---------------------------------------------------------------------------
-test("kbFilterModel returns every course + year without truncating", () => {
-  assert.ok(typeof kbFilterModel === "function", "kbFilterModel is exported");
-  // 40 distinct courses — exceeds the old 24-chip cap that hid courses.
+test("kbFilterBarModel lists every course, grouped under its newest school year", () => {
   const courses = Array.from({ length: 40 }, (_, i) => `Course ${String(i).padStart(2, "0")}`);
-  const years = ["2023-24", "2024-25", "2025-26", "undated"];
-  const filters = { courses, years };
-  const model = kbFilterModel(filters);
-  // No truncation: all 40 courses must be present, not just the first 24.
-  assert.strictEqual(model.courses.length, 40, "all courses returned (no cap/truncation)");
-  assert.deepStrictEqual(model.years, years, "all years returned");
-  // Active state must round-trip so the UI can mark the selected chip.
-  const withActive = kbFilterModel(filters, { course: "Course 39", year: "2025-26" });
-  assert.strictEqual(withActive.activeCourse, "Course 39", "active course passed through");
-  assert.strictEqual(withActive.activeYear, "2025-26", "active year passed through");
-  // The last (alphabetically latest) course must be reachable.
-  assert.ok(model.courses.includes("Course 39"), "last course is reachable as a filter");
+  const notes = courses.map((course, i) => ({ course, y: ["2023-24", "2024-25", "2025-26"][i % 3] }));
+  notes.push({ course: "Course 00", y: "2025-26" });
+  const model = kbFilterBarModel({ courses, years: ["2023-24", "2025-26", "2024-25"] }, {}, notes);
+  const listed = model.courseGroups.flatMap((g) => g.courses);
+  assert.equal(listed.length, 40, "a course went missing from the dropdown");
+  assert.ok(listed.includes("Course 39"), "the alphabetically last course is reachable");
+  assert.deepEqual(model.years, ["2025-26", "2024-25", "2023-24"], "years newest first");
+  assert.deepEqual(model.courseGroups.map((g) => g.label), ["2025-26", "2024-25", "2023-24"]);
+  // A course taught in two years sits under the newer one, once.
+  assert.ok(model.courseGroups[0].courses.includes("Course 00"));
+  assert.equal(listed.filter((c) => c === "Course 00").length, 1);
+  assert.equal(model.hasActive, false);
 });
 
-// ---------------------------------------------------------------------------
-// Focus area 7 — KB sorting & filtering by kind / year / class / class-type
-// (family) + an explicit sort order. The filter model must carry the new
-// facets (kinds, families) and a default sort so the UI can render a complete
-// type + class-type selector and a sort dropdown, and round-trip active state.
-// ---------------------------------------------------------------------------
-test("kbFilterModel returns kinds + families + default sort and round-trips active state", () => {
-  assert.ok(typeof kbFilterModel === "function", "kbFilterModel is exported");
-  const filters = {
-    courses: ["ELA 1", "BEng Y1"],
-    years: ["2023-24", "2025-26"],
-    kinds: ["note", "announcements"],
-    families: ["Language", "Engineering"],
-  };
-  const m = kbFilterModel(filters);
-  assert.deepStrictEqual(m.kinds, ["note", "announcements"], "kinds facet returned");
-  assert.deepStrictEqual(m.families, ["Language", "Engineering"], "families facet returned");
-  assert.strictEqual(m.sort, "relevance", "default sort is relevance");
-  const active = kbFilterModel(filters, {
-    kind: "announcements",
-    family: "Engineering",
-    sort: "recency",
-  });
-  assert.strictEqual(active.activeKind, "announcements", "active kind passed through");
-  assert.strictEqual(active.activeFamily, "Engineering", "active family passed through");
-  assert.strictEqual(active.sort, "recency", "active sort passed through");
+test("kbFilterBarModel narrows courses to the chosen year and subject, but keeps the chosen course", () => {
+  const notes = [
+    { course: "Y2 MAT", y: "2024-25", family: "Science/Math" },
+    { course: "ELA Year 2", y: "2024-25", family: "Language" },
+    { course: "MAT Y3", y: "2025-26", family: "Science/Math" },
+  ];
+  const filters = { courses: ["Y2 MAT", "ELA Year 2", "MAT Y3"], years: ["2024-25", "2025-26"], families: ["Language", "Science/Math"], kinds: ["note"] };
+  const byYear = kbFilterBarModel(filters, { year: "2024-25" }, notes);
+  assert.deepEqual(byYear.courseGroups.flatMap((g) => g.courses).sort(), ["ELA Year 2", "Y2 MAT"]);
+  const bySubject = kbFilterBarModel(filters, { year: "2024-25", family: "Science/Math" }, notes);
+  assert.deepEqual(bySubject.courseGroups.flatMap((g) => g.courses), ["Y2 MAT"]);
+  // The active course survives a year that would exclude it, or the select could not show it.
+  const kept = kbFilterBarModel(filters, { year: "2024-25", course: "MAT Y3" }, notes);
+  assert.ok(kept.courseGroups.flatMap((g) => g.courses).includes("MAT Y3"));
+  assert.equal(kept.hasActive, true);
+  assert.deepEqual(kept.active, { year: "2024-25", family: "", course: "MAT Y3", kind: "" });
+  // A Type dropdown with one value is noise; it appears when there is a choice.
+  assert.equal(byYear.showKind, false);
+  assert.equal(kbFilterBarModel({ ...filters, kinds: ["note", "announcements"] }, {}, notes).showKind, true);
+  // Sort is not a filter: nothing set means nothing to clear.
+  assert.equal(kbFilterBarModel(filters, { sort: "recency" }, notes).hasActive, false);
 });
 
 // /api/kb-search must surface kind + family facets and narrow by `kind`.

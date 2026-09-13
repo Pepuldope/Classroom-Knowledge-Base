@@ -2863,65 +2863,48 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-msg-assistant { background: var(--card); border: 1px solid var(--border); }
 .ai-messages { flex: 1; overflow-y: auto; padding: 0.5rem; }
 
-/* Filters, closed by default.
-   Every facet is a chip and none is capped, which is right — but at 43 courses
-   plus four years plus twelve kinds that was ~60 chips on ONE nowrap row inside
-   a horizontal scroller, sitting between the search box and the results. On a
-   phone, reaching the last course meant most of a screen-width of sideways
-   dragging, every time. The row is a disclosure now: what is ON shows on the
-   summary line, and the chips wrap inside instead of scrolling. */
-.kb-filter-panel {
-  margin-bottom: 0.75rem;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: var(--surface-subtle);
-}
-.kb-filter-summary {
+/* Filter row: labelled dropdowns, one per facet, next to Sort.
+   It replaced a full-width "Filters" disclosure that opened into ~60 wrapping
+   chips. Wraps to two rows on a phone rather than scrolling sideways. */
+.kb-filter-bar {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.7rem;
-  cursor: pointer;
-  list-style: none;
-  font-size: 0.82rem;
-  color: var(--muted);
-  border-radius: 10px;
-  min-height: 40px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem 0.75rem;
+  margin: 0.6rem 0 0.6rem;
 }
-.kb-filter-summary::-webkit-details-marker { display: none; }
-.kb-filter-summary:hover { color: var(--accent); }
-.kb-filter-panel:focus-within > .kb-filter-summary { outline: 2px solid var(--accent); outline-offset: -2px; }
-.kb-filter-summary-label { font-weight: 600; }
-.kb-filter-summary-icon { font-size: 0.9rem; line-height: 1; }
-/* The native disclosure marker is suppressed above (it cannot be positioned
-   after the active-filter tags), so the summary draws its own. */
-.kb-filter-summary::after {
-  content: "\25BE";
-  flex: 0 0 auto;
-  margin-left: 0.15rem;
-  transition: transform 0.15s ease;
+.kb-filter-fields { display: contents; }
+.kb-filter-fields[hidden] { display: none; }
+.kb-filter-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.kb-filter-field[hidden] { display: none; }
+.kb-filter-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; color: var(--muted); }
+.kb-filter-select {
+  font: inherit; font-size: 0.85rem; cursor: pointer;
+  height: 2.1rem; padding: 0 1.6rem 0 0.6rem; max-width: 100%;
+  border-radius: 8px; border: 1px solid var(--border);
+  background-color: var(--surface); color: var(--fg);
+  transition: border-color 0.12s, box-shadow 0.12s;
 }
-.kb-filter-panel[open] > .kb-filter-summary::after { transform: rotate(180deg); }
-@media (prefers-reduced-motion: reduce) {
-  .kb-filter-summary::after { transition: none; }
+.kb-filter-field-course .kb-filter-select { width: min(20rem, 100%); }
+.kb-filter-select:hover { border-color: var(--accent); }
+.kb-filter-select:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+/* A set filter reads as set without opening the dropdown. */
+.kb-filter-select.is-active { border-color: var(--accent); background-color: var(--accent-bg); color: var(--accent); font-weight: 600; }
+.kb-clear-filters {
+  height: 2.1rem; padding: 0 0.75rem; font-size: 0.82rem;
+  border: 1px dashed var(--border); border-radius: 8px; background: transparent; color: var(--muted);
 }
-.kb-filter-panel[open] > .kb-filter-summary { border-bottom: 1px solid var(--border); border-radius: 10px 10px 0 0; }
-/* Active facets, on the closed line: a collapsed panel still has to answer
-   "why am I only seeing these results?". */
-.kb-filter-summary-chips { display: flex; align-items: center; gap: 0.35rem; min-width: 0; overflow: hidden; flex: 1 1 auto; }
-.kb-filter-tag {
-  font-size: 0.76rem;
-  padding: 0.18rem 0.55rem;
-  border-radius: 999px;
-  background: var(--accent);
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 11rem;
+.kb-clear-filters:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
+@media (max-width: 640px) {
+  /* Year, Subject and Sort share one row; Course, the long one, gets its own
+     below. Two rows instead of three. */
+  .kb-filter-bar { gap: 0.4rem 0.5rem; }
+  .kb-filter-field { flex: 1 1 0; }
+  .kb-filter-field-course { flex-basis: 100%; order: 2; }
+  #kbFilterKindField { order: 2; flex-basis: 100%; }
+  .kb-filter-select, .kb-filter-field-course .kb-filter-select { width: 100%; height: 2.5rem; padding: 0 1.1rem 0 0.45rem; font-size: 0.82rem; }
+  .kb-clear-filters { flex: 1 1 100%; height: 2.5rem; order: 3; }
 }
-.kb-filter-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; padding: 0.6rem 0.7rem; }
-.kb-chip-group-label { font-size: 0.8rem; color: var(--muted); margin-right: 0.1rem; }
 .kb-chip {
   font: inherit; font-size: 0.82rem; cursor: pointer;
   padding: 0.28rem 0.7rem; border-radius: 999px;
@@ -2930,22 +2913,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .kb-chip:hover { border-color: var(--accent); color: var(--accent); }
 .kb-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-.kb-chip.kb-clear-filters { margin-left: auto; flex: 0 0 auto; border-style: dashed; background: var(--card); color: var(--muted); }
-.kb-chip.kb-clear-filters:hover { border-color: var(--danger, #c0392b); color: var(--danger, #c0392b); }
 .kb-result-count { font-size: 0.82rem; color: var(--muted); margin: 0.25rem 0 0.5rem; }
-
-/* Focus area 7: explicit sort order control. Sits between the filter chips
-   and the result count; compact on mobile (wraps, full-width select). */
-.kb-sort-row { display: flex; align-items: center; gap: 0.4rem; margin-bottom: 0.5rem; }
-.kb-sort-label { font-size: 0.8rem; color: var(--muted); }
-.kb-sort-select {
-  font: inherit; font-size: 0.82rem; cursor: pointer;
-  padding: 0.28rem 0.5rem; border-radius: 8px;
-  border: 1px solid var(--border); background: var(--surface); color: var(--fg);
-  transition: border-color 0.12s, box-shadow 0.12s;
-}
-.kb-sort-select:hover { border-color: var(--accent); }
-.kb-sort-select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
 
 /* Browse-by-course discovery panel + example search chips. */
 .kb-examples { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; margin-bottom: 0.75rem; }

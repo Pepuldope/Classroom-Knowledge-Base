@@ -25,19 +25,20 @@ import assert from "node:assert/strict";
 const BASE = process.env.BASE_URL || "http://localhost:4321";
 
 /**
- * Open the Filters disclosure.
- *
- * The facet chips used to be a permanently-visible horizontal scroller; they
- * are inside a collapsed <details> now, so anything that clicks one has to open
- * it first — a reader does the same.
+ * Wait for the filter dropdowns a search renders (2026-09-13: they replaced a
+ * collapsed chip panel, so there is nothing to open first).
  */
 const openFilterPanel = async (page) => {
-  await page.waitForSelector("#kbFilterPanel:not([hidden])", { timeout: 10000 });
-  await page.evaluate(() => {
-    const panel = document.getElementById("kbFilterPanel");
-    if (panel) panel.open = true;
-  });
-  await page.waitForSelector("#kbFilterChips .kb-chip", { state: "visible", timeout: 10000 });
+  await page.waitForSelector("#kbFilterFields:not([hidden])", { timeout: 10000 });
+  await page.waitForFunction(() => document.querySelectorAll("#kbFilterYear option").length > 1, null, { timeout: 10000 });
+};
+
+/** Choose the first real (non-"All …") option of a filter dropdown. */
+const chooseFirstFilter = async (page, id) => {
+  const value = await page.evaluate((sel) => [...document.querySelectorAll(`${sel} option`)].find((o) => o.value)?.value || "", `#${id}`);
+  assert.ok(value, `#${id} offers no value to filter by`);
+  await page.selectOption(`#${id}`, value);
+  return value;
 };
 
 // fileURLToPath, not .pathname: on Windows a file: URL's pathname is
@@ -331,7 +332,7 @@ try {
   });
 
   await check("arrow keys move focus through result cards and Enter opens one", async () => {
-    const clearFilters = page.locator("#kbFilterPanel .kb-clear-filters");
+    const clearFilters = page.locator("#kbClearFilters");
     if (await clearFilters.count() && await clearFilters.isVisible()) await clearFilters.click();
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
@@ -379,32 +380,23 @@ try {
     assert.ok(!crashed, "a render-time JS error produced a 'Search failed' empty state");
   });
 
-  await check("filter chips render after search", async () => {
+  await check("filter dropdowns render after search", async () => {
     await openFilterPanel(page);
-    const chips = await page.locator("#kbFilterChips .kb-chip").count();
-    assert.ok(chips > 0, "expected at least one filter chip");
+    const courses = await page.locator("#kbFilterCourse option").count();
+    assert.ok(courses > 1, "expected the course dropdown to list courses");
   });
 
-  // Focus area 7: the filter bar must expose Type + Class-type facets AND a
-  // sort dropdown, so a student can narrow/search the KB by kind / family and
-  // reorder results. These are reachable from the search response facets.
-  await check("Type + Class-type filter facets and sort dropdown render", async () => {
-    // Labels for the new facets must be present in the chip bar.
+  // The filter row exposes Year, Subject and Course dropdowns next to Sort, and
+  // Type only when there is more than one type to choose between.
+  await check("Year / Subject / Course dropdowns and sort render as one labelled row", async () => {
     await openFilterPanel(page);
-    const labels = await page.locator("#kbFilterChips .kb-chip-group-label").allTextContents();
-    const joined = labels.join(" | ").toLowerCase();
-    assert.ok(joined.includes("type"), "Type facet label present");
-    // Class-type only appears when notes carry a family; the seeded dev vault
-    // may not, so only require it when the facet exists in the search response.
-    const r = await page.request.fetch(BASE + "/api/kb-search?q=cover%20letter");
-    const data = await r.json().catch(() => null);
-    if (Array.isArray(data?.filters?.families) && data.filters.families.length) {
-      assert.ok(joined.includes("class type"), "Class-type facet label present when families exist");
-    }
-    // Sort dropdown must be present and offer the four orderings.
-    await page.waitForSelector("#kbSort", { timeout: 5000 });
+    const labels = (await page.locator("#kbFilterBar .kb-filter-label:visible").allTextContents()).map((l) => l.trim());
+    for (const label of ["Year", "Subject", "Course", "Sort"]) assert.ok(labels.includes(label), `missing ${label}: ${labels}`);
+    const kinds = await page.locator("#kbFilterKind option").count();
+    assert.equal(await page.locator("#kbFilterKindField").isVisible(), kinds > 2, "Type shows only with a real choice");
     const opts = await page.locator("#kbSort option").allTextContents();
     assert.ok(opts.length >= 4, "sort dropdown has at least 4 orderings");
+    assert.equal(await page.locator("#kbClearFilters").isVisible(), false, "Clear shows with no filter set");
   });
 
   await check("filter changes have a polite screen-reader status region", async () => {
@@ -637,10 +629,9 @@ try {
   });
 
   // --- Click a Year chip -> results narrow ---
-  await check("clicking a Year filter chip re-runs search with the filter", async () => {
+  await check("choosing a Year filter re-runs search with the filter", async () => {
     await openFilterPanel(page);
-    const yearChip = page.locator("#kbFilterChips .kb-chip").first();
-    await yearChip.click();
+    await chooseFirstFilter(page, "kbFilterYear");
     await page.waitForTimeout(800); // allow re-fetch
     // either results updated or empty state shown — both are valid outcomes
     const cards = await page.locator("#kbResults .kb-result-card").count();
@@ -790,34 +781,25 @@ try {
   });
 
   await check("clear-filters control appears when a filter is active and resets it", async () => {
-    // Run a fresh search (via an example chip) to ensure chips are rendered,
-    // then activate a chip that is currently INACTIVE (filter state is
-    // module-level and persists across searches, so the first chip may already
-    // be active from an earlier step — clicking it would toggle OFF).
-    await page.evaluate(() => {
-      const input = document.getElementById("kbSearchInput");
-      if (input) { input.value = ""; input.dispatchEvent(new Event("input", { bubbles: true })); }
-    });
     await page.fill("#kbSearchInput", "cover letter");
     await page.keyboard.press("Enter");
     await page.waitForSelector("#kbResults .kb-result-card", { timeout: 8000 });
-    // Pick an inactive chip so clicking turns the filter ON.
     await openFilterPanel(page);
-    const inactive = page.locator("#kbFilterChips .kb-chip:not(.active)").first();
-    assert.ok((await inactive.count()) >= 1, "an inactive filter chip should be present");
-    await inactive.click();
-    await page.waitForTimeout(700);
-    // A "Clear filters" control must now be present.
-    const clear = page.locator("#kbFilterPanel .kb-clear-filters");
-    assert.ok((await clear.count()) === 1, "clear-filters control should appear when a filter is active");
-    // Clicking it clears the filter and the control disappears.
-    await clear.click();
-    await page.waitForFunction(
-      () => document.querySelectorAll("#kbFilterPanel .kb-clear-filters").length === 0,
-      { timeout: 5000 }
-    ).catch(() => {});
-    assert.equal(await page.locator("#kbFilterPanel .kb-clear-filters").count(), 0,
-      "clear-filters control should disappear after clearing");
+    if (await page.locator("#kbClearFilters").isVisible()) await page.click("#kbClearFilters");
+    await page.waitForFunction(() => document.getElementById("kbClearFilters").hidden, null, { timeout: 5000 });
+    // Sort is not a filter: changing it must not offer to clear filters.
+    await page.selectOption("#kbSort", "title");
+    await page.waitForTimeout(400);
+    assert.equal(await page.locator("#kbClearFilters").isVisible(), false, "Clear appeared for a sort change");
+    const course = await chooseFirstFilter(page, "kbFilterCourse");
+    await page.waitForSelector("#kbClearFilters:not([hidden])", { timeout: 5000 });
+    assert.equal(await page.locator("#kbFilterCourse").inputValue(), course, "the chosen course is still selected after the re-render");
+    assert.match(await page.locator("#kbFilterCourse").getAttribute("class"), /is-active/);
+    await page.click("#kbClearFilters");
+    await page.waitForFunction(() => document.getElementById("kbClearFilters").hidden, null, { timeout: 5000 });
+    assert.equal(await page.locator("#kbFilterCourse").inputValue(), "", "clear left the course set");
+    assert.equal(await page.locator("#kbSort").inputValue(), "title", "clear reset the sort, which is not a filter");
+    await page.selectOption("#kbSort", "relevance");
     await page.screenshot({ path: SHOTS + "07-result-count.png", fullPage: true });
   });
 
