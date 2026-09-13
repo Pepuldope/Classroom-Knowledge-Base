@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildTutorRetrievedNotes, tutorRequestNotesModel, notePassages, verifyTutorQuotes } from "../kb-tutor-context.js";
+import { buildTutorRetrievedNotes, tutorRequestNotesModel, notePassages, verifyTutorQuotes, tutorSearchQuery } from "../kb-tutor-context.js";
 
 test("buildTutorRetrievedNotes sends only the bounded notes selected by retrieval", () => {
   const bundle = {
@@ -94,6 +94,28 @@ test("a quote is checked against the whole note it cites, not the excerpt", () =
   assert.equal(verifyTutorQuotes('"THE Discriminant, decides how many roots" [1]', sources).missing.length, 0);
   assert.equal(verifyTutorQuotes('"the discriminant decides how many roots" [7]', sources).missing.length, 1);
   assert.equal(verifyTutorQuotes('He said "the discriminant decides how many roots".', sources).checked, 0);
+});
+
+// Measured live 2026-09-13: "Čo je diskriminant a ako ho vypočítam? Odcituj
+// moje poznámky." retrieved "MacBook Welcome" and "Lasica a Satinský: Soirée",
+// matched on the words used to ask. On the vault, 3 of 12 conversational
+// questions found their note in the top 6; with the asking words dropped, 10.
+test("the words used to ask a question are not searched for", () => {
+  assert.equal(tutorSearchQuery("Čo je diskriminant a ako ho vypočítam? Odcituj moje poznámky."), "diskriminant vypočítam");
+  assert.equal(tutorSearchQuery("Can you explain what the STAR method is from my notes?"), "STAR method");
+  assert.equal(tutorSearchQuery("Explain SQL joins to me please"), "SQL joins");
+  // Nothing left to search for: keep the question rather than search for nothing.
+  assert.equal(tutorSearchQuery("Explain this to me"), "Explain this to me");
+
+  const bundle = {
+    notes: [
+      { t: "🍏 MacBook Welcome", x: "Ako si nastaviť MacBook. Moje poznámky a čo je dôležité." , course: "IntroWeek" },
+      { t: "Všeobecný vzorec a diskriminant", x: "D = b² - 4ac", course: "Y2 MAT" },
+      { t: "Lasica a Satinský", x: "Čo je humor a ako ho poznáme", course: "KUJ 2" },
+    ],
+  };
+  const [top] = buildTutorRetrievedNotes(bundle, "Čo je diskriminant a ako ho vypočítam? Odcituj moje poznámky.", { limit: 1 });
+  assert.equal(top.t, "Všeobecný vzorec a diskriminant");
 });
 
 test("the Planner tutor sends note content, not just the titles of its related notes", () => {

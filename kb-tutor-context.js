@@ -208,6 +208,41 @@ export function rankByCourseAffinity(results, focusNote) {
     .map(({ result }) => result);
 }
 
+// Words a student uses to ASK, not to say what about. Search scored them like
+// any other: "Čo je diskriminant a ako ho vypočítam? Odcituj moje poznámky."
+// returned "MacBook Welcome" first and missed "Všeobecný vzorec a diskriminant",
+// which "diskriminant" alone ranks top by a wide margin. Folded (no diacritics).
+const QUESTION_WORDS = new Set([
+  // English
+  "a", "an", "the", "and", "or", "of", "in", "on", "at", "for", "to", "from", "with", "about", "into", "by",
+  "is", "are", "was", "were", "be", "been", "am", "do", "does", "did", "can", "could", "would", "should", "will",
+  "i", "me", "my", "mine", "you", "your", "it", "its", "this", "that", "these", "those", "there", "here",
+  "what", "whats", "which", "who", "how", "why", "when", "where", "please", "pls",
+  "explain", "tell", "say", "says", "said", "show", "give", "find", "quote", "cite", "summarize", "summarise",
+  "describe", "define", "mean", "means", "meaning", "help", "understand", "know", "need",
+  "note", "notes", "material", "materials", "class", "according", "using", "only", "knowledge", "base",
+  "topic", "like", "im", "starting", "zero", "simple", "words",
+  // Slovak
+  "co", "je", "su", "som", "si", "sa", "a", "aj", "ale", "alebo", "ako", "ho", "ju", "ich", "mu", "mi", "ma", "to", "ten", "ta",
+  "moje", "moja", "moj", "mojich", "mojej", "tvoje", "na", "v", "vo", "z", "zo", "o", "pre", "pri", "do", "od", "k", "ku", "s", "so",
+  "aky", "aka", "ake", "preco", "kedy", "kde", "ktory", "ktora", "ktore", "kolko",
+  "vysvetli", "povedz", "ukaz", "daj", "najdi", "odcituj", "cituj", "citat", "zhrn", "prosim", "mam", "mozes", "podla",
+  "poznamky", "poznamka", "poznamok", "poznamkach", "material", "materialy", "materialov", "hodina", "hodiny", "nieco", "vsetko",
+]);
+
+/**
+ * The part of a student's question worth searching for.
+ *
+ * Falls back to the whole question when every word is a question word
+ * ("explain this"), because an empty query retrieves nothing at all.
+ */
+export function tutorSearchQuery(text) {
+  const raw = String(text || "");
+  const words = raw.match(/[\p{L}\p{N}]+/gu) || [];
+  const content = words.filter((w) => !QUESTION_WORDS.has(passageFold(w)));
+  return content.length ? content.join(" ") : raw.trim();
+}
+
 export function buildTutorRetrievedNotes(bundle, query, { limit = DEFAULT_LIMIT, focusNote = null } = {}) {
   const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
   const numericLimit = Number(limit);
@@ -220,7 +255,7 @@ export function buildTutorRetrievedNotes(bundle, query, { limit = DEFAULT_LIMIT,
   // same-course candidates to promote rather than only the top few keyword
   // hits — which is exactly the set that was all from the wrong classes.
   const searchLimit = focusNote ? Math.min(notes.length, boundedLimit * 4) : boundedLimit;
-  const hits = searchNotes(notes, query, { limit: searchLimit }).map((result) => ({
+  const hits = searchNotes(notes, tutorSearchQuery(query), { limit: searchLimit }).map((result) => ({
     ...notes[result.noteIndex],
     noteIndex: result.noteIndex,
   }));
