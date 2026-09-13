@@ -65,7 +65,7 @@ try {
   const empty = await page.evaluate(() => ({
     strip: Math.round(document.getElementById("kbTutorSources").getBoundingClientRect().height),
     welcome: document.querySelector("#kbTutorMessages .ai-welcome")?.textContent || "",
-    header: [...document.querySelectorAll("#kbTutorRenameThread, #kbTutorArchiveThread")].map((b) => ({
+    header: [...document.querySelectorAll("#kbTutorRenameThread, #kbTutorSaveChat")].map((b) => ({
       underline: getComputedStyle(b).textDecorationLine, border: getComputedStyle(b).borderTopWidth,
     })),
     input: document.getElementById("kbTutorInput").tagName,

@@ -3218,8 +3218,10 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-notebook-source { font-size: 0.75rem; padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--fg); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 a.kb-notebook-source { text-decoration: none; }
 a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); }
-.kb-notebook-item.is-pin.is-openable { cursor: pointer; }
-.kb-notebook-item.is-pin.is-openable:hover { border-color: var(--accent); }
+.kb-notebook-item.is-openable { cursor: pointer; }
+.kb-notebook-item.is-openable:hover { border-color: var(--accent); }
+.kb-notebook-item.is-openable:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kb-notebook-preview { margin-top: 0.45rem; font-size: 0.85rem; color: var(--fg); overflow-wrap: anywhere; }
 .kb-notebook-source.is-missing { color: var(--muted); border-style: dashed; }
 .kb-notebook-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
 .kb-notebook-action {

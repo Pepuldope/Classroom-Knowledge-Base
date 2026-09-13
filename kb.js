@@ -29,7 +29,7 @@ import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 import { kbBuildProgressStatusModel, kbBuildCheckpointModel, kbBuildResumeSummaryModel } from "./kb-local-status.js";
 import { buildTutorRetrievedNotes, tutorRequestNotesModel, verifyTutorQuotes } from "./kb-tutor-context.js";
-import { noteKey, noteKeyIndex, parseNoteKey, encodeSources, answerCourse, renameAnswer, notebookModel } from "./notebook.js";
+import { noteKey, noteKeyIndex, parseNoteKey, encodeSources, answerCourse, renameAnswer, notebookModel, defaultAnswerTitle } from "./notebook.js";
 import { noteHref, linkTo } from "./deep-links.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
@@ -805,20 +805,33 @@ function renderNotebookStatus(model) {
     return;
   }
   const answers = loadStudyList().length;
+  const chats = loadTutorThreadArchive().length;
   const pins = loadPinnedNotes().length;
-  const parts = [`${answers} saved answer${answers === 1 ? "" : "s"}`, `${pins} pinned note${pins === 1 ? "" : "s"}`];
+  const parts = [
+    `${answers} saved answer${answers === 1 ? "" : "s"}`,
+    ...(chats ? [`${chats} chat${chats === 1 ? "" : "s"}`] : []),
+    `${pins} pinned note${pins === 1 ? "" : "s"}`,
+  ];
   status.textContent = notebookQuery.trim() && model.total
     ? `Showing ${model.shown} of ${model.total}`
     : model.total ? parts.join(" · ") : "";
 }
 
+const notebookStore = {
+  answer: { load: () => loadStudyList(), save: (list) => saveStudyList(list) },
+  pin: { load: () => loadPinnedNotes(), save: (list) => savePinnedNotes(list) },
+  chat: { load: () => loadTutorThreadArchive(), save: (list) => saveTutorThreadArchive(list) },
+};
+
 function removeFromNotebook(kind, id, title) {
-  const list = kind === "pin" ? loadPinnedNotes() : loadStudyList();
+  const store = notebookStore[kind];
+  const list = store.load();
   const index = list.findIndex((item) => item.id === id);
   if (index < 0) return;
   notebookUndo = { kind, record: list[index], index, title };
-  const next = list.filter((item) => item.id !== id);
-  if (kind === "pin") savePinnedNotes(next); else saveStudyList(next);
+  store.save(list.filter((item) => item.id !== id));
+  // Deleting the chat that is open makes it an unsaved chat again.
+  if (kind === "chat" && tutorThreadId === id) tutorThreadId = null;
   clearTimeout(notebookUndoTimer);
   notebookUndoTimer = setTimeout(() => { notebookUndo = null; renderNotebookStatus(notebookModel({ answers: loadStudyList(), pins: loadPinnedNotes(), query: notebookQuery })); }, 10000);
   renderStudyList();
@@ -830,9 +843,10 @@ function undoNotebookRemoval() {
   if (!undo) return;
   notebookUndo = null;
   clearTimeout(notebookUndoTimer);
-  const list = undo.kind === "pin" ? loadPinnedNotes() : loadStudyList();
+  const store = notebookStore[undo.kind];
+  const list = store.load();
   list.splice(Math.min(undo.index, list.length), 0, undo.record);
-  if (undo.kind === "pin") savePinnedNotes(list); else saveStudyList(list);
+  store.save(list);
   renderStudyList();
 }
 
@@ -937,6 +951,49 @@ function notebookAnswerCard(item) {
   return card;
 }
 
+function notebookChatCard(item) {
+  const card = document.createElement("article");
+  card.className = "kb-notebook-item is-chat is-openable";
+  card.dataset.id = item.id;
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-label", `Continue chat: ${item.title}`);
+  const open = () => openSavedTutorChat(item.id);
+  card.addEventListener("click", (event) => {
+    if (event.target instanceof Element && event.target.closest("button, a")) return;
+    open();
+  });
+  card.addEventListener("keydown", (event) => {
+    if (event.target !== card || (event.key !== "Enter" && event.key !== " ")) return;
+    event.preventDefault();
+    open();
+  });
+  const head = document.createElement("div");
+  head.className = "kb-notebook-item-head";
+  const title = document.createElement("h5");
+  title.className = "kb-notebook-title";
+  title.textContent = item.title;
+  head.appendChild(title);
+  const meta = document.createElement("div");
+  meta.className = "kb-notebook-meta";
+  meta.textContent = ["Tutor chat", `${item.count} message${item.count === 1 ? "" : "s"}`, item.savedAt ? new Date(item.savedAt).toLocaleDateString() : ""].filter(Boolean).join(" · ");
+  card.append(head, meta);
+  if (item.preview) {
+    const preview = document.createElement("div");
+    preview.className = "kb-notebook-preview";
+    preview.textContent = `“${item.preview}”`;
+    card.appendChild(preview);
+  }
+  const actions = document.createElement("div");
+  actions.className = "kb-notebook-actions";
+  actions.append(
+    notebookButton("Continue chat", "", open),
+    notebookButton("Delete", "is-danger", () => removeFromNotebook("chat", item.id, item.title)),
+  );
+  card.appendChild(actions);
+  return card;
+}
+
 function notebookPinCard(item) {
   const card = document.createElement("article");
   card.className = "kb-notebook-item is-pin";
@@ -978,6 +1035,7 @@ function renderStudyList() {
   const model = notebookModel({
     answers: loadStudyList(),
     pins: loadPinnedNotes(),
+    chats: loadTutorThreadArchive(),
     notes: Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [],
     query: notebookQuery,
   });
@@ -986,7 +1044,7 @@ function renderStudyList() {
   if (!model.total) {
     const empty = document.createElement("p");
     empty.className = "settings-hint kb-notebook-empty";
-    empty.textContent = "Your notebook is empty. Under any tutor answer, “Save to notebook” keeps it here — select part of the answer first to keep just that part. “☆ Pin note” on a search result keeps the note.";
+    empty.textContent = "Your notebook is empty. Under any tutor answer, “Save to notebook” keeps it here — select part of the answer first to keep just that part. “Save chat” in the tutor keeps the whole conversation, and “☆ Pin note” on a search result keeps the note.";
     host.appendChild(empty);
     return;
   }
@@ -1008,7 +1066,9 @@ function renderStudyList() {
     count.textContent = String(group.items.length);
     heading.appendChild(count);
     section.appendChild(heading);
-    for (const item of group.items) section.appendChild(item.kind === "answer" ? notebookAnswerCard(item) : notebookPinCard(item));
+    for (const item of group.items) {
+      section.appendChild(item.kind === "answer" ? notebookAnswerCard(item) : item.kind === "chat" ? notebookChatCard(item) : notebookPinCard(item));
+    }
     host.appendChild(section);
   }
 }
@@ -1686,14 +1746,13 @@ export function wireKbEvents() {
   tutorThreadTitle = loadTutorThreadTitle();
   const threadTitle = $("kbTutorThreadTitle");
   if (threadTitle) threadTitle.textContent = tutorThreadTitle;
-  renderTutorThreadArchive();
   $("kbTutorRenameThread")?.addEventListener("click", () => {
     const next = typeof window.prompt === "function"
       ? window.prompt("Name this tutor thread", tutorThreadTitle)
       : null;
-    if (next !== null) saveTutorThreadTitle(next);
+    if (next !== null) { saveTutorThreadTitle(next); autosaveTutorChat(); }
   });
-  $("kbTutorArchiveThread")?.addEventListener("click", archiveCurrentTutorThread);
+  $("kbTutorSaveChat")?.addEventListener("click", () => saveCurrentTutorChat());
   document.addEventListener("selectionchange", updateSaveSelectionLabels);
   $("kbNotebookSearch")?.addEventListener("input", debounce((event) => {
     notebookQuery = event.target.value || "";
@@ -2957,6 +3016,7 @@ export function tutorThreadArchiveModel(value = []) {
         .slice(-40)
         .map((message) => ({ role: message.role, content: message.content.trim().slice(0, 12000) })),
       archivedAt: Number.isFinite(Number(thread.archivedAt)) ? Number(thread.archivedAt) : 0,
+      ...(typeof thread.course === "string" && thread.course.trim() ? { course: thread.course.trim().slice(0, 160) } : {}),
     }));
 }
 
@@ -2981,60 +3041,68 @@ function saveTutorThreadArchive(value) {
   return threads;
 }
 
-function renderTutorThreadArchive() {
-  const list = $("kbTutorThreadArchive");
-  if (!list) return;
-  list.replaceChildren();
-  const threads = loadTutorThreadArchive();
-  list.hidden = threads.length === 0;
-  for (const thread of threads) {
-    const row = document.createElement("div");
-    row.className = "kb-tutor-archived-thread";
-    const label = document.createElement("span");
-    label.textContent = thread.title;
-    const restore = document.createElement("button");
-    restore.type = "button";
-    restore.className = "link-btn";
-    restore.textContent = "Restore";
-    restore.title = `Restore archived thread ${thread.title}`;
-    restore.addEventListener("click", () => restoreTutorThread(thread.id));
-    const del = document.createElement("button");
-    del.type = "button";
-    del.className = "link-btn";
-    del.textContent = "Delete";
-    del.title = `Delete archived thread ${thread.title}`;
-    del.addEventListener("click", () => {
-      saveTutorThreadArchive(tutorThreadDeleteModel(loadTutorThreadArchive(), thread.id));
-      renderTutorThreadArchive();
-    });
-    row.append(label, restore, del);
-    list.appendChild(row);
-  }
-}
+/** The saved chat the open conversation is, once it has been saved; else null. */
+let tutorThreadId = null;
+let tutorThreadCourse = "";
 
-function archiveCurrentTutorThread() {
-  if (!tutorMessages.length) return;
-  const id = typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`;
+/**
+ * Save the open conversation into the Notebook, or update it if it already is.
+ *
+ * It replaced "Archive", which Peter found too formal and which also cleared
+ * the chat as it filed it away, into a list only the tutor showed. Saving
+ * keeps the conversation open; once saved, later messages and renames update
+ * the same record (see autosaveTutorChat). Chats stay in this browser — a
+ * chat can hold dozens of long answers, which the prefs sync is not sized for.
+ */
+function saveCurrentTutorChat({ quiet = false } = {}) {
+  if (!tutorMessages.length) return false;
+  const id = tutorThreadId || (typeof crypto?.randomUUID === "function" ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
+  const firstQuestion = tutorMessages.find((m) => m.role === "user")?.content || "";
+  const title = tutorThreadTitle === "New tutor thread" ? defaultAnswerTitle({ question: firstQuestion }) : tutorThreadTitle;
+  const others = loadTutorThreadArchive().filter((thread) => thread.id !== id);
   saveTutorThreadArchive([
-    { id, title: tutorThreadTitle, messages: tutorMessages, archivedAt: Date.now() },
-    ...loadTutorThreadArchive(),
+    { id, title, messages: tutorMessages, archivedAt: Date.now(), ...(tutorThreadCourse ? { course: tutorThreadCourse } : {}) },
+    ...others,
   ]);
-  renderTutorThreadArchive();
-  resetTutorUi();
+  tutorThreadId = id;
+  saveTutorThreadTitle(title);
+  renderStudyList();
+  if (!quiet) {
+    const button = $("kbTutorSaveChat");
+    if (button) {
+      button.textContent = "Saved ✓";
+      setTimeout(() => { button.textContent = "Save chat"; }, 1500);
+    }
+  }
+  return true;
 }
 
-function restoreTutorThread(id) {
+/** Keep a saved chat current. An unsaved chat stays unsaved. */
+function autosaveTutorChat() {
+  if (tutorThreadId) saveCurrentTutorChat({ quiet: true });
+}
+
+/** Reopen a saved chat in the tutor, to carry on where it stopped. */
+function openSavedTutorChat(id) {
   const thread = tutorThreadRestoreModel(loadTutorThreadArchive(), id);
   if (!thread) return;
+  const modal = $("kbTutorModal");
+  if (modal) modal.hidden = false;
   tutorMessages = thread.messages.map((message) => ({ ...message }));
+  tutorThreadId = thread.id;
+  tutorThreadCourse = thread.course || "";
   saveTutorThreadTitle(thread.title);
   const messages = $("kbTutorMessages");
   if (messages) {
     messages.replaceChildren();
-    for (const message of tutorMessages) addTutorMessage(message.role, message.content, false);
+    for (const message of tutorMessages) {
+      const el = addTutorMessage(message.role, message.content, false);
+      // Answers were stored as markdown; show them the way they first appeared.
+      if (el && message.role === "assistant") el.innerHTML = renderTutorAnswer(message.content);
+    }
+    messages.scrollTop = messages.scrollHeight;
   }
-  const sources = $("kbTutorSources");
-  if (sources) sources.innerHTML = '<span class="ai-context-note">Restored locally — answers will still use your knowledge base.</span>';
+  $("kbTutorSources")?.replaceChildren();
   $("kbTutorInput")?.focus();
 }
 
@@ -3429,6 +3497,8 @@ function renderTutorWelcome() {
 
 function resetTutorUi() {
   tutorMessages = resetTutorConversation();
+  tutorThreadId = null;
+  tutorThreadCourse = "";
   saveTutorThreadTitle("New tutor thread");
   const messages = $("kbTutorMessages");
   if (messages) messages.replaceChildren();
@@ -3439,6 +3509,8 @@ function resetTutorUi() {
 
 function clearTutorUi() {
   tutorMessages = resetTutorConversation();
+  tutorThreadId = null;
+  tutorThreadCourse = "";
   const messages = $("kbTutorMessages");
   if (messages) messages.replaceChildren();
   $("kbTutorSources")?.replaceChildren();
@@ -3631,6 +3703,14 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
     // bottom and landing a row of buttons short of it.
     followOutput(wrap, stick);
     tutorMessages.push({ role: "assistant", content: acc });
+    if (!tutorThreadCourse) {
+      const notes = Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [];
+      tutorThreadCourse = answerCourse({
+        focusCourse: focus?.course,
+        sources: sources.map((s) => (Number.isInteger(s?.noteIndex) ? notes[s.noteIndex] : null)).filter(Boolean),
+      });
+    }
+    autosaveTutorChat();
   } catch (e) {
     const aborted = e?.name === "AbortError";
     const end = streamEndModel({ text: acc, aborted, error: aborted ? "" : e.message });

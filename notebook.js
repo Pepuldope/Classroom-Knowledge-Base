@@ -118,7 +118,7 @@ export function renameAnswer(list, id, title) {
  * search over title, question, text and class. Groups alphabetical with "Other"
  * last; newest answers first inside a group, then pins, most recent pin first.
  */
-export function notebookModel({ answers = [], pins = [], notes = [], query = "" } = {}) {
+export function notebookModel({ answers = [], pins = [], chats = [], notes = [], query = "" } = {}) {
   const index = noteKeyIndex(notes);
   const needle = fold(query).trim();
   const matches = (...fields) => !needle || fold(fields.join(" ")).includes(needle);
@@ -137,6 +137,19 @@ export function notebookModel({ answers = [], pins = [], notes = [], query = "" 
     const sources = decodeSources(a.sources).map((s) => ({ title: s.t, key: s.k, noteIndex: index.has(s.k) ? index.get(s.k) : null }));
     if (!matches(a.title, a.question, a.text, a.course, sources.map((s) => s.title).join(" "))) continue;
     add(a.course, { kind: "answer", id: a.id, title: a.title, question: a.question, text: a.text, savedAt: a.savedAt, sources });
+  }
+  // Saved tutor chats. A card opens the chat again to continue it.
+  for (const chat of Array.isArray(chats) ? chats : []) {
+    const messages = Array.isArray(chat?.messages) ? chat.messages.filter((m) => typeof m?.content === "string") : [];
+    if (typeof chat?.id !== "string" || !chat.id || !messages.length) continue;
+    total++;
+    const title = clean(chat.title, NOTEBOOK_TITLE_MAX) || "Tutor chat";
+    const firstQuestion = clean(messages.find((m) => m.role === "user")?.content, 200);
+    if (!matches(title, chat.course, messages.map((m) => m.content).join(" "))) continue;
+    add(clean(chat.course, 160), {
+      kind: "chat", id: chat.id, title, savedAt: Number(chat.archivedAt) || 0,
+      count: messages.length, preview: firstQuestion === title ? "" : firstQuestion,
+    });
   }
   const pinList = Array.isArray(pins) ? pins : [];
   pinList.forEach((pin, order) => {
@@ -157,9 +170,12 @@ export function notebookModel({ answers = [], pins = [], notes = [], query = "" 
       .sort(([a], [b]) => (a === OTHER) - (b === OTHER) || a.localeCompare(b))
       .map(([course, items]) => ({
         course,
-        items: items.sort((x, y) => (x.kind === y.kind
-          ? (x.kind === "answer" ? y.savedAt - x.savedAt : y.order - x.order)
-          : x.kind === "answer" ? -1 : 1)),
+        // Answers and chats newest first, then pins, most recent pin first.
+        items: items.sort((x, y) => {
+          const xPin = x.kind === "pin", yPin = y.kind === "pin";
+          if (xPin !== yPin) return xPin ? 1 : -1;
+          return xPin ? y.order - x.order : y.savedAt - x.savedAt;
+        }),
       })),
   };
 }

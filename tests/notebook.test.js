@@ -72,3 +72,18 @@ test("the notebook groups answers and pins by class, links what still exists, an
   assert.equal(notebookModel({ answers, pins, notes: NOTES, query: "vseobecny" }).shown, 2);
   assert.equal(notebookModel({ answers, pins, notes: NOTES, query: "zzz" }).shown, 0);
 });
+
+test("saved chats sit with their class among the answers, newest first, and search their messages", () => {
+  const chats = [
+    { id: "c-old", title: "Discriminant chat", course: "Y2 MAT", archivedAt: 2, messages: [{ role: "user", content: "Čo je diskriminant?" }, { role: "assistant", content: "D = b² - 4ac" }] },
+    { id: "c-empty", title: "Nothing", messages: [] },
+  ];
+  const answers = [{ id: "a-new", text: "Newer", savedAt: 5, course: "Y2 MAT" }];
+  const nb = notebookModel({ answers, chats, pins: [{ id: K0, title: NOTES[0].t }], notes: NOTES });
+  assert.equal(nb.total, 3, "an empty chat is not a notebook entry");
+  const items = nb.groups.find((g) => g.course === "Y2 MAT").items;
+  assert.deepEqual(items.map((i) => `${i.kind}:${i.id}`), ["answer:a-new", "chat:c-old", `pin:${K0}`]);
+  assert.equal(items[1].count, 2);
+  assert.equal(items[1].preview, "Čo je diskriminant?");
+  assert.equal(notebookModel({ chats, notes: NOTES, query: "4ac" }).shown, 1, "search reaches inside the conversation");
+});

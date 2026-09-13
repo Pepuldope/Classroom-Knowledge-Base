@@ -127,6 +127,39 @@ try {
   assert.equal(await page.locator(".kb-notebook-item").count(), before, "Undo did not bring the pin back");
   console.log("✓ delete asks for no dialog and can be undone");
 
+  // --- items 1 + 7: Save chat, then continue it from the Notebook -----------
+  await page.click('.study-tab-btn[data-tab="search"]');
+  await page.click("#kbTutorOpen");
+  assert.equal(await page.locator("#kbTutorSaveChat").textContent(), "Save chat");
+  assert.equal(await page.locator("#kbTutorModal").getByText("Archive", { exact: true }).count(), 0, "Archive is back");
+  await page.click("#kbTutorSaveChat");
+  assert.equal(await page.locator("#kbTutorSaveChat").textContent(), "Saved ✓");
+  assert.equal(await page.locator('#kbTutorMessages [data-role="assistant"]').count(), 1, "saving cleared the chat, as Archive did");
+  await page.click("#kbTutorNewTopic");
+  await page.click("#kbTutorClose");
+  await page.click('.study-tab-btn[data-tab="saved"]');
+  const chatCard = page.locator(".kb-notebook-item.is-chat");
+  assert.equal(await chatCard.count(), 1);
+  assert.match(await chatCard.locator(".kb-notebook-meta").textContent(), /Tutor chat · 2 messages/);
+  assert.equal(await chatCard.locator(".kb-notebook-title").textContent(), "Čo je diskriminant?");
+  await chatCard.locator(".kb-notebook-meta").click();
+  await page.waitForSelector("#kbTutorModal:not([hidden])");
+  const restored = await page.evaluate(() => ({
+    messages: document.querySelectorAll("#kbTutorMessages .ai-msg").length,
+    rendered: !!document.querySelector('#kbTutorMessages [data-role="assistant"] p'),
+    title: document.getElementById("kbTutorThreadTitle").textContent,
+  }));
+  assert.deepEqual(restored, { messages: 2, rendered: true, title: "Čo je diskriminant?" });
+  await page.fill("#kbTutorInput", "A follow-up question");
+  await page.keyboard.press("Enter");
+  await page.waitForFunction(() => document.querySelectorAll('#kbTutorMessages [data-role="assistant"] .ai-answer-actions').length === 1, null, { timeout: 10000 });
+  const chats = await page.evaluate(() => JSON.parse(localStorage.getItem("cwa_tutor_thread_archive")));
+  assert.equal(chats.length, 1, "continuing a saved chat made a second copy");
+  assert.equal(chats[0].messages.length, 4, "the follow-up was not saved into the chat");
+  assert.equal(chats[0].course, "Y2 MAT");
+  await page.click("#kbTutorClose");
+  console.log("✓ Save chat keeps the chat open, files it under its class, reopens it to continue, and saves the follow-up");
+
   // Geometry: nothing overflows at phone width.
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(200);
