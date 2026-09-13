@@ -195,7 +195,7 @@
         <button class="study-tab-btn active" data-tab="search" type="button" role="tab" aria-selected="true" aria-controls="studyPanel-search">Search</button>
         <button class="study-tab-btn" data-tab="browse" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-browse">Browse</button>
         <button class="study-tab-btn" data-tab="curriculum" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-curriculum">Curriculum</button>
-        <button class="study-tab-btn" data-tab="saved" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-saved">Saved</button>
+        <button class="study-tab-btn" data-tab="saved" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-saved">Notebook</button>
         <button class="study-tab-btn" data-tab="manage" type="button" role="tab" aria-selected="false" aria-controls="studyPanel-manage">Manage</button>
       </div>
 
@@ -283,9 +283,12 @@
       </div>
 
       <div id="studyPanel-saved" class="study-panel" role="tabpanel" tabindex="-1" hidden>
-        <h3 class="study-manage-title">Saved answers</h3>
-        <p class="settings-hint">Answers you saved from the AI tutor. Stored in this browser.</p>
-        <div id="kbSavedList" class="kb-saved-list"></div>
+        <div class="kb-notebook-head">
+          <h3 class="study-manage-title">Notebook</h3>
+          <input id="kbNotebookSearch" class="kb-notebook-search" type="search" placeholder="Search your notebook…" autocomplete="off" aria-label="Search your notebook" />
+        </div>
+        <div id="kbNotebookStatus" class="kb-notebook-status" role="status" aria-live="polite"></div>
+        <div id="kbSavedList" class="kb-notebook"></div>
       </div>
 
       <div id="studyPanel-manage" class="study-panel" role="tabpanel" tabindex="-1" hidden>

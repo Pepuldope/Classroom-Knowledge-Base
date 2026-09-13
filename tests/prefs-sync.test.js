@@ -262,6 +262,26 @@ test("a long saved answer survives a full merge round-trip", () => {
     "the merge is what writes back to localStorage, so truncation here destroys the local copy");
 });
 
+// The Notebook (2026-09-13) gives a saved answer a title, the question, its
+// class and its sources. A field the sync does not list is dropped on merge and
+// then written back, so a rename would last only until the next sync.
+test("a Notebook answer's title, question, class and sources survive a merge", () => {
+  const at = Date.now();
+  const sources = JSON.stringify([{ k: "Y2 MAT|2024-25|Diskriminant|", t: "Diskriminant" }]);
+  const local = { studyList: { "ans-1": { at, text: "D = b² - 4ac", savedAt: at, title: "Discriminant", question: "Čo je diskriminant?", course: "Y2 MAT", sources } } };
+  const merged = mergeSyncedPrefs(local, {});
+  assert.deepEqual(
+    { ...merged.studyList["ans-1"], at: undefined },
+    { at: undefined, text: "D = b² - 4ac", savedAt: at, title: "Discriminant", question: "Čo je diskriminant?", course: "Y2 MAT", sources },
+  );
+  // A rename on another device, later, wins.
+  const renamed = mergeSyncedPrefs(local, { studyList: { "ans-1": { ...local.studyList["ans-1"], at: at + 1, title: "D formula" } } });
+  assert.equal(renamed.studyList["ans-1"].title, "D formula");
+  // A record from before the Notebook still merges.
+  const old = mergeSyncedPrefs({ studyList: { old: { at, text: "old", savedAt: at } } }, {});
+  assert.equal(old.studyList.old.text, "old");
+});
+
 test("label fields keep the tight cap", () => {
   const at = Date.now();
   const long = "x".repeat(1000);

@@ -63,7 +63,7 @@ const TRACKED_SHAPES = {
   dismissed: { idsOnly: true },
   pinnedCourses: { idsOnly: true },
   pinnedNotes: { idsOnly: false, fields: ["title"] },
-  studyList: { idsOnly: false, fields: ["text", "savedAt"] },
+  studyList: { idsOnly: false, fields: ["text", "savedAt", "title", "question", "course", "sources"] },
 };
 
 function liveList(section) {

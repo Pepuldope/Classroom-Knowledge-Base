@@ -110,6 +110,8 @@ GATES=(
 "auth|srv|Cross-device prefs convergence e2e|node scripts/prefs_sync_convergence_test.mjs"
 "panel|srv|Chat composer busy/stop e2e|node scripts/chat_composer_test.mjs"
 "kb|srv|Study tutor frame: fixed height, welcome, one action row, composer|node scripts/tutor_layout_test.mjs"
+"kb|srv|Notebook: save selection/answer, group, rename, search, sources, undo|node scripts/notebook_test.mjs"
+"models,kb|-|Notebook model tests|node --test tests/notebook.test.js"
 "theme|seed|Theme contrast browser tests|node scripts/theme_contrast_test.mjs"
 "theme|seed|Visual common-sense browser gate (light + dark)|node scripts/visual_common_sense_test.mjs"
 "kb,mobile|seed|KB copy confirmation mobile e2e|node scripts/kb_copy_mobile_test.mjs"

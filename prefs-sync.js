@@ -41,7 +41,9 @@ export const MAX_FIELD = 400;
 // every one of them. Worse than lossy: mergeSyncedPrefs writes back to
 // localStorage, so the truncated copy replaced the full local one on the next
 // sync. Fields that carry content name their own cap here.
-export const FIELD_MAX = { text: 8000 };
+// `sources` is the Notebook's JSON list of the notes an answer came from
+// (notebook.js encodeSources keeps it under this).
+export const FIELD_MAX = { text: 8000, sources: 2000 };
 const fieldMax = (field) => FIELD_MAX[field] || MAX_FIELD;
 /**
  * How long a deletion is remembered.
@@ -292,7 +294,9 @@ export const TRACKED_SECTIONS = {
   dismissed: { fields: [] },        // Planner: hidden assignments
   pinnedCourses: { fields: [] },    // Study: pinned courses
   pinnedNotes: { fields: ["title"] },
-  studyList: { fields: ["text", "savedAt"] },
+  // The Notebook's saved answers. title/question/course/sources were added
+  // 2026-09-13; a record from before simply has none of them.
+  studyList: { fields: ["text", "savedAt", "title", "question", "course", "sources"] },
 };
 
 /**

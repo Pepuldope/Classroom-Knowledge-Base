@@ -3166,35 +3166,42 @@ summary::-webkit-details-marker { color: var(--muted); }
   font-style: italic;
 }
 
-/* --- Saved answers (Study → Saved) ---------------------------------------- */
-.kb-saved-list { display: flex; flex-direction: column; gap: 0.75rem; }
-.kb-saved-item {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.85rem 1rem;
+/* --- Notebook (Study → Notebook) ----------------------------------------- */
+.kb-notebook-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin-bottom: 0.35rem; }
+.kb-notebook-head .study-manage-title { margin: 0; }
+.kb-notebook-search {
+  font: inherit; font-size: 0.9rem; flex: 0 1 22rem; min-width: 0; height: 2.25rem;
+  padding: 0 0.7rem; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--fg);
 }
-.kb-saved-text { font-size: 0.9rem; line-height: 1.5; }
-.kb-saved-text > :first-child { margin-top: 0; }
-.kb-saved-text > :last-child { margin-bottom: 0; }
-.kb-saved-meta {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-top: 0.6rem;
-  font-size: 0.75rem;
-  color: var(--muted);
+.kb-notebook-search:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.kb-notebook-status { display: flex; align-items: center; gap: 0.6rem; min-height: 1.9rem; font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+.kb-notebook { display: flex; flex-direction: column; gap: 1.25rem; }
+.kb-notebook-group { display: flex; flex-direction: column; gap: 0.6rem; }
+.kb-notebook-course { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-size: 0.95rem; font-weight: 600; }
+.kb-notebook-count { font-size: 0.72rem; font-weight: 600; color: var(--muted); background: var(--surface-subtle); border: 1px solid var(--border); border-radius: 999px; padding: 0 0.45rem; }
+.kb-notebook-item { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 0.85rem 1rem; min-width: 0; }
+.kb-notebook-item.is-pin { padding-block: 0.65rem; }
+.kb-notebook-item-head { display: flex; align-items: flex-start; gap: 0.75rem; }
+.kb-notebook-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 0.95rem; font-weight: 600; overflow-wrap: anywhere; }
+.kb-notebook-rename { flex: 1 1 auto; min-width: 0; font: inherit; font-size: 0.95rem; font-weight: 600; padding: 0.2rem 0.45rem; border: 1px solid var(--accent); border-radius: 6px; background: var(--surface); color: var(--fg); }
+.kb-notebook-meta { margin-top: 0.2rem; font-size: 0.75rem; color: var(--muted); overflow-wrap: anywhere; }
+.kb-notebook-body { margin-top: 0.6rem; font-size: 0.9rem; line-height: 1.5; overflow-wrap: anywhere; }
+.kb-notebook-body > :first-child { margin-top: 0; }
+.kb-notebook-body > :last-child { margin-bottom: 0; }
+.kb-notebook-body.is-collapsed { max-height: 9.5rem; overflow: hidden; -webkit-mask-image: linear-gradient(#000 70%, transparent); mask-image: linear-gradient(#000 70%, transparent); }
+.kb-notebook-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.65rem; }
+.kb-notebook-sources-label { font-size: 0.75rem; color: var(--muted); }
+.kb-notebook-source { font-size: 0.75rem; padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--fg); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+button.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); }
+.kb-notebook-source.is-missing { color: var(--muted); border-style: dashed; }
+.kb-notebook-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+.kb-notebook-action {
+  font: inherit; font-size: 0.78rem; line-height: 1; height: 1.9rem; padding: 0 0.7rem;
+  border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--fg); cursor: pointer;
 }
-.kb-saved-remove {
-  background: transparent;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  color: var(--muted);
-  font: inherit;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.6rem;
-  cursor: pointer;
-}
-.kb-saved-remove:hover { color: var(--fg); border-color: var(--muted); }
-.kb-saved-remove:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kb-notebook-action:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
+.kb-notebook-action.is-danger:hover { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); }
+.kb-notebook-item-head .kb-notebook-action { flex: 0 0 auto; }
+.kb-notebook-more { margin-top: 0.4rem; height: auto; padding: 0.2rem 0; border: none; color: var(--accent); }
+.kb-notebook-more:hover { background: transparent; text-decoration: underline; }
+.kb-notebook-empty { margin: 0.5rem 0; }

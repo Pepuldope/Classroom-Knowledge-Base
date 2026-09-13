@@ -29,6 +29,7 @@ import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 import { kbBuildProgressStatusModel, kbBuildCheckpointModel, kbBuildResumeSummaryModel } from "./kb-local-status.js";
 import { buildTutorRetrievedNotes, tutorRequestNotesModel, verifyTutorQuotes } from "./kb-tutor-context.js";
+import { noteKey, encodeSources, answerCourse, renameAnswer, notebookModel } from "./notebook.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
@@ -355,10 +356,9 @@ export function togglePinnedNote(current, note) {
 
 function pinnedNoteRecord(note) {
   const title = typeof note?.t === "string" ? note.t.trim() : typeof note?.title === "string" ? note.title.trim() : "";
-  const id = typeof note?.id === "string" ? note.id.trim() : "";
-  const fallback = [note?.course, note?.y, title, note?.topic].map((value) => String(value || "").trim()).join("|");
-  const stableId = id || fallback;
-  return stableId && title ? { id: stableId.slice(0, 240), title: title.slice(0, 240) } : null;
+  // notebook.js owns the key, so the Notebook can find a pin's note again.
+  const key = noteKey(note);
+  return key && title ? { id: key, title: title.slice(0, 240) } : null;
 }
 
 function loadPinnedNotes() {
@@ -399,22 +399,32 @@ function renderNotePinButton(note) {
 /** Normalize locally saved tutor answers; malformed entries never reach the UI. */
 export function studyListModel(value = []) {
   if (!Array.isArray(value)) return [];
+  // The Notebook's extra fields ride along only when present, so a record from
+  // before them is unchanged — and does not get re-stamped by the sync.
+  const extras = [["title", 120], ["question", 400], ["course", 160], ["sources", 2000]];
   return value
     .filter((item) => item && typeof item.id === "string" && item.id.trim() && typeof item.text === "string" && item.text.trim())
-    .map((item) => ({ id: item.id.trim(), text: item.text.trim(), savedAt: Number.isFinite(Number(item.savedAt)) ? Number(item.savedAt) : 0 }));
+    .map((item) => {
+      const record = { id: item.id.trim(), text: item.text.trim(), savedAt: Number.isFinite(Number(item.savedAt)) ? Number(item.savedAt) : 0 };
+      for (const [field, max] of extras) {
+        const v = typeof item[field] === "string" ? item[field].trim().slice(0, max) : "";
+        if (v) record[field] = v;
+      }
+      return record;
+    });
 }
 
 function studyAnswerId(text) {
   return String(text || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 120);
 }
 
-export function addStudyAnswer(value, text, savedAt = Date.now()) {
+export function addStudyAnswer(value, text, savedAt = Date.now(), extra = {}) {
   const clean = String(text || "").trim();
   if (!clean) return studyListModel(value);
   const id = studyAnswerId(clean);
   const list = studyListModel(value);
   if (!id || list.some((item) => item.id === id)) return list;
-  return [...list, { id, text: clean, savedAt: Number(savedAt) || 0 }];
+  return studyListModel([...list, { ...extra, id, text: clean, savedAt: Number(savedAt) || 0 }]);
 }
 
 export function removeStudyAnswer(value, id) {
@@ -766,47 +776,224 @@ export async function maybeAutoBuildKb() {
 let activeStudyTab = "search";
 
 /**
- * The Saved tab: tutor answers the student chose to keep.
+ * The Notebook tab: saved tutor answers and pinned notes, by class.
  *
- * "Save to study list" wrote to localStorage and to the prefs sync, and nothing
- * in the app ever read it back — the button reported "Saved" about something
- * the student could never reach again. This is the other half.
+ * It was "Saved" — whole answers with a date and nothing else — and pins had no
+ * page at all. The model is notebook.js; this is the DOM around it.
  */
+let notebookQuery = "";
+let notebookUndo = null;
+let notebookUndoTimer = null;
+
+function notebookButton(label, className, onClick, title = "") {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `kb-notebook-action ${className}`.trim();
+  button.textContent = label;
+  if (title) button.title = title;
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function renderNotebookStatus(model) {
+  const status = $("kbNotebookStatus");
+  if (!status) return;
+  status.replaceChildren();
+  if (notebookUndo) {
+    const text = document.createElement("span");
+    text.textContent = `${notebookUndo.kind === "pin" ? "Unpinned" : "Deleted"} “${notebookUndo.title}”.`;
+    status.append(text, notebookButton("Undo", "is-undo", undoNotebookRemoval));
+    return;
+  }
+  const answers = loadStudyList().length;
+  const pins = loadPinnedNotes().length;
+  const parts = [`${answers} saved answer${answers === 1 ? "" : "s"}`, `${pins} pinned note${pins === 1 ? "" : "s"}`];
+  status.textContent = notebookQuery.trim() && model.total
+    ? `Showing ${model.shown} of ${model.total}`
+    : model.total ? parts.join(" · ") : "";
+}
+
+function removeFromNotebook(kind, id, title) {
+  const list = kind === "pin" ? loadPinnedNotes() : loadStudyList();
+  const index = list.findIndex((item) => item.id === id);
+  if (index < 0) return;
+  notebookUndo = { kind, record: list[index], index, title };
+  const next = list.filter((item) => item.id !== id);
+  if (kind === "pin") savePinnedNotes(next); else saveStudyList(next);
+  clearTimeout(notebookUndoTimer);
+  notebookUndoTimer = setTimeout(() => { notebookUndo = null; renderNotebookStatus(notebookModel({ answers: loadStudyList(), pins: loadPinnedNotes(), query: notebookQuery })); }, 10000);
+  renderStudyList();
+  $("kbNotebookStatus")?.querySelector(".is-undo")?.focus();
+}
+
+function undoNotebookRemoval() {
+  const undo = notebookUndo;
+  if (!undo) return;
+  notebookUndo = null;
+  clearTimeout(notebookUndoTimer);
+  const list = undo.kind === "pin" ? loadPinnedNotes() : loadStudyList();
+  list.splice(Math.min(undo.index, list.length), 0, undo.record);
+  if (undo.kind === "pin") savePinnedNotes(list); else saveStudyList(list);
+  renderStudyList();
+}
+
+function startNotebookRename(card, item) {
+  const heading = card.querySelector(".kb-notebook-title");
+  if (!heading || card.querySelector(".kb-notebook-rename")) return;
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "kb-notebook-rename";
+  input.value = item.title;
+  input.maxLength = 120;
+  input.setAttribute("aria-label", "Rename this answer");
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    if (save) saveStudyList(renameAnswer(loadStudyList(), item.id, input.value));
+    renderStudyList();
+    $("kbSavedList")?.querySelector(`[data-id="${CSS.escape(item.id)}"] .kb-notebook-rename-btn`)?.focus();
+  };
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    if (e.key === "Escape") { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener("blur", () => finish(true));
+  heading.replaceWith(input);
+  input.focus();
+  input.select();
+}
+
+function notebookAnswerCard(item) {
+  const card = document.createElement("article");
+  card.className = "kb-notebook-item is-answer";
+  card.dataset.id = item.id;
+
+  const head = document.createElement("div");
+  head.className = "kb-notebook-item-head";
+  const title = document.createElement("h5");
+  title.className = "kb-notebook-title";
+  title.textContent = item.title;
+  head.append(title, notebookButton("Rename", "kb-notebook-rename-btn", () => startNotebookRename(card, item)));
+
+  const meta = document.createElement("div");
+  meta.className = "kb-notebook-meta";
+  const bits = ["Tutor answer"];
+  if (item.savedAt) bits.push(new Date(item.savedAt).toLocaleDateString());
+  if (item.question && item.question !== item.title) bits.push(`asked “${item.question}”`);
+  meta.textContent = bits.join(" · ");
+
+  const body = document.createElement("div");
+  body.className = "kb-notebook-body";
+  // Same escaping renderer as the tutor, so a saved answer cannot smuggle markup in.
+  body.innerHTML = renderTutorAnswer(item.text);
+  card.append(head, meta, body);
+  if (item.text.length > 420) {
+    body.classList.add("is-collapsed");
+    const more = notebookButton("Show all", "kb-notebook-more", () => {
+      const collapsed = body.classList.toggle("is-collapsed");
+      more.textContent = collapsed ? "Show all" : "Show less";
+      more.setAttribute("aria-expanded", String(!collapsed));
+    });
+    more.setAttribute("aria-expanded", "false");
+    card.appendChild(more);
+  }
+
+  if (item.sources.length) {
+    const sources = document.createElement("div");
+    sources.className = "kb-notebook-sources";
+    const label = document.createElement("span");
+    label.className = "kb-notebook-sources-label";
+    label.textContent = "From your notes:";
+    sources.appendChild(label);
+    // Numbered, so the [1] the answer cites still points at something here.
+    item.sources.forEach((source, i) => {
+      const chip = `[${i + 1}] ${source.title}`;
+      if (source.noteIndex == null) {
+        const gone = document.createElement("span");
+        gone.className = "kb-notebook-source is-missing";
+        gone.textContent = chip;
+        gone.title = "This note is not in your current knowledge base";
+        sources.appendChild(gone);
+      } else {
+        sources.appendChild(notebookButton(chip, "kb-notebook-source", () => openKbNote(source.noteIndex), "Open this note"));
+      }
+    });
+    card.appendChild(sources);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "kb-notebook-actions";
+  const copy = notebookButton("Copy", "", async () => {
+    try { await navigator.clipboard.writeText(item.text); copy.textContent = "Copied"; }
+    catch { copy.textContent = "Copy unavailable"; }
+    setTimeout(() => { copy.textContent = "Copy"; }, 1200);
+  });
+  actions.append(copy, notebookButton("Delete", "is-danger", () => removeFromNotebook("answer", item.id, item.title)));
+  card.appendChild(actions);
+  return card;
+}
+
+function notebookPinCard(item) {
+  const card = document.createElement("article");
+  card.className = "kb-notebook-item is-pin";
+  card.dataset.id = item.id;
+  const head = document.createElement("div");
+  head.className = "kb-notebook-item-head";
+  const title = document.createElement("h5");
+  title.className = "kb-notebook-title";
+  title.textContent = `★ ${item.title}`;
+  head.appendChild(title);
+  const meta = document.createElement("div");
+  meta.className = "kb-notebook-meta";
+  meta.textContent = ["Pinned note", item.y, item.topic].filter(Boolean).join(" · ")
+    + (item.noteIndex == null ? " · not in your current knowledge base" : "");
+  const actions = document.createElement("div");
+  actions.className = "kb-notebook-actions";
+  if (item.noteIndex != null) actions.appendChild(notebookButton("Open note", "", () => openKbNote(item.noteIndex)));
+  actions.appendChild(notebookButton("Unpin", "is-danger", () => removeFromNotebook("pin", item.id, item.title)));
+  card.append(head, meta, actions);
+  return card;
+}
+
 function renderStudyList() {
   const host = $("kbSavedList");
   if (!host) return;
-  const list = loadStudyList().slice().sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
-  host.textContent = "";
-  if (!list.length) {
+  const model = notebookModel({
+    answers: loadStudyList(),
+    pins: loadPinnedNotes(),
+    notes: Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [],
+    query: notebookQuery,
+  });
+  host.replaceChildren();
+  renderNotebookStatus(model);
+  if (!model.total) {
     const empty = document.createElement("p");
-    empty.className = "settings-hint";
-    empty.textContent = "Nothing saved yet. Use “Save to study list” under any tutor answer.";
+    empty.className = "settings-hint kb-notebook-empty";
+    empty.textContent = "Your notebook is empty. Under any tutor answer, “Save to notebook” keeps it here — select part of the answer first to keep just that part. “☆ Pin note” on a search result keeps the note.";
     host.appendChild(empty);
     return;
   }
-  for (const item of list) {
-    const card = document.createElement("article");
-    card.className = "kb-saved-item";
-    const body = document.createElement("div");
-    body.className = "kb-saved-text";
-    // Same renderer as the tutor and the note bodies; it escapes before it
-    // builds any HTML, so a saved answer cannot smuggle markup back in.
-    body.innerHTML = renderTutorAnswer(item.text);
-    const meta = document.createElement("div");
-    meta.className = "kb-saved-meta";
-    const when = document.createElement("span");
-    when.textContent = item.savedAt ? new Date(item.savedAt).toLocaleDateString() : "";
-    const remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "kb-saved-remove";
-    remove.textContent = "Remove";
-    remove.addEventListener("click", () => {
-      saveStudyList(removeStudyAnswer(loadStudyList(), item.id));
-      renderStudyList();
-    });
-    meta.append(when, remove);
-    card.append(body, meta);
-    host.appendChild(card);
+  if (!model.shown) {
+    const none = document.createElement("p");
+    none.className = "settings-hint kb-notebook-empty";
+    none.textContent = `Nothing in your notebook matches “${notebookQuery.trim()}”.`;
+    host.appendChild(none);
+    return;
+  }
+  for (const group of model.groups) {
+    const section = document.createElement("section");
+    section.className = "kb-notebook-group";
+    const heading = document.createElement("h4");
+    heading.className = "kb-notebook-course";
+    heading.textContent = group.course;
+    const count = document.createElement("span");
+    count.className = "kb-notebook-count";
+    count.textContent = String(group.items.length);
+    heading.appendChild(count);
+    section.appendChild(heading);
+    for (const item of group.items) section.appendChild(item.kind === "answer" ? notebookAnswerCard(item) : notebookPinCard(item));
+    host.appendChild(section);
   }
 }
 
@@ -1491,6 +1678,11 @@ export function wireKbEvents() {
     if (next !== null) saveTutorThreadTitle(next);
   });
   $("kbTutorArchiveThread")?.addEventListener("click", archiveCurrentTutorThread);
+  document.addEventListener("selectionchange", updateSaveSelectionLabels);
+  $("kbNotebookSearch")?.addEventListener("input", debounce((event) => {
+    notebookQuery = event.target.value || "";
+    renderStudyList();
+  }, 150));
 
   buildBtn?.addEventListener("click", () => startScrape());
   resumeBtn?.addEventListener("click", () => startScrape());
@@ -3067,18 +3259,54 @@ function addTutorCopyAction(messageEl, text) {
   answerActionRow(messageEl).appendChild(button);
 }
 
-function addTutorStudyAction(messageEl, text) {
+const SAVE_LABEL = "Save to notebook";
+const SAVE_SELECTION_LABEL = "Save selection";
+
+/** Text the reader has selected inside this answer (not in its buttons), or "". */
+function selectionInside(messageEl) {
+  const sel = typeof window !== "undefined" ? window.getSelection?.() : null;
+  if (!messageEl || !sel || sel.isCollapsed || !sel.rangeCount) return "";
+  const node = sel.getRangeAt(0).commonAncestorContainer;
+  const el = node.nodeType === 1 ? node : node.parentElement;
+  if (!el || !messageEl.contains(el) || el.closest(".ai-answer-actions, .ai-quote-check")) return "";
+  return sel.toString().trim();
+}
+
+/** Keep each Save button saying whether it will save the selection or the whole answer. */
+function updateSaveSelectionLabels() {
+  document.querySelectorAll("#kbTutorMessages .ai-save-btn").forEach((button) => {
+    if (button.dataset.flash) return;
+    const message = button.closest('[data-role="assistant"]');
+    button.textContent = selectionInside(message) ? SAVE_SELECTION_LABEL : SAVE_LABEL;
+  });
+}
+
+function addTutorStudyAction(messageEl, text, context = {}) {
   if (!messageEl || !copyableTutorText(text) || messageEl.querySelector(".ai-save-btn")) return;
   const button = document.createElement("button");
   button.type = "button";
   button.className = "ai-save-btn msg-action";
-  button.textContent = "Save to study list";
-  button.title = "Save this answer in this browser for later review";
+  button.textContent = SAVE_LABEL;
+  button.title = "Keep this answer in your Notebook. Select part of it first to keep just that part.";
+  // Pressing a button moves focus, which can collapse the selection before the
+  // click handler reads it.
+  button.addEventListener("pointerdown", (event) => event.preventDefault());
   button.addEventListener("click", () => {
+    const picked = selectionInside(messageEl);
+    const notes = Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [];
+    const sources = (Array.isArray(context.sources) ? context.sources : [])
+      .map((s) => (Number.isInteger(s?.noteIndex) && notes[s.noteIndex] ? notes[s.noteIndex] : null))
+      .filter(Boolean)
+      .map((note) => ({ k: noteKey(note), t: note.t, course: note.course }));
     const before = loadStudyList();
-    const after = saveStudyList(addStudyAnswer(before, text));
-    button.textContent = after.length > before.length ? "Saved" : "Already saved";
-    button.disabled = true;
+    const after = saveStudyList(addStudyAnswer(before, picked || text, Date.now(), {
+      question: context.question || "",
+      course: answerCourse({ focusCourse: context.focusCourse, sources }),
+      sources: encodeSources(sources),
+    }));
+    button.dataset.flash = "1";
+    button.textContent = after.length > before.length ? (picked ? "Selection saved" : "Saved") : "Already saved";
+    setTimeout(() => { delete button.dataset.flash; updateSaveSelectionLabels(); }, 1600);
     renderStudyList();
   });
   answerActionRow(messageEl).appendChild(button);
@@ -3376,7 +3604,7 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
     linkTutorCitations(assistantEl, sources);
     addTutorQuoteCheck(assistantEl, acc, sources);
     addTutorCopyAction(assistantEl, acc);
-    addTutorStudyAction(assistantEl, acc);
+    addTutorStudyAction(assistantEl, acc, { question: text, sources, focusCourse: focus?.course });
     addTutorStudyModeAction(assistantEl, acc);
     addTutorTryAgainAction(assistantEl, acc, model);
     addTutorAttribution(assistantEl, provider, model);
