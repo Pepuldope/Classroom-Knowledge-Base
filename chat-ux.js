@@ -296,6 +296,16 @@ export function createDeltaStream({ onContent, onReasoning, onSources } = {}) {
  * Deliberately small: delimiters, spacing macros, and \text{...}. Anything else
  * is left exactly as written rather than half-translated.
  */
+const MATH_SYMBOLS = {
+  pm: "±", mp: "∓", cdot: "·", times: "×", div: "÷", le: "≤", leq: "≤", ge: "≥", geq: "≥",
+  neq: "≠", ne: "≠", approx: "≈", infty: "∞", to: "→", rightarrow: "→", Rightarrow: "⇒",
+  Delta: "Δ", delta: "δ", alpha: "α", beta: "β", pi: "π", theta: "θ", lambda: "λ", mu: "μ", sigma: "σ",
+  in: "∈", degree: "°", circ: "°", left: "", right: "",
+};
+const SUBSCRIPTS = { 0: "₀", 1: "₁", 2: "₂", 3: "₃", 4: "₄", 5: "₅", 6: "₆", 7: "₇", 8: "₈", 9: "₉", "+": "₊", "-": "₋", ",": "," };
+const FRACTION_RE = /\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g;
+const fraction = (_, num, den) => `(${num.trim()})/(${den.trim()})`;
+
 export function unwrapMathDelimiters(text) {
   if (typeof text !== "string" || !text) return "";
   return text
@@ -306,9 +316,19 @@ export function unwrapMathDelimiters(text) {
     // single-dollar rule would eat the opening pair and strand the closing one.
     .replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (_, body) => `\n${body.trim()}\n`)
     .replace(/\$(?!\d)\s*([^$\n]+?)\s*\$/g, (_, body) => body.trim())
+    // Innermost first: a root or a symbol inside a fraction's braces is what
+    // stopped the fraction rule matching `\frac{-b \pm \sqrt{D}}{2a}`, which a
+    // model wrote with no delimiters at all and the page showed verbatim.
+    .replace(/\\sqrt\s*\{([^{}]*)\}/g, (_, body) => `√(${body.trim()})`)
+    .replace(/\\([a-zA-Z]+)(?![a-zA-Z])/g, (whole, name) => MATH_SYMBOLS[name] ?? whole)
     // A fraction is the one macro common enough to be worth spelling out; the
-    // parentheses keep "a/b + c" from reading as "a/(b + c)".
-    .replace(/\\d?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, (_, num, den) => `(${num.trim()})/(${den.trim()})`)
+    // parentheses keep "a/b + c" from reading as "a/(b + c)". Twice, for one
+    // level of nesting.
+    .replace(FRACTION_RE, fraction)
+    .replace(FRACTION_RE, fraction)
+    // x_{1,2} → x₁,₂ — only when every character has a subscript form.
+    .replace(/_\{([0-9,+\-]+)\}/g, (_, sub) => [...sub].map((c) => SUBSCRIPTS[c] ?? c).join(""))
+    .replace(/\^\{([^{}]{1,12})\}/g, "^$1")
     // \text{or} is prose the model wrapped for the typesetter's benefit.
     .replace(/\\text\{([^}]*)\}/g, "$1")
     .replace(/\\(?:qquad|quad|;|,|!)/g, " ")

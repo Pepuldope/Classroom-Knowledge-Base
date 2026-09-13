@@ -320,6 +320,16 @@ test("a price is not mistaken for maths", () => {
   assert.equal(unwrapMathDelimiters("it costs $5 and $10"), "it costs $5 and $10");
 });
 
+// Live, 2026-09-13: a model wrote the quadratic formula with no delimiters and
+// the fraction rule could not see past the root nested in its numerator.
+test("undelimited maths with nested macros is readable", () => {
+  assert.equal(unwrapMathDelimiters("x_{1,2} = \\frac{-b \\pm \\sqrt{D}}{2a}"), "x₁,₂ = (-b ± √(D))/(2a)");
+  assert.equal(unwrapMathDelimiters("\\(a \\cdot b \\leq c^{2}\\)"), "a · b ≤ c^2");
+  assert.equal(unwrapMathDelimiters("\\frac{\\frac{1}{2}}{3}"), "((1)/(2))/(3)");
+  // Unknown macros are left as written, and a word after a backslash is not eaten.
+  assert.equal(unwrapMathDelimiters("\\mathbb{R} and \\topology"), "\\mathbb{R} and \\topology");
+});
+
 test("text with no maths in it is returned untouched", () => {
   const plain = "A linear function has a constant rate of change.";
   assert.equal(unwrapMathDelimiters(plain), plain);
