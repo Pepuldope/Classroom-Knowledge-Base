@@ -28,7 +28,7 @@ import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 import { kbBuildProgressStatusModel, kbBuildCheckpointModel, kbBuildResumeSummaryModel } from "./kb-local-status.js";
-import { buildTutorRetrievedNotes, tutorRequestNotesModel } from "./kb-tutor-context.js";
+import { buildTutorRetrievedNotes, tutorRequestNotesModel, verifyTutorQuotes } from "./kb-tutor-context.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
@@ -3324,6 +3324,7 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
     const focus = openTutorFocus();
     const retrieved = tutorRequestNotesModel(
       buildTutorRetrievedNotes(localKbBundle, text, { focusNote: focus }),
+      { query: text },
     );
     const body = JSON.stringify({
       messages: tutorMessages, notes: retrieved, focus, language: preferredTutorLanguage(),
@@ -3417,6 +3418,8 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
 
     // After streaming, render the source chips (clickable -> open the note).
     renderTutorSources(sourcesEl, sources);
+    linkTutorCitations(assistantEl, sources);
+    addTutorQuoteCheck(assistantEl, acc, sources);
     addTutorCopyAction(assistantEl, acc);
     addTutorStudyAction(assistantEl, acc);
     addTutorStudyModeAction(assistantEl, acc);
@@ -3447,6 +3450,80 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
     tutorStreamController = null;
     setTutorBusy(false);
   }
+}
+
+/** The full text of each cited source, from the local bundle, in [n] order. */
+function tutorSourceTexts(sources) {
+  const notes = Array.isArray(localKbBundle?.notes) ? localKbBundle.notes : [];
+  return (Array.isArray(sources) ? sources : []).map((source) => {
+    const note = Number.isInteger(source?.noteIndex) ? notes[source.noteIndex] : null;
+    return note ? [note.t, note.s, note.x].filter(Boolean).join("\n") : null;
+  });
+}
+
+/**
+ * Turn "[2]" in a finished answer into a button that opens note 2.
+ *
+ * Works on text nodes after rendering, so it never touches the markdown or
+ * the escaping: the only markup it adds is a button whose label it sets as
+ * text. Code is left alone — "[2]" in a code block is an array index.
+ */
+function linkTutorCitations(messageEl, sources) {
+  if (!messageEl || !Array.isArray(sources) || !sources.length) return;
+  const walker = document.createTreeWalker(messageEl, NodeFilter.SHOW_TEXT, {
+    acceptNode: (node) => (node.parentElement?.closest("code, pre, button, .ai-answer-actions")
+      ? NodeFilter.FILTER_REJECT
+      : /\[\d{1,2}\]/.test(node.nodeValue) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP),
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const parts = node.nodeValue.split(/(\[\d{1,2}\])/);
+    const frag = document.createDocumentFragment();
+    for (const part of parts) {
+      const m = /^\[(\d{1,2})\]$/.exec(part);
+      const source = m ? sources[Number(m[1]) - 1] : null;
+      if (!source || !Number.isInteger(source.noteIndex)) {
+        frag.appendChild(document.createTextNode(part));
+        continue;
+      }
+      const cite = document.createElement("button");
+      cite.type = "button";
+      cite.className = "ai-cite";
+      cite.textContent = part;
+      cite.title = `Open “${source.t || "this note"}”`;
+      cite.addEventListener("click", () => openKbNote(source.noteIndex));
+      frag.appendChild(cite);
+    }
+    node.replaceWith(frag);
+  }
+}
+
+/** Say whether the answer's quotes are really in the notes they cite. */
+function addTutorQuoteCheck(messageEl, answer, sources) {
+  if (!messageEl) return;
+  const result = verifyTutorQuotes(answer, tutorSourceTexts(sources));
+  if (!result.checked) return;
+  const box = document.createElement("div");
+  box.className = `ai-quote-check${result.missing.length ? " is-warning" : ""}`;
+  if (!result.missing.length) {
+    box.textContent = `✓ ${result.checked === 1 ? "The quote is" : `All ${result.checked} quotes are`} word-for-word in your notes.`;
+  } else {
+    const head = document.createElement("strong");
+    head.textContent = result.missing.length === 1
+      ? "⚠ This quote isn't in the note it cites — check the note before relying on it:"
+      : `⚠ ${result.missing.length} of ${result.checked} quotes aren't in the notes they cite — check before relying on them:`;
+    box.appendChild(head);
+    const list = document.createElement("ul");
+    for (const q of result.missing) {
+      const item = document.createElement("li");
+      item.textContent = `“${q.quote}” ${q.cites.map((n) => `[${n}]`).join("")}`;
+      list.appendChild(item);
+    }
+    box.appendChild(list);
+  }
+  const row = messageEl.querySelector(":scope > .ai-answer-actions");
+  messageEl.insertBefore(box, row || null);
 }
 
 function renderTutorSources(container, notes) {

@@ -152,10 +152,21 @@ test("the old positional language argument still works", () => {
   assert.ok(!/Reply in Slovak/.test(prompt([], { language: "en" })));
 });
 
+test("the prompt numbers notes, marks excerpts, and says what to do when the notes lack the answer", () => {
+  const text = prompt(OTHER_NOTES, {});
+  assert.match(text, /\[1\] "/, "notes must be numbered the way the answer cites them");
+  assert.match(text, /EXCERPTS: "\[…\]" marks text that was left out/);
+  assert.match(text, /copy the words EXACTLY/);
+  assert.match(text, /checks every quote against their notes/);
+  assert.match(text, /say so FIRST/);
+  assert.match(text, /it probably covers this/);
+  assert.match(text, /label it clearly as not from their notes/);
+});
+
 test("notes are still bounded and still carry their index", () => {
   const notes = normalizeTutorNotes([{ t: "x".repeat(999), s: "y".repeat(9999), noteIndex: 3 }]);
   assert.equal(notes[0].t.length, 300);
-  assert.equal(notes[0].s.length, 1400);
+  assert.equal(notes[0].s.length, 500);
   assert.equal(notes[0].noteIndex, 3);
 });
 

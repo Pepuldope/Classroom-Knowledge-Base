@@ -12,6 +12,7 @@ import {
 import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { migrateArchiveBundle } from "./kb-merge.js";
 import { relatedNotes } from "./kb-client-search.js";
+import { tutorRequestNotesModel } from "./kb-tutor-context.js";
 import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday } from "./planner-cards.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
@@ -3324,9 +3325,16 @@ async function sendAi(userText) {
     // What the teacher probably meant by "it's in the Classroom folder".
     relatedMaterials: relatedCourseMaterials(a, allAssignments),
   };
-  const tutorNotes = activeLibraryNotes.slice(0, 5).map((n) => ({
-    t: n.t, course: n.course, y: n.y, topic: n.topic, s: n.s, x: n.x,
-  }));
+  // activeLibraryNotes are relatedNotes() results: title, course, year and an
+  // index, but no summary or body. Mapping those straight through sent the
+  // tutor titles only, so "From your notes" grounded nothing. Resolve each to
+  // its full note, then send the passages that match the question.
+  const bundleNotes = Array.isArray(libraryBundle?.notes) ? libraryBundle.notes : [];
+  const tutorNotes = tutorRequestNotesModel(
+    activeLibraryNotes.slice(0, 5)
+      .map((n) => (Number.isInteger(n.noteIndex) && bundleNotes[n.noteIndex] ? { ...bundleNotes[n.noteIndex], noteIndex: n.noteIndex } : n)),
+    { query: [userText, a.title].filter(Boolean).join(" ") },
+  );
 
   try {
     const r = await fetch("/api/tutor", {

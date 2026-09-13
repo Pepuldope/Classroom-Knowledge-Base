@@ -876,6 +876,33 @@ summary::-webkit-details-marker { color: var(--muted); }
 }
 .ai-answer-actions .msg-action:hover { border-color: var(--accent); background: var(--accent-bg); color: var(--accent); }
 .ai-answer-actions .ai-attribution { margin: 0 0 0 auto; }
+/* [n] in an answer opens the note it cites. */
+.ai-cite {
+  display: inline;
+  padding: 0 0.15em;
+  border: none;
+  border-radius: 3px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.85em;
+  font-weight: 600;
+  line-height: inherit;
+  vertical-align: baseline;
+  cursor: pointer;
+}
+.ai-cite:hover { background: var(--accent); color: var(--card); }
+/* Whether the quotes are really in the notes. Quiet when they are. */
+.ai-quote-check { margin-top: 0.6rem; font-size: 0.8rem; color: var(--muted); white-space: normal; }
+.ai-quote-check.is-warning {
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--warn);
+  border-radius: 4px;
+  background: var(--callout-warn-bg);
+  color: var(--callout-warn-fg);
+}
+.ai-quote-check ul { margin: 0.3rem 0 0; padding-left: 1.1rem; }
+.ai-quote-check li { margin: 0.15rem 0; color: var(--fg); }
 /* Nothing to say yet is no reason to draw an empty tinted strip. */
 .ai-context:empty { display: none; }
 .ai-welcome {

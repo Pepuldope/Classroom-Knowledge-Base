@@ -11,6 +11,9 @@ export const config = { runtime: "edge" };
 const CONTEXT_NOTES = 6;
 const MAX_ATTACHMENTS = 8;
 
+export const NOTE_BODY_MAX = 2200;
+export const NOTE_SUMMARY_MAX = 500;
+
 /** Keep the server-side model context bounded and free of client metadata. */
 export function normalizeTutorNotes(notes, limit = CONTEXT_NOTES) {
   if (!Array.isArray(notes)) return [];
@@ -19,8 +22,11 @@ export function normalizeTutorNotes(notes, limit = CONTEXT_NOTES) {
     course: typeof n?.course === "string" ? n.course.slice(0, 160) : "",
     y: typeof n?.y === "string" ? n.y.slice(0, 40) : "",
     topic: typeof n?.topic === "string" ? n.topic.slice(0, 160) : "",
-    s: typeof n?.s === "string" ? n.s.slice(0, 1400) : "",
-    x: typeof n?.x === "string" ? n.x.slice(0, 1400) : "",
+    // Kept in step with kb-tutor-context.js. The browser sends the passages of
+    // a body that match the question (up to NOTE_BODY_MAX), not its opening;
+    // summaries are short by construction, so their share went to the body.
+    s: typeof n?.s === "string" ? n.s.slice(0, NOTE_SUMMARY_MAX) : "",
+    x: typeof n?.x === "string" ? n.x.slice(0, NOTE_BODY_MAX) : "",
     noteIndex: Number.isInteger(n?.noteIndex) ? n.noteIndex : undefined,
   }));
 }
@@ -156,8 +162,8 @@ export function renderFocusBlock(focus, today = "") {
 function renderNotesBlock(notes, hasFocus) {
   const ctx = notes
     .map((n, i) => {
-      const head = `NOTE ${i + 1} — "${n.t}"${n.course ? ` (${n.course}${n.y ? `, ${n.y}` : ""})` : ""}${n.topic ? ` · topic: ${n.topic}` : ""}`;
-      const body = (n.x || n.s || "").slice(0, 1400);
+      const head = `[${i + 1}] "${n.t}"${n.course ? ` (${n.course}${n.y ? `, ${n.y}` : ""})` : ""}${n.topic ? ` · topic: ${n.topic}` : ""}`;
+      const body = (n.x || n.s || "").slice(0, NOTE_BODY_MAX);
       return `${head}\n${body}`;
     })
     .join("\n\n---\n\n");
@@ -168,7 +174,8 @@ function renderNotesBlock(notes, hasFocus) {
         "check the class and year on each before relying on it, and never mistake one of these for the open item above.",
       ].join("\n")
     : "=== THE STUDENT'S KNOWLEDGE BASE (retrieved notes) ===";
-  return `${heading}\n\n${ctx || "(no notes retrieved)"}`;
+  const excerpt = "Each note is numbered [1], [2], … Long notes are EXCERPTS: \"[…]\" marks text that was left out, so a note may say more than you can see.";
+  return `${heading}\n${excerpt}\n\n${ctx || "(no notes retrieved)"}`;
 }
 
 function buildSystemPrompt(notes, { focus = null, language = "en", today = "" } = {}) {
@@ -184,6 +191,12 @@ function buildSystemPrompt(notes, { focus = null, language = "en", today = "" } 
     "- EXPLAINING A CONCEPT is different. If the material names something and the student asks what it IS, explain it properly using your own knowledge. Do not refuse to teach because the note is terse.",
     "- Keep the two visibly apart. Course facts can be attributed ('your quiz note lists…'); general explanation should read as general explanation.",
     "- Never invent a due date, a grade, a task requirement or an attachment. Those are facts, and a wrong one costs the student marks.",
+    "",
+    "CITING AND QUOTING THEIR NOTES:",
+    "- When you rely on a note, cite it with its number in square brackets, like [2]. Cite the note, not the conversation.",
+    "- When you quote, copy the words EXACTLY as they appear in that note, in quotation marks, followed by its number: \"the discriminant decides how many roots\" [2]. Never put quotation marks around a paraphrase — the student's page checks every quote against their notes and flags any it cannot find.",
+    "- If the notes below do not contain the answer, say so FIRST, in one plain sentence, e.g. \"I can't find that in your notes.\" Then point them to the material most likely to have it, by its title and class: \"Check \u201c<title>\u201d (<class>) — it probably covers this.\" Only do that if one of the notes plausibly does; if none does, say that too.",
+    "- After saying the notes do not cover it, you may still explain the idea from general knowledge, but label it clearly as not from their notes, and never cite a number for it.",
     tutorLanguageInstruction(language),
     "",
     "STYLE: short paragraphs, bullets where they help, concrete examples taken from their own material wherever possible.",

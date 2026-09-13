@@ -113,6 +113,45 @@ try {
   assert.ok(box.sendH < 60, `Send stretched to the composer's height: ${box.sendH}px`);
   console.log(`✓ a long question wraps and grows the composer to ${Math.round(box.h)}px; Send stays ${Math.round(box.sendH)}px`);
 
+  // --- citations and quote checking ----------------------------------------
+  // Note 1's body is "The discriminant decides the number of roots." One quote
+  // is real, one is invented; the page must link [1] and flag only the second.
+  await page.evaluate(() => {
+    const realFetch = window.fetch.bind(window);
+    window.fetch = async (url, opts) => {
+      if (String(url).includes("/api/tutor")) {
+        const answer = 'Your note says "The discriminant decides the number of roots" [1]. It also says "roots are always real numbers" [1].';
+        const body = `data: ${JSON.stringify({ type: "sources", notes: [{ t: "Quadratics 1", course: "MAT Y3", y: "2025-26", noteIndex: 1 }] })}\n\n`
+          + `data: ${JSON.stringify({ choices: [{ delta: { content: answer } }] })}\n\ndata: [DONE]\n\n`;
+        return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream", "X-KB-Notes": "1", "X-AI-Model": "model-b" } });
+      }
+      return realFetch(url, opts);
+    };
+  });
+  await page.fill("#kbTutorInput", "what does my note say about roots");
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("#kbTutorMessages .ai-quote-check", { timeout: 10000 });
+  const grounded = await page.evaluate(() => {
+    const answers = document.querySelectorAll('#kbTutorMessages [data-role="assistant"]');
+    const last = answers[answers.length - 1];
+    const check = last.querySelector(".ai-quote-check");
+    return {
+      cites: last.querySelectorAll(".ai-cite").length,
+      warning: check.classList.contains("is-warning"),
+      flagged: [...check.querySelectorAll("li")].map((li) => li.textContent),
+      tryAgainButtons: document.querySelectorAll("#kbTutorMessages .ai-tryagain-btn").length,
+    };
+  });
+  assert.equal(grounded.cites, 2, "[1] citations were not turned into links");
+  assert.equal(grounded.warning, true);
+  assert.equal(grounded.flagged.length, 1);
+  assert.match(grounded.flagged[0], /roots are always real numbers/);
+  assert.equal(grounded.tryAgainButtons, 1, "Try again is offered on more than the latest answer");
+  await page.locator("#kbTutorMessages .ai-cite").last().click();
+  await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
+  assert.match(await page.locator("#kbNoteTitle").textContent(), /Quadratics 1/);
+  console.log("✓ [1] opens the cited note; the invented quote is flagged and the real one is not");
+
   assert.deepEqual(errors, []);
 } catch (e) {
   failed = true;
