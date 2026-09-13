@@ -383,52 +383,81 @@ export default async function handler(req) {
   }));
   const sourcesEvent = `data: ${JSON.stringify({ type: "sources", notes: sourceNotes })}\n\n`;
 
-  // ---- Route through all providers with failover ----
-  let routed;
-  try {
-    // Per-question routing. With one provider configured, the tier no longer
-    // selects a provider — it selects a model inside that provider's chain.
-    // `avoidModel` is set by the tutor's "Try again": the student did not like
-    // the answer, so the model that gave it goes to the back of the chain.
-    const avoid = typeof body.avoidModel === "string" && body.avoidModel.trim()
-      ? [body.avoidModel.trim().slice(0, 200)]
-      : null;
-    routed = await routeChat(messages, { task, stream: true, avoid });
-  } catch (e) {
-    return jsonResponse({ error: "AI request failed", details: e.message }, 502);
-  }
+  // Per-question routing. With one provider configured, the tier no longer
+  // selects a provider — it selects a model inside that provider's chain.
+  // `avoidModel` is set by the tutor's "Try again": the student did not like
+  // the answer, so the model that gave it goes to the back of the chain.
+  const avoid = typeof body.avoidModel === "string" && body.avoidModel.trim()
+    ? [body.avoidModel.trim().slice(0, 200)]
+    : null;
 
-  // Compose the stream: lead with the sources control event, then the model's
-  // SSE payload verbatim, then the [DONE] terminator.
-  const stream = new ReadableStream({
-    start(controller) {
-      const enc = new TextEncoder();
-      controller.enqueue(enc.encode(sourcesEvent));
-      const reader = routed.stream.getReader();
-      const pump = () =>
-        reader.read().then(({ done, value }) => {
-          if (done) { controller.enqueue(enc.encode("\ndata: [DONE]\n\n")); controller.close(); return; }
-          controller.enqueue(value);
-          return pump();
-        });
-      pump().catch((e) => { try { controller.error(e); } catch {} });
-    },
-  });
-
-  return new Response(stream, {
+  return new Response(tutorEventStream({
+    sourcesEvent,
+    route: () => routeChat(messages, { task, stream: true, avoid }),
+  }), {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
       "Cache-Control": "no-cache, no-transform",
       "X-Accel-Buffering": "no",
       "X-KB-Notes": String(notes.length),
-      "X-AI-Provider": routed.provider,
-      "X-AI-Model": routed.model,
-      "X-AI-Tier": String(routed.meta?.tier ?? ""),
       "X-AI-Task": task,
-      "X-AI-Attempts": String(routed.meta?.attempts ?? 1),
-      "X-AI-Fallback": routed.meta?.fallbackReason || "none",
       "X-RateLimit-Used": String(rate.count),
       "X-RateLimit-Limit": String(rate.limit),
+    },
+  });
+}
+
+/**
+ * The tutor's SSE body: sources, then a `route` event naming the model, then
+ * the model's stream verbatim, then [DONE].
+ *
+ * Routing happens INSIDE the stream. The router now waits for each model's
+ * first token and moves on when one stalls, which can take longer than the
+ * edge allows before a response must start. So the response starts at once
+ * with the sources, and the model — which used to travel in X-AI-Model — is an
+ * event. A routing failure is an `error` event: the status is already 200.
+ */
+export function tutorEventStream({ sourcesEvent, route, keepAliveMs = 10_000 }) {
+  const enc = new TextEncoder();
+  const event = (obj) => enc.encode(`data: ${JSON.stringify(obj)}\n\n`);
+  return new ReadableStream({
+    async start(controller) {
+      controller.enqueue(enc.encode(sourcesEvent));
+      // Nothing flows while the router waits on a stalled model; say so, so
+      // no proxy in between mistakes the quiet for a dead connection.
+      const keepAlive = setInterval(() => {
+        try { controller.enqueue(enc.encode(": routing\n\n")); } catch {}
+      }, keepAliveMs);
+      let routed;
+      try {
+        routed = await route();
+      } catch (e) {
+        controller.enqueue(event({ type: "error", error: "AI request failed", details: e?.message || String(e) }));
+        controller.enqueue(enc.encode("data: [DONE]\n\n"));
+        controller.close();
+        return;
+      } finally {
+        clearInterval(keepAlive);
+      }
+      controller.enqueue(event({
+        type: "route",
+        provider: routed.provider,
+        model: routed.model,
+        attempts: routed.meta?.attempts ?? 1,
+        fallback: routed.meta?.fallbackReason || null,
+      }));
+      const reader = routed.stream.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          controller.enqueue(value);
+        }
+        controller.enqueue(enc.encode("\ndata: [DONE]\n\n"));
+        controller.close();
+      } catch (e) {
+        try { controller.error(e); } catch {}
+      }
     },
   });
 }

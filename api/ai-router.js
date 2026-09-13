@@ -545,7 +545,69 @@ export function getRouterMetrics() {
  * The error thrown when the chain is exhausted carries every model tried, so
  * the 502 a user eventually sees names all of them rather than only the last.
  */
-async function callProviderOnce(p, { messages, max_tokens, temperature, stream, tier = null, avoid = null }) {
+/**
+ * How long a streamed model gets to send its first SSE `data:` line.
+ *
+ * HTTP 200 is not an answer. On 2026-09-13 OpenRouter accepted a tutor request
+ * for nemotron-3-ultra:free and then sent only ": OPENROUTER PROCESSING"
+ * comments for minutes; committing on the status left the student staring at
+ * an empty bubble while four other models sat unused. Reasoning tokens count
+ * as data — a model that is thinking is working, not stalled.
+ */
+export const STREAM_FIRST_DATA_MS = 20_000;
+
+/**
+ * Read a stream until its first `data:` line, or give up at the deadline.
+ *
+ * Returns `{ ok: true, stream }` — a stream that replays every byte already
+ * read and then the rest — or `{ ok: false, reason: "stalled" | "empty" }`,
+ * with the source cancelled so a stalled upstream is not left streaming.
+ */
+export async function awaitFirstData(source, ms = STREAM_FIRST_DATA_MS) {
+  const reader = source.getReader();
+  const dec = new TextDecoder();
+  const chunks = [];
+  let seen = "";
+  let timer;
+  const deadline = new Promise((resolve) => { timer = setTimeout(() => resolve(null), ms); });
+  try {
+    while (true) {
+      const next = await Promise.race([reader.read(), deadline]);
+      if (next === null) {
+        reader.cancel().catch(() => {});
+        return { ok: false, reason: "stalled" };
+      }
+      if (next.done) {
+        if (!/(^|\n)data:/.test(seen)) return { ok: false, reason: "empty" };
+        return { ok: true, stream: replayStream(chunks, reader, true) };
+      }
+      chunks.push(next.value);
+      // Whole text, not a tail: a sliced tail can start mid-line and fake a
+      // line start. Before the first data line this is only keep-alives.
+      seen += dec.decode(next.value, { stream: true });
+      if (/(^|\n)data:/.test(seen)) return { ok: true, stream: replayStream(chunks, reader, false) };
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function replayStream(chunks, reader, finished) {
+  return new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      if (finished) controller.close();
+    },
+    async pull(controller) {
+      const { done, value } = await reader.read();
+      if (done) controller.close();
+      else controller.enqueue(value);
+    },
+    cancel(reason) { return reader.cancel(reason); },
+  });
+}
+
+async function callProviderOnce(p, { messages, max_tokens, temperature, stream, tier = null, avoid = null, firstDataMs = STREAM_FIRST_DATA_MS }) {
   if (_forcedFail.has(p.name)) {
     const e = new Error(`${p.name} forced-fail (drill)`);
     e.provider = p.name;
@@ -571,16 +633,29 @@ async function callProviderOnce(p, { messages, max_tokens, temperature, stream, 
     const body = { model, messages, max_tokens, temperature, stream, ...(p.extra || {}) };
     const res = await fetch(p.baseURL, { method: "POST", headers, body: JSON.stringify(body) });
 
+    const last = i === chain.length - 1;
     if (res.ok) {
-      if (stream) return { stream: res.body, provider: p.name, model, response: res };
-      const data = await res.json();
-      return { text: data.choices?.[0]?.message?.content || "", provider: p.name, model };
+      if (!stream) {
+        const data = await res.json();
+        return { text: data.choices?.[0]?.message?.content || "", provider: p.name, model };
+      }
+      const first = await awaitFirstData(res.body, firstDataMs);
+      if (first.ok) return { stream: first.stream, provider: p.name, model, response: res };
+      const why = first.reason === "stalled" ? `no data in ${Math.round(firstDataMs / 1000)}s` : "no data";
+      skipped.push(`${model} (${why})`);
+      bump(_metrics.byReason, "model_stalled");
+      if (!last) continue;
+      const e = new Error(`${p.name} ${model} sent ${why} [after ${skipped.join(", ")}]`);
+      e.provider = p.name;
+      e.status = 504;
+      e.model = model;
+      e.modelsTried = skipped.map((s) => s.split(" ")[0]);
+      throw e;
     }
 
     // Read the body once: the text is what tells a dead slug apart from a dead
     // key, and a 429 upstream apart from a 429 account-wide.
     const text = await res.text().catch(() => "");
-    const last = i === chain.length - 1;
     if (!last && isModelLevelFailure(res.status, text)) {
       skipped.push(`${model} (HTTP ${res.status})`);
       bump(_metrics.byReason, "model_retired");
@@ -723,6 +798,7 @@ export async function routeChat(messages, opts = {}) {
     classify = true,
     requires = null,
     avoid = null,
+    firstDataMs,
   } = opts;
 
   const TASK_PROFILES = {
@@ -821,7 +897,7 @@ export async function routeChat(messages, opts = {}) {
     const isProbe = getHealth(p.name).state === "half_open";
     if (isProbe) beginProbe(p); // count this as a limited recovery probe
     try {
-      const r = await callProviderOnce(p, { messages, max_tokens: MT, temperature: TEMP, stream, tier, avoid });
+      const r = await callProviderOnce(p, { messages, max_tokens: MT, temperature: TEMP, stream, tier, avoid, ...(firstDataMs ? { firstDataMs } : {}) });
       const latency = Date.now() - pt0;
       recordOutcome(p, true);
       bump(_metrics.byProvider, p.name);

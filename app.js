@@ -3423,6 +3423,7 @@ async function sendAi(userText) {
     const reader = r.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    let streamError = "";
     // The dots stay until the first token of ANSWER. `fetch` resolves on the
     // response headers, and every model in the chain reasons before it writes,
     // so dismissing them here — which is what this did — left an empty bubble
@@ -3450,6 +3451,9 @@ async function sendAi(userText) {
         if (payload === "[DONE]") continue;
         try {
           const json = JSON.parse(payload);
+          // api/tutor.js routes inside the stream, so a failure after the 200
+          // arrives as an event, not a status.
+          if (json?.type === "error") { streamError = String(json.details || json.error || "AI request failed"); continue; }
           const choice = json.choices?.[0];
           const kind = deltaKind(choice);
           if (kind === "reasoning") {
@@ -3466,7 +3470,7 @@ async function sendAi(userText) {
     }
 
     if (!accumulated) {
-      const end = streamEndModel({ text: "" });
+      const end = streamEndModel({ text: "", error: streamError });
       thinking.className = end.className;
       thinking.innerHTML = renderTutorAnswer(end.text);
     } else {

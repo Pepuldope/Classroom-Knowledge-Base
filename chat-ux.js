@@ -236,9 +236,9 @@ export function createSseFramer() {
  * Callbacks are invoked in stream order. A throwing callback must not abort the
  * stream or swallow later deltas, so it is counted and the stream carries on.
  */
-export function createDeltaStream({ onContent, onReasoning, onSources } = {}) {
+export function createDeltaStream({ onContent, onReasoning, onSources, onRoute, onError } = {}) {
   const framer = createSseFramer();
-  const stats = { lines: 0, data: 0, content: 0, reasoning: 0, sources: 0, done: 0, unparsable: 0, callbackErrors: 0 };
+  const stats = { lines: 0, data: 0, content: 0, reasoning: 0, sources: 0, route: 0, error: 0, done: 0, unparsable: 0, callbackErrors: 0 };
 
   const call = (fn, value) => {
     if (typeof fn !== "function") return;
@@ -264,6 +264,18 @@ export function createDeltaStream({ onContent, onReasoning, onSources } = {}) {
     if (json && json.type === "sources") {
       stats.sources++;
       call(onSources, Array.isArray(json.notes) ? json.notes : []);
+      return;
+    }
+    // api/tutor.js routes inside the stream: which model answered, or why
+    // none could, arrives as an event rather than a header or a status.
+    if (json && json.type === "route") {
+      stats.route++;
+      call(onRoute, { provider: String(json.provider || ""), model: String(json.model || "") });
+      return;
+    }
+    if (json && json.type === "error") {
+      stats.error++;
+      call(onError, String(json.details || json.error || "AI request failed"));
       return;
     }
     const choice = json?.choices?.[0];

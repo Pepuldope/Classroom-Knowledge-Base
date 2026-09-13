@@ -3647,8 +3647,11 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
       return;
     }
     const notesUsed = Number(r.headers.get("X-KB-Notes") || "0");
-    const provider = r.headers.get("X-AI-Provider") || "";
-    const model = r.headers.get("X-AI-Model") || "";
+    // The server names the model in a `route` event now (it routes inside the
+    // stream); the headers are the older contract, kept as a fallback.
+    let provider = r.headers.get("X-AI-Provider") || "";
+    let model = r.headers.get("X-AI-Model") || "";
+    let streamError = "";
     // Feature: expose WHICH notes the tutor grounded on, as clickable chips
     // that jump to the full note (openKbNote). The server returns them as a
     // JSON line on a dedicated stream event so the UI can render them once.
@@ -3681,6 +3684,8 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
 
     const stream = createDeltaStream({
       onSources: (notes) => { sources = notes; },
+      onRoute: (route) => { provider = route.provider || provider; model = route.model || model; },
+      onError: (message) => { streamError = message; },
       onReasoning: () => markReasoning(assistantEl),
       onContent: (chunk) => { acc += chunk; paint(); },
     });
@@ -3694,6 +3699,24 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
       stream.end();
     } finally {
       if (wrap) wrap.removeEventListener("scroll", onScroll);
+    }
+
+    // A stream can end without a word of answer: every model stalled, or the
+    // router failed after the 200. That used to paint an empty bubble with no
+    // actions and push an empty assistant turn. Say what happened and offer
+    // Retry; the question stays in the thread.
+    if (!acc.trim()) {
+      const end = streamEndModel({ text: "", error: streamError });
+      if (assistantEl) {
+        assistantEl.className = `ai-msg ai-msg-assistant${end.className.includes("error") ? " error" : ""}`;
+        assistantEl.removeAttribute("role");
+        assistantEl.removeAttribute("aria-label");
+        assistantEl.innerHTML = renderTutorAnswer(end.text);
+        addTutorRetryAction(assistantEl, getTutorRetryPrompt(tutorMessages));
+        followOutput(wrap, stick);
+      }
+      if (sourcesEl) sourcesEl.innerHTML = "";
+      return;
     }
 
     // The answer on screen must equal the answer we accumulated. Each delta
