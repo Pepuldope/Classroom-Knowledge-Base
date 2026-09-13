@@ -276,6 +276,25 @@ button {
 }
 button:hover { background: var(--btn-hover-bg); }
 button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* A link that looks like a button — notes and chips became real links so they
+   can open in a new tab (deep-links.js). Same base as `button` above, placed
+   before the component rules so each component's own class still wins. */
+.btn-link {
+  display: inline-block;
+  font: inherit;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--fg);
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+}
+.btn-link:hover { background: var(--btn-hover-bg); text-decoration: none; }
+.btn-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The title of a clickable card, as a link: looks like the title it was. */
+.card-title-link { color: inherit; text-decoration: none; }
+.card-title-link:hover { text-decoration: underline; }
 /* Keep route-transition focus visible after a modal closes, even when the
    transition began with a pointer click rather than keyboard input. */
 .view-toggle-btn.view-toggle-focus-restored {
@@ -881,6 +900,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   display: inline;
   padding: 0 0.15em;
   border: none;
+  text-decoration: none;
   border-radius: 3px;
   background: var(--accent-bg);
   color: var(--accent);
@@ -2314,18 +2334,22 @@ summary::-webkit-details-marker { color: var(--muted); }
   border-radius: 0 6px 6px 0;
 }
 .archive-note-content del { color: var(--muted); }
-.archive-note-content .md-table {
+.archive-note-content .md-table,
+#kbNoteBody .md-table {
   border-collapse: collapse;
   width: 100%;
   margin: 0.6rem 0;
   font-size: 0.88rem;
 }
 .archive-note-content .md-table th,
-.archive-note-content .md-table td {
+#kbNoteBody .md-table th,
+.archive-note-content .md-table td,
+#kbNoteBody .md-table td {
   border: 1px solid var(--border);
   padding: 0.35rem 0.6rem;
   text-align: left;
 }
+#kbNoteBody .md-table thead th,
 .archive-note-content .md-table thead th { background: var(--accent-bg); font-weight: 600; }
 
 /* Obsidian [[wikilinks]] rendered by renderRichMarkdown(): show them as
@@ -2836,7 +2860,7 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-review-digest h3 { margin: 0; font-size: 1rem; }
 .kb-review-detail { margin: 0.2rem 0 0.65rem; color: var(--muted); font-size: 0.82rem; }
 .kb-review-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0.5rem; }
-.kb-review-item { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 0.6rem 0.7rem; border: 1px solid var(--border); border-radius: 9px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; font: inherit; }
+.kb-review-item { text-decoration: none; display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 0.6rem 0.7rem; border: 1px solid var(--border); border-radius: 9px; background: transparent; color: var(--fg); text-align: left; cursor: pointer; font: inherit; }
 .kb-review-item:hover, .kb-review-item:focus-visible { border-color: var(--accent); outline: none; }
 .kb-review-item span { color: var(--muted); font-size: 0.78rem; }
 .kb-export-label { font-size: 0.85rem; color: var(--muted); }
@@ -3192,7 +3216,10 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-notebook-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem; margin-top: 0.65rem; }
 .kb-notebook-sources-label { font-size: 0.75rem; color: var(--muted); }
 .kb-notebook-source { font-size: 0.75rem; padding: 0.15rem 0.55rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-subtle); color: var(--fg); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-button.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); }
+a.kb-notebook-source { text-decoration: none; }
+a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); }
+.kb-notebook-item.is-pin.is-openable { cursor: pointer; }
+.kb-notebook-item.is-pin.is-openable:hover { border-color: var(--accent); }
 .kb-notebook-source.is-missing { color: var(--muted); border-style: dashed; }
 .kb-notebook-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
 .kb-notebook-action {
@@ -3205,3 +3232,21 @@ button.kb-notebook-source:hover { border-color: var(--accent); color: var(--acce
 .kb-notebook-more { margin-top: 0.4rem; height: auto; padding: 0.2rem 0; border: none; color: var(--accent); }
 .kb-notebook-more:hover { background: transparent; text-decoration: underline; }
 .kb-notebook-empty { margin: 0.5rem 0; }
+
+/* Close buttons draw an SVG ×, centred by flexbox. The text glyph put its ink
+   wherever the font's metrics put it, which in some fonts is visibly below the
+   middle of the button — reported on the assignment panel, 2026-09-13. */
+.close-btn { display: inline-flex; align-items: center; justify-content: center; line-height: 0; }
+.close-btn .close-icon { display: block; flex: 0 0 auto; pointer-events: none; }
+.modal-card header .close-btn { min-width: 36px; min-height: 36px; }
+
+/* Note modal: every band lines up with the body's 1.25rem gutter. The meta line
+   and the related list had none, so "ELA Y4 Omega · 2026-27" started at the
+   card's left edge; and the meta's -0.25rem top margin pulled it under the
+   header, whose bottom border then ran through the "Pin note" button. */
+#kbNoteModal .kb-note-meta {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.65rem;
+  margin: 0; padding: 0.6rem 1.25rem;
+}
+#kbNoteModal .kb-note-meta .kb-note-pin { margin-left: 0; }
+#kbNoteModal .kb-related { padding: 0.6rem 1.25rem 0; }

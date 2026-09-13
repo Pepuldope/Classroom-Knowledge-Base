@@ -13,7 +13,9 @@ import { loadKbBundle, saveKbBundle, removeKbBundle } from "./kb-local.js";
 import { migrateArchiveBundle } from "./kb-merge.js";
 import { relatedNotes } from "./kb-client-search.js";
 import { tutorRequestNotesModel } from "./kb-tutor-context.js";
-import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday } from "./planner-cards.js";
+import { installNewTabCards, assignmentHref, noteHref, parseDeepLink, linkTo } from "./deep-links.js";
+import { noteKey } from "./notebook.js";
+import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday, groupPendingByDay } from "./planner-cards.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
@@ -1052,9 +1054,10 @@ function renderLibraryStrip(a) {
   const row = document.createElement("div");
   row.className = "archive-strip-row";
   for (const note of related) {
-    const chip = document.createElement("button");
-    chip.type = "button";
-    chip.className = "archive-strip-item";
+    const full = Number.isInteger(note.noteIndex) ? notes[note.noteIndex] : null;
+    // Open it where notes actually live now, rather than in a second modal.
+    const chip = linkTo(document.createElement("a"), noteHref(noteKey(full || note)), () => openInStudy(note.t || ""));
+    chip.className = "btn-link archive-strip-item";
 
     const title = document.createElement("div");
     title.className = "archive-strip-title";
@@ -1065,8 +1068,6 @@ function renderLibraryStrip(a) {
     meta.textContent = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
 
     chip.append(title, meta);
-    // Open it where notes actually live now, rather than in a second modal.
-    chip.addEventListener("click", () => openInStudy(note.t || ""));
     row.appendChild(chip);
   }
   strip.appendChild(row);
@@ -1110,6 +1111,28 @@ window.addEventListener("scroll", () => {
  * Called after the signed-in view has hydrated. Study restores its own tab and
  * query in `refreshKb`; this owns the route and the scroll offset.
  */
+/**
+ * Open what a #note= / #assignment= address names — a tab opened with a
+ * middle-click. Runs once the signed-in view has hydrated, so assignments are
+ * loaded, and consumes the hash so a reload does not reopen it.
+ */
+async function routeFromHash() {
+  const link = parseDeepLink(location.hash);
+  if (!link) return;
+  history.replaceState(null, "", location.pathname + location.search);
+  if (link.type === "note") {
+    setView("kb");
+    const kb = await import("./kb.js");
+    await kb.openKbNoteByKey(link.key);
+  } else {
+    setView("planner");
+    const a = allAssignments.find((item) => item.id === link.id);
+    if (a) openAi(a);
+  }
+}
+
+installNewTabCards();
+
 function restoreSessionPosition(epoch) {
   if (positionRestored) return;
   positionRestored = true;
@@ -1595,6 +1618,7 @@ async function onSignedIn() {
   try {
     await hydrateSignedInView(epoch);
     if (epoch === sessionEpoch) restoreSessionPosition(epoch);
+    if (epoch === sessionEpoch) routeFromHash();
   } catch (e) {
     if (epoch === sessionEpoch) setStatus(e?.message || "Sign-in failed.", true);
   } finally {
@@ -2105,6 +2129,8 @@ function assignmentCard(a) {
     else if (due && daysUntil(due) < 0 && isPending(a)) stateCls = " state-overdue";
   }
   el.className = "assignment" + (pinnedIds.has(a.id) ? " pinned" : "") + stateCls;
+  // Middle-click / Ctrl-click opens it in a new tab (deep-links.js).
+  el.dataset.href = assignmentHref(a.id);
 
   const dot = document.createElement("div");
   if (isPassive) {
@@ -2151,6 +2177,16 @@ function assignmentCard(a) {
     titleEl.appendChild(document.createTextNode(a.title || "(announcement)"));
   } else {
     titleEl.textContent = a.title || "(untitled)";
+  }
+  // The title text is a real link too, for "Open link in new tab" and copying.
+  const titleText = titleEl.lastChild;
+  if (titleText) {
+    const link = document.createElement("a");
+    link.className = "card-title-link";
+    link.tabIndex = -1;
+    link.textContent = titleText.textContent;
+    linkTo(link, assignmentHref(a.id), () => el.click());
+    titleText.replaceWith(link);
   }
   titleLine.appendChild(titleEl);
 
@@ -2538,21 +2574,31 @@ function renderFull(all) {
     list.innerHTML = `<div class="empty">Nothing pending.</div>`;
     return;
   }
-  const byCourse = new Map();
-  pending.forEach((a) => {
-    if (!byCourse.has(a.courseName)) byCourse.set(a.courseName, []);
-    byCourse.get(a.courseName).push(a);
+  // An explicit sort from the dropdown is the student's choice: one flat list.
+  if (currentSort !== "default") {
+    applySort(pending).forEach((a) => list.appendChild(assignmentCard(a)));
+    return;
+  }
+  // Otherwise by deadline, headed by day — see groupPendingByDay.
+  const groups = groupPendingByDay(pending, (a) => {
+    const due = dueDateObj(a);
+    return due ? daysUntil(due) : null;
   });
-  for (const [course, items] of byCourse) {
+  for (const { key, dayOffset, items } of groups) {
     const group = document.createElement("div");
-    group.className = "course-group";
+    group.className = "day-group";
     const h = document.createElement("div");
     h.className = "day-label";
-    h.textContent = course;
+    if (key === "overdue") h.textContent = "Overdue";
+    else if (key === "undated") h.textContent = "No due date";
+    else {
+      const dayDate = new Date();
+      dayDate.setDate(dayDate.getDate() + dayOffset);
+      const name = dayOffset === 0 ? "Today" : dayOffset === 1 ? "Tomorrow" : dayDate.toLocaleDateString(undefined, { weekday: "long" });
+      h.textContent = `${name} · ${dayDate.toLocaleDateString(undefined, { month: "short", day: "numeric" })}`;
+    }
     group.appendChild(h);
-    const sorted = currentSort === "default"
-      ? [...items].sort((a, b) => (dueDateObj(a)?.getTime() ?? Infinity) - (dueDateObj(b)?.getTime() ?? Infinity))
-      : applySort(items);
+    const sorted = [...items].sort((a, b) => (dueDateObj(a)?.getTime() ?? Infinity) - (dueDateObj(b)?.getTime() ?? Infinity));
     sorted.forEach((a) => group.appendChild(assignmentCard(a)));
     list.appendChild(group);
   }

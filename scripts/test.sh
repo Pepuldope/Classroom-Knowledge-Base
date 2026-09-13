@@ -111,6 +111,8 @@ GATES=(
 "panel|srv|Chat composer busy/stop e2e|node scripts/chat_composer_test.mjs"
 "kb|srv|Study tutor frame: fixed height, welcome, one action row, composer|node scripts/tutor_layout_test.mjs"
 "kb|srv|Notebook: save selection/answer, group, rename, search, sources, undo|node scripts/notebook_test.mjs"
+"kb,panel|srv|New-tab links, pending by date, note meta, centred close|node scripts/deep_links_test.mjs"
+"models|-|Deep link model tests|node --test tests/deep-links.test.js"
 "models,kb|-|Notebook model tests|node --test tests/notebook.test.js"
 "theme|seed|Theme contrast browser tests|node scripts/theme_contrast_test.mjs"
 "theme|seed|Visual common-sense browser gate (light + dark)|node scripts/visual_common_sense_test.mjs"

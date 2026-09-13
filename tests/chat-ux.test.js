@@ -346,6 +346,16 @@ test("a tutor answer cannot inject markup, whatever the model writes", () => {
   assert.match(html, /&lt;img/);
 });
 
+// renderRichMarkdown rendered one line at a time, so a list was one <ul> per
+// item and a fenced code block could never see its closing fence.
+test("a list is one list, and a code block is one block", () => {
+  const html = renderTutorAnswer("Steps:\n\n- one\n- two\n- three\n\n```\nx = 1\ny = 2\n```");
+  assert.equal((html.match(/<ul>/g) || []).length, 1, html);
+  assert.equal((html.match(/<li>/g) || []).length, 3);
+  assert.equal((html.match(/<pre>/g) || []).length, 1, html);
+  assert.match(html, /x = 1\ny = 2/);
+});
+
 test("a tutor answer renders tables and unwraps maths", () => {
   const html = renderTutorAnswer("| x | y |\n|---|---|\n| 1 | 2 |\n\nSlope: \\(\\frac{a}{b}\\)");
   assert.match(html, /<table class="md-table">/);

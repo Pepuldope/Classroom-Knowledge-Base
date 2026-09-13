@@ -215,6 +215,7 @@ export function renderRichMarkdown(text) {
     const l = lines[i];
     const next = lines[i + 1] || "";
     if (isRow(l) && isSep(next)) {
+      flush();
       // Header row at i, separator at i+1, body rows until a non-row/non-sep.
       out.push('<table class="md-table"><thead>');
       out.push(`<tr>${headCells(l)}</tr>`);
@@ -231,6 +232,7 @@ export function renderRichMarkdown(text) {
     // consecutive "> ..." lines. Each line's leading "> " (escaped to "&gt; ")
     // is consumed by renderCallout; a blank line or a non-quote line ends it.
     if (isCalloutStart(l)) {
+      flush();
       const block = [l];
       i++;
       while (i < lines.length && /^\s*>\s?/.test(lines[i])) {
@@ -240,11 +242,14 @@ export function renderRichMarkdown(text) {
       out.push(renderCallout(block));
       continue;
     }
-    // Non-table line (or a lone "| ..." that isn't a real table): render it
-    // through the safe light pass + inline transforms on its own.
-    out.push(rich([l]));
+    // Non-table line (or a lone "| ..." that isn't a real table). Batched, as
+    // the comment on `rich` always said: rendered one line at a time, each list
+    // item became its own one-item <ul>, and a three-item list was three lists
+    // with a list's margins between every item.
+    buf.push(l);
     i++;
   }
+  flush();
   return out.join("");
 }
 

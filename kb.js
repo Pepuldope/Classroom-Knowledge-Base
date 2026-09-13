@@ -15,7 +15,7 @@
 // KB request that leaves the browser, and it receives only bounded retrieved notes.
 
 import { highlightSnippet } from "./kb-highlight.js";
-import { renderLightMarkdown, renderRichMarkdown } from "./archive.js";
+import { renderRichMarkdown } from "./archive.js";
 import { studyTabModel, studyTabForAction, STUDY_TABS } from "./study-tabs.js";
 import { renderCurriculum, curriculumControlsModel } from "./kb-curriculum.js";
 import { kbAutoSyncModel, kbSyncStatusModel } from "./kb-autosync.js";
@@ -29,7 +29,8 @@ import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
 import { buildReviewDigest } from "./review-digest.js";
 import { kbBuildProgressStatusModel, kbBuildCheckpointModel, kbBuildResumeSummaryModel } from "./kb-local-status.js";
 import { buildTutorRetrievedNotes, tutorRequestNotesModel, verifyTutorQuotes } from "./kb-tutor-context.js";
-import { noteKey, encodeSources, answerCourse, renameAnswer, notebookModel } from "./notebook.js";
+import { noteKey, noteKeyIndex, parseNoteKey, encodeSources, answerCourse, renameAnswer, notebookModel } from "./notebook.js";
+import { noteHref, linkTo } from "./deep-links.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
@@ -578,16 +579,14 @@ function renderReviewDigest(progress = loadStudyProgress()) {
   const list = document.createElement("div");
   list.className = "kb-review-list";
   for (const item of digest.items) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "kb-review-item";
+    const link = linkTo(document.createElement("a"), noteHrefAt(item.index), () => openKbNote(item.index));
+    link.className = "kb-review-item";
     const title = document.createElement("strong");
     title.textContent = item.title;
     const meta = document.createElement("span");
     meta.textContent = item.detail || "Open note";
-    button.append(title, meta);
-    button.addEventListener("click", () => openKbNote(item.index));
-    list.appendChild(button);
+    link.append(title, meta);
+    list.appendChild(link);
   }
   card.append(heading, detail, list);
   card.hidden = digest.items.length === 0;
@@ -916,7 +915,11 @@ function notebookAnswerCard(item) {
         gone.title = "This note is not in your current knowledge base";
         sources.appendChild(gone);
       } else {
-        sources.appendChild(notebookButton(chip, "kb-notebook-source", () => openKbNote(source.noteIndex), "Open this note"));
+        const link = linkTo(document.createElement("a"), noteHrefAt(source.noteIndex), () => openKbNote(source.noteIndex));
+        link.className = "kb-notebook-source";
+        link.textContent = chip;
+        link.title = "Open this note";
+        sources.appendChild(link);
       }
     });
     card.appendChild(sources);
@@ -942,7 +945,21 @@ function notebookPinCard(item) {
   head.className = "kb-notebook-item-head";
   const title = document.createElement("h5");
   title.className = "kb-notebook-title";
-  title.textContent = `★ ${item.title}`;
+  // Like every other note on the site, the card itself opens it; the title is
+  // a real link so it can also open in a new tab.
+  if (item.noteIndex != null) {
+    const open = () => openKbNote(item.noteIndex);
+    const href = noteHrefAt(item.noteIndex);
+    title.appendChild(cardTitleLink(`★ ${item.title}`, href, open));
+    card.classList.add("is-openable");
+    card.dataset.href = href;
+    card.addEventListener("click", (event) => {
+      if (event.target instanceof Element && event.target.closest("button, a")) return;
+      open();
+    });
+  } else {
+    title.textContent = `★ ${item.title}`;
+  }
   head.appendChild(title);
   const meta = document.createElement("div");
   meta.className = "kb-notebook-meta";
@@ -950,7 +967,6 @@ function notebookPinCard(item) {
     + (item.noteIndex == null ? " · not in your current knowledge base" : "");
   const actions = document.createElement("div");
   actions.className = "kb-notebook-actions";
-  if (item.noteIndex != null) actions.appendChild(notebookButton("Open note", "", () => openKbNote(item.noteIndex)));
   actions.appendChild(notebookButton("Unpin", "is-danger", () => removeFromNotebook("pin", item.id, item.title)));
   card.append(head, meta, actions);
   return card;
@@ -2287,11 +2303,13 @@ async function runKbSearch(query) {
       row.dataset.noteIndex = String(note.noteIndex ?? "");
       if (note.noteIndex != null) row.id = `kb-result-${note.noteIndex}`;
       row.setAttribute("aria-label", `Open note: ${note.t || "(untitled)"}`);
+      const href = noteHrefAt(note.noteIndex);
+      if (href) row.dataset.href = href;
       const body = document.createElement("div");
       body.className = "assignment-body";
       const title = document.createElement("div");
       title.className = "title";
-      title.textContent = note.t || "(untitled)";
+      title.appendChild(cardTitleLink(note.t || "(untitled)", href, () => openKbNote(note.noteIndex)));
       body.appendChild(title);
       const meta = document.createElement("div");
       meta.className = "meta";
@@ -2659,11 +2677,13 @@ async function openCourse(course, year = "") {
           row.setAttribute("role", "button");
           row.dataset.noteIndex = String(note.noteIndex ?? "");
           row.setAttribute("aria-label", `Open note: ${note.t || "(untitled)"}`);
+          const href = noteHrefAt(note.noteIndex);
+          if (href) row.dataset.href = href;
           const body = document.createElement("div");
           body.className = "assignment-body";
           const title = document.createElement("div");
           title.className = "title";
-          title.textContent = note.t || "(untitled)";
+          title.appendChild(cardTitleLink(note.t || "(untitled)", href, () => openKbNote(note.noteIndex)));
           body.appendChild(title);
           const meta = document.createElement("div");
           meta.className = "meta";
@@ -2761,16 +2781,13 @@ async function renderRelatedPreview(container, noteIndex, { restoreFocus = false
     tag.textContent = "Related:";
     container.appendChild(tag);
     for (const rel of related) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "kb-chip kb-related-preview-chip";
+      // A link: middle-click opens it in a new tab. linkTo stops the click
+      // reaching the parent card, which used to be done here by hand.
+      const b = linkTo(document.createElement("a"), noteHrefAt(rel.noteIndex), () => openKbNote(rel.noteIndex));
+      b.className = "btn-link kb-chip kb-related-preview-chip";
       b.title = "Open related note";
       // Only show the title in the compact chip; meta on hover via title.
       b.textContent = rel.t || "(untitled)";
-      b.addEventListener("click", (ev) => {
-        ev.stopPropagation(); // don't also open the parent card
-        openKbNote(rel.noteIndex);
-      });
       container.appendChild(b);
     }
     restoreParentFocus();
@@ -3670,12 +3687,10 @@ function linkTutorCitations(messageEl, sources) {
         frag.appendChild(document.createTextNode(part));
         continue;
       }
-      const cite = document.createElement("button");
-      cite.type = "button";
+      const cite = linkTo(document.createElement("a"), noteHrefAt(source.noteIndex), () => openKbNote(source.noteIndex));
       cite.className = "ai-cite";
       cite.textContent = part;
       cite.title = `Open “${source.t || "this note"}”`;
-      cite.addEventListener("click", () => openKbNote(source.noteIndex));
       frag.appendChild(cite);
     }
     node.replaceWith(frag);
@@ -3724,14 +3739,12 @@ function renderTutorSources(container, notes) {
   lbl.textContent = `Sources used (${chips.length})`;
   wrap.appendChild(lbl);
   for (const c of chips) {
-    const b = document.createElement("button");
-    b.type = "button";
-    b.className = "kb-chip kb-source-chip";
+    const b = linkTo(document.createElement("a"), noteHrefAt(c.noteIndex), () => openKbNote(c.noteIndex));
+    b.className = "btn-link kb-chip kb-source-chip";
     b.title = "Open this note";
     b.innerHTML = `<span class="kb-chip-title"></span><span class="kb-chip-sub"></span>`;
     b.querySelector(".kb-chip-title").textContent = c.title;
     if (c.subtitle) b.querySelector(".kb-chip-sub").textContent = c.subtitle;
-    b.addEventListener("click", () => openKbNote(c.noteIndex));
     wrap.appendChild(b);
   }
   // Replaces the "Grounded in N notes" line rather than stacking under it —
@@ -3766,6 +3779,44 @@ function openTutorFocus() {
   };
 }
 
+/** The address of the note at `index` in the current bundle, or "". */
+function noteHrefAt(index) {
+  const note = Number.isInteger(index) ? localKbBundle?.notes?.[index] : null;
+  return note ? noteHref(noteKey(note)) : "";
+}
+
+/** A card's title as a real link to the note, opening in place on a plain click. */
+function cardTitleLink(text, href, open) {
+  const link = document.createElement("a");
+  link.className = "card-title-link";
+  link.textContent = text;
+  // The card is the keyboard target (role=button, tabindex 0); the title link
+  // is for the mouse, so it stays out of the tab order.
+  link.tabIndex = -1;
+  if (href) linkTo(link, href, open);
+  return link;
+}
+
+/**
+ * Open a note by its stable key — what a #note= address carries, so a note
+ * opened in a new tab finds itself again after a rebuild renumbers the bundle.
+ * A key that no longer matches falls back to searching for its title.
+ */
+export async function openKbNoteByKey(key) {
+  showKbView();
+  if (!localKbBundle?.notes?.length) {
+    try { localKbBundle = await loadKbBundle(); } catch { /* handled below */ }
+  }
+  const index = noteKeyIndex(localKbBundle?.notes).get(key);
+  if (index == null) {
+    const title = parseNoteKey(key).title;
+    if (title) kbSearchTopic(title);
+    return false;
+  }
+  await openKbNote(index);
+  return true;
+}
+
 async function openKbNote(index) {
   openNoteIndex = Number.isInteger(index) ? index : null;
   const modal = $("kbNoteModal");
@@ -3794,12 +3845,14 @@ async function openKbNote(index) {
       metaEl.appendChild(renderNotePinButton(note));
     }
     markNoteProgress(index);
-    // Prefer the full body, fall back to summary. renderLightMarkdown escapes
-    // HTML and turns markdown links ([text](url)) into clickable <a> tags, so
-    // teacher materials + student submission links are actually clickable.
+    // Prefer the full body, fall back to summary. renderRichMarkdown escapes
+    // HTML first (links still become clickable <a> tags) and, unlike the light
+    // renderer this used, draws tables and Obsidian callouts — which showed as
+    // raw "| word | synonym |" and "> [!note]" lines, although #kbNoteBody
+    // already had callout styles waiting for them.
     const fullText = (note.x || note.s || "").trim();
     if (fullText) {
-      bodyEl.innerHTML = renderLightMarkdown(fullText);
+      bodyEl.innerHTML = renderRichMarkdown(fullText);
     } else {
       bodyEl.innerHTML = `<div class="empty">This note has no body text.</div>`;
     }
@@ -3856,9 +3909,8 @@ async function renderRelatedNotes(index) {
     related = related.slice(0, 3);
     if (!related.length) return;
     for (const rel of related) {
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "kb-related-item";
+      const item = linkTo(document.createElement("a"), noteHrefAt(rel.noteIndex), () => openKbNote(rel.noteIndex));
+      item.className = "btn-link kb-related-item";
       const title = document.createElement("span");
       title.className = "kb-related-item-title";
       title.textContent = rel.t || "(untitled)";
@@ -3867,7 +3919,6 @@ async function renderRelatedNotes(index) {
       meta.className = "kb-related-item-meta";
       meta.textContent = [rel.course, rel.y].filter(Boolean).join(" · ");
       item.appendChild(meta);
-      item.addEventListener("click", () => openKbNote(rel.noteIndex));
       list.appendChild(item);
     }
     wrap.hidden = false;

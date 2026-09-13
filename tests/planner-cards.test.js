@@ -154,3 +154,22 @@ test("a missing or unparseable timestamp is not new", () => {
   assert.equal(postedSinceYesterday(undefined, now), false);
   assert.equal(postedSinceYesterday("not a date", now), false);
 });
+
+import { groupPendingByDay } from "../planner-cards.js";
+
+test("everything else pending is ordered by date, not grouped by class", () => {
+  const items = [
+    { id: "zoology-tomorrow", course: "Zoology", d: 1 },
+    { id: "art-in-9", course: "Art", d: 9 },
+    { id: "undated", course: "Art", d: null },
+    { id: "late-2", course: "Maths", d: -2 },
+    { id: "late-5", course: "ELA", d: -5 },
+    { id: "ela-tomorrow", course: "ELA", d: 1 },
+  ];
+  const groups = groupPendingByDay(items, (a) => a.d);
+  assert.deepEqual(groups.map((g) => g.key), ["overdue", "day-1", "day-9", "undated"]);
+  assert.deepEqual(groups[0].items.map((a) => a.id), ["late-5", "late-2"], "oldest overdue first");
+  assert.deepEqual(groups[1].items.map((a) => a.id), ["zoology-tomorrow", "ela-tomorrow"]);
+  assert.equal(groups[1].dayOffset, 1);
+  assert.deepEqual(groupPendingByDay([], () => 0), []);
+});

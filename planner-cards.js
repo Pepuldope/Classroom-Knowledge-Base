@@ -124,3 +124,38 @@ export function postedSinceYesterday(creationTime, now = new Date()) {
   since.setDate(since.getDate() - 1);
   return created >= since;
 }
+
+/**
+ * "Everything else pending", in date order.
+ *
+ * It was grouped by class — every course a heading, deadlines sorted only
+ * inside each — so the next thing due could be the last card on the page under
+ * a class starting with Z. One list by deadline instead, headed by day: overdue
+ * first, then each due day, then work with no deadline at all.
+ *
+ * `dayOffset(item)` returns whole days until the item is due (negative when
+ * late) or null for no deadline; days, not times, because that is what the
+ * headings show and what the rest of the Planner already counts in.
+ */
+export function groupPendingByDay(items, dayOffset) {
+  const list = Array.isArray(items) ? items : [];
+  const overdue = [];
+  const days = new Map();
+  const undated = [];
+  for (const item of list) {
+    const d = dayOffset(item);
+    if (d == null || !Number.isFinite(d)) undated.push(item);
+    else if (d < 0) overdue.push({ item, d });
+    else {
+      if (!days.has(d)) days.set(d, []);
+      days.get(d).push(item);
+    }
+  }
+  const groups = [];
+  if (overdue.length) {
+    groups.push({ key: "overdue", dayOffset: null, items: overdue.sort((a, b) => a.d - b.d).map((x) => x.item) });
+  }
+  for (const d of [...days.keys()].sort((a, b) => a - b)) groups.push({ key: `day-${d}`, dayOffset: d, items: days.get(d) });
+  if (undated.length) groups.push({ key: "undated", dayOffset: null, items: undated });
+  return groups;
+}

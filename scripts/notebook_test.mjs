@@ -112,7 +112,7 @@ try {
   console.log("✓ rename sticks; search filters by title and by source, ignoring diacritics");
 
   // A source opens its note.
-  await page.locator(".kb-notebook-item.is-answer button.kb-notebook-source").first().click();
+  await page.locator(".kb-notebook-item.is-answer a.kb-notebook-source").first().click();
   await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
   assert.equal(await page.locator("#kbNoteTitle").textContent(), "Všeobecný vzorec a diskriminant");
   await page.click("#kbNoteClose");
