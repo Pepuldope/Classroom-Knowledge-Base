@@ -64,6 +64,32 @@ test("the matrix is derived from notes, not the courses array", () => {
   assert.equal(rows[0].byYear.size, 2);
 });
 
+test("\"ran across multiple years\" filters, instead of being a caption", () => {
+  // It was a legend: a swatch and those words, styled like every other control
+  // in the bar, doing nothing when pressed. Peter, 2026-09-16: "does not work
+  // or do anything."
+  const bundle = {
+    notes: [
+      note({ course: "Matematika Y3", y: "2023-24" }),
+      note({ course: "Matematika Y4", y: "2024-25" }),
+      note({ course: "Dejepis", y: "2024-25" }),
+    ],
+  };
+  const all = curriculumModel(bundle);
+  assert.equal(all.rows.length, 2, "both subjects show by default");
+
+  const onlyMulti = curriculumModel(bundle, { multiYearOnly: true });
+  assert.equal(onlyMulti.rows.length, 1, "the filter did nothing");
+  assert.equal(onlyMulti.rows[0].multiYear, true);
+  assert.equal(onlyMulti.totalRows, 2, "the count still reports the whole corpus");
+  assert.equal(onlyMulti.filtered, true);
+  // Columns with nothing left in them go too.
+  assert.deepEqual(onlyMulti.years, ["2023-24", "2024-25"]);
+
+  // It composes with the search box rather than replacing it.
+  assert.equal(curriculumModel(bundle, { multiYearOnly: true, q: "dejepis" }).rows.length, 0);
+});
+
 test("same subject across years and tracks lands on one row", () => {
   const bundle = {
     notes: [

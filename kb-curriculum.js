@@ -28,6 +28,11 @@ export function curriculumControlsModel(value = {}) {
     yearFrom: String(value?.yearFrom == null ? "" : value.yearFrom).trim(),
     yearTo: String(value?.yearTo == null ? "" : value.yearTo).trim(),
     sort,
+    // Show only subjects that ran across two or more years. This used to be a
+    // legend — a swatch and the words "ran across multiple years" — which
+    // looked exactly like every other control in the bar and did nothing when
+    // clicked. Peter, 2026-09-16: "does not work or do anything."
+    multiYearOnly: !!value?.multiYearOnly,
   };
 }
 
@@ -135,6 +140,7 @@ export function curriculumModel(bundle, controls = {}) {
 
   const sorted = [...rows.values()]
     .map((row) => ({ ...row, multiYear: row.byYear.size >= 2 }))
+    .filter((row) => !opts.multiYearOnly || row.multiYear)
     .filter(matches)
     .sort((a, b) => {
       if (opts.sort === "alpha") return a.label.localeCompare(b.label);
@@ -280,14 +286,24 @@ function curriculumControlsBar(opts, allYears, shownRows, totalRows, filtered, o
   spacer.className = "kb-controls-spacer";
   bar.appendChild(spacer);
 
-  const legend = document.createElement("span");
+  // A real control, because it already read as one. The swatch stays: it is
+  // still the key to the tinted rows, it is just now also the thing you press
+  // to see only those rows.
+  const legend = document.createElement("button");
+  legend.type = "button";
+  legend.id = "kbCurriculumMultiYear";
   legend.className = "kb-controls-legend";
+  legend.setAttribute("aria-pressed", String(opts.multiYearOnly));
+  legend.title = opts.multiYearOnly
+    ? "Showing only subjects that ran across more than one year — click to show all"
+    : "Show only subjects that ran across more than one year";
   const swatch = document.createElement("span");
   swatch.className = "kb-controls-swatch";
   swatch.setAttribute("aria-hidden", "true");
   const legendText = document.createElement("span");
   legendText.textContent = "ran across multiple years";
   legend.append(swatch, legendText);
+  legend.addEventListener("click", () => emit({ multiYearOnly: !opts.multiYearOnly }));
   bar.appendChild(legend);
 
   const count = document.createElement("span");
@@ -299,7 +315,7 @@ function curriculumControlsBar(opts, allYears, shownRows, totalRows, filtered, o
     : `${totalRows} subject${totalRows === 1 ? "" : "s"}`;
   bar.appendChild(count);
 
-  const isDefault = !opts.q && !opts.yearFrom && !opts.yearTo && opts.sort === DEFAULT_CURRICULUM_SORT;
+  const isDefault = !opts.q && !opts.yearFrom && !opts.yearTo && opts.sort === DEFAULT_CURRICULUM_SORT && !opts.multiYearOnly;
   if (!isDefault) {
     const reset = document.createElement("button");
     reset.type = "button";

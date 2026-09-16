@@ -2847,7 +2847,29 @@ summary::-webkit-details-marker { color: var(--muted); }
 .kb-controls-reset { font-size: 0.8rem; }
 .kb-controls-count { font-size: 0.8rem; color: var(--muted); white-space: nowrap; }
 /* Explains the tinted Curriculum rows. */
-.kb-controls-legend { display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.78rem; color: var(--muted); white-space: nowrap; }
+/* It is a button now, not a caption. It always looked like one, which is why
+   it was reported as broken — so it reads as pressable and shows its state. */
+.kb-controls-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+}
+.kb-controls-legend:hover { border-color: var(--border); color: var(--text); }
+.kb-controls-legend:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.kb-controls-legend[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+  color: var(--text);
+  font-weight: 500;
+}
 .kb-controls-swatch {
   width: 0.85rem;
   height: 0.85rem;

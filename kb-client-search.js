@@ -632,23 +632,114 @@ export function suggestCorrection(notes, query, { hasResults = null } = {}) {
   return correctedQuery;
 }
 
+// ---------------------------------------------------------------------------
+// Class categories ("class type" in the UI).
+//
+// These were ten unanchored substring rules run against the raw course name,
+// first match wins, and they got a measurable number of real courses wrong:
+//
+//   ELA Y2 Digi            -> Digital/IT   (the TRACK decided the subject)
+//   MATURITA SJL           -> Science/Math (maturita is not a subject)
+//   MATURITA INFO Y4       -> Science/Math (it is the IT one)
+//   Transport and Logistics-> PE           ("tran-SPORT")
+//   Kartografia            -> Arts         ("k-ART-ografia")
+//   Telesna vychova        -> (none)       (PE, written without accents)
+//
+// Three causes, fixed three ways:
+//
+//  1. TRACK AND YEAR TOKENS ARE NOT SUBJECTS. "Digi", "Lambda", "Y2", "Sem1"
+//     name which stream a student is in. archive-builder.js already knows this
+//     — subjectKeyOf strips exactly these tokens — and this function did not,
+//     so "Digi" outranked "ELA". They are dropped before any rule is tried.
+//  2. "maturita" IS NOT A SUBJECT EITHER. It is the school-leaving exam, and
+//     there is one in every subject. It was filed under Science/Math, so every
+//     maturita course landed there whatever it was about. It is dropped too,
+//     which lets the subject standing next to it decide.
+//  3. SHORT TOKENS MATCHED INSIDE LONGER WORDS. "art", "sport", "glo", "ela",
+//     "pe", "inf" are matched as whole tokens now. The long, unambiguous ones
+//     ("matemat", "geograf", "engineering") still match as substrings, because
+//     that is what catches "Matematika" and "Matematiky" without listing every
+//     inflection Slovak has.
+//
+// Perfect accuracy is not the goal and is not reachable from a course name —
+// which is why a student can override any of these by hand; see
+// classFamilyOverridesModel. This only has to be right often enough that the
+// override list stays short.
+// ---------------------------------------------------------------------------
+
+/** Tokens that name a year, a track or an exam format rather than a subject. */
+const NON_SUBJECT_TOKEN_RE = /^(y\d+|\d+|i{1,3}|t|sem\d*|digi|lambda|epsilon|delta|omega|alpha|beta|gamma|maturita|maturity|skupina|group|trieda|class)$/;
+
+/** Whole-token rules: the token must stand alone to count. */
+const FAMILY_TOKEN_RULES = [
+  [["beng", "eng"], "Engineering"],
+  [["inf", "info", "it", "ict"], "Digital/IT"],
+  [["ela", "sjl", "anj", "nej", "kuj", "slj"], "Language"],
+  [["mat", "fyz", "che", "bio"], "Science/Math"],
+  [["glo", "dej", "obn", "geo"], "Humanities"],
+  [["pe", "tsv", "tev"], "PE"],
+  [["vyv", "huv"], "Arts"],
+  [["vspv", "vpv"], "Teaching"],
+];
+
+/** Substring rules, for words long enough that a substring cannot lie. */
+const FAMILY_SUBSTRING_RULES = [
+  [/engineering/, "Engineering"],
+  [/informat|databaz|computer|program|kodovan|coding|softver|software/, "Digital/IT"],
+  [/english|jazyk|sloven|literat|language|nemcin|anglict/, "Language"],
+  [/fyzika|physics|chem|biolog|matemat|\bmath/, "Science/Math"],
+  [/geograf|kartograf|histor|dejepis|spolocen|humanit|obcian|etika|nabozen/, "Humanities"],
+  [/business|ekonom|strateg|podnikan|marketing|uctovn/, "Business"],
+  [/buducnost|buducnos|future|career|karier/, "Careers"],
+  [/ucitel|pedagog|teaching/, "Teaching"],
+  [/telesna|telocvik|sportov|\bsport\b/, "PE"],
+  [/vytvar|hudob|hudba|\bart\b|\barts\b|music|drama|dizajn|design/, "Arts"],
+];
+
+/** Lowercase, strip accents, split into tokens, drop the ones that name no subject. */
+export function subjectTokens(course = "") {
+  const folded = String(course || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+  const tokens = folded.match(/[a-z0-9]+/g) || [];
+  return tokens.filter((tok) => !NON_SUBJECT_TOKEN_RE.test(tok));
+}
+
+/**
+ * The class category for a course name, or "" when nothing is confident.
+ *
+ * Whole-token rules run FIRST: a course called "MATURITA INFO Y4" should be
+ * decided by "info", not by whatever substring happens to appear somewhere in
+ * the name.
+ */
 export function deriveFamily(course = "") {
-  const c = String(course || "");
-  const rules = [
-    [/beng|b\.?eng|engineering/i, "Engineering"],
-    [/digi|datab[aá]zy|informat|computer|program/i, "Digital/IT"],
-    [/ela|english|jazyk|kuj|sloven|language/i, "Language"],
-    [/fyzika|physics|chem|biol|math|matemat|maturita/i, "Science/Math"],
-    [/glo|geograf|hist|dejepis|spolo|humanit/i, "Humanities"],
-    [/business|ekonom|strateg/i, "Business"],
-    [/bud[uú]cnos?[ťt]|future|career|kari[eé]r/i, "Careers"],
-    [/v[šs]?pv|u[cč]itel|pedagog/i, "Teaching"],
-    [/šport|sport|telocvik|\bpe\b/i, "PE"],
-    [/v[ýy]tvar|hudob|hudba|art|music|drama/i, "Arts"],
-  ];
-  for (const [re, family] of rules) if (re.test(c)) return family;
+  const tokens = subjectTokens(course);
+  if (tokens.length === 0) return "";
+  const set = new Set(tokens);
+  for (const [needles, family] of FAMILY_TOKEN_RULES) {
+    if (needles.some((n) => set.has(n))) return family;
+  }
+  const text = tokens.join(" ");
+  for (const [re, family] of FAMILY_SUBSTRING_RULES) {
+    if (re.test(text)) return family;
+  }
   return "";
 }
+
+/** Every category the rules can produce, for the override picker. */
+export const CLASS_FAMILIES = [
+  "Language",
+  "Science/Math",
+  "Humanities",
+  "Digital/IT",
+  "Engineering",
+  "Business",
+  "Careers",
+  "Teaching",
+  "PE",
+  "Arts",
+];
 
 // --- recency as part of relevance ------------------------------------------
 // What a student is studying now is usually what they are searching for, so a
