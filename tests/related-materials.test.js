@@ -17,6 +17,19 @@ const CLASS_POSTS = [
   { id: "m4", kind: "material", title: "Lesson slides week 2", courseId: "c-ela4", creationTime: "2026-09-08T08:00:00Z" },
 ];
 
+test("each suggestion carries the id of the post it points at", () => {
+  // The UI opens the post in the assignment panel rather than bouncing out to
+  // Classroom, so it needs the id. api/tutor.js whitelists the fields it
+  // forwards to a prompt, and the id is not one of them.
+  const found = relatedCourseMaterials(QUIZ, CLASS_POSTS);
+  assert.ok(found.length > 0, "the fixture should produce at least one suggestion");
+  for (const suggestion of found) {
+    assert.equal(typeof suggestion.id, "string");
+    assert.ok(suggestion.id, `"${suggestion.title}" came back without an id`);
+    assert.ok(CLASS_POSTS.some((post) => post.id === suggestion.id), "the id names no post in the class");
+  }
+});
+
 test("the handout posted next to the quiz is found", () => {
   const found = relatedCourseMaterials(QUIZ, CLASS_POSTS);
   assert.equal(found[0].title, "Vocabulary — synonyms, similes, idioms");

@@ -17,6 +17,8 @@ export const POSITION_VIEWS = ["planner", "kb"];
 export const POSITION_TABS = ["search", "browse", "curriculum", "manage"];
 /** Longer than any real search; the cap keeps a pasted essay out of storage. */
 export const MAX_POSITION_QUERY = 200;
+/** Classroom ids are short; the cap is only to stop anything else being stored here. */
+export const MAX_POSITION_ASSIGNMENT = 120;
 
 /** Normalize a stored position; unknown routes and tabs never survive. */
 export function sessionPositionModel(value = {}) {
@@ -27,10 +29,21 @@ export function sessionPositionModel(value = {}) {
     tab: POSITION_TABS.includes(input.tab) ? input.tab : "search",
     query: typeof input.query === "string" ? input.query.slice(0, MAX_POSITION_QUERY) : "",
     scroll: Number.isFinite(scroll) && scroll > 0 ? Math.round(scroll) : 0,
+    // The assignment left open on the Planner. Switching to Study hides the
+    // panel rather than forgetting it, so switching back shows it again.
+    // An opaque Classroom id, not the reader's words — unlike `query`.
+    assignment: typeof input.assignment === "string" ? input.assignment.slice(0, MAX_POSITION_ASSIGNMENT) : "",
   };
 }
 
-/** True when the stored position differs from where a cold load would land. */
+/**
+ * True when the stored position differs from where a cold load would land.
+ *
+ * Deliberately blind to `assignment`. Reopening a panel is not "where on the
+ * page you were" — it needs the Planner's list to have arrived from Classroom
+ * first — so it is restored by the route switch that can actually satisfy it,
+ * not by the boot-time scroll restore this gates.
+ */
 export function positionNeedsRestore(value) {
   const p = sessionPositionModel(value);
   return p.view !== "planner" || p.tab !== "search" || p.query !== "" || p.scroll > 0;

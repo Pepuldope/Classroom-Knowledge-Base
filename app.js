@@ -999,8 +999,12 @@ function setView(view) {
   saveSessionPosition({ view });
   const plannerView = $("plannerView");
   const kbView = $("kbView");
+  // Before the views swap: the panel belongs to the Planner, and hiding it
+  // after Study has painted is a visible flash of the sheet over the new page.
+  if (view === "kb") stashAssignmentPanel();
   if (plannerView) plannerView.hidden = view === "kb";
   if (kbView) kbView.hidden = view !== "kb";
+  if (view === "planner") restoreAssignmentPanel();
   if (view !== "kb") {
     const kbNoteModal = $("kbNoteModal");
     const kbTutorModal = $("kbTutorModal");
@@ -1083,6 +1087,64 @@ function renderLibraryStrip(a) {
     const meta = document.createElement("div");
     meta.className = "archive-strip-meta";
     meta.textContent = [note.course, note.y, note.topic].filter(Boolean).join(" · ");
+
+    chip.append(title, meta);
+    row.appendChild(chip);
+  }
+  strip.appendChild(row);
+  strip.hidden = false;
+}
+
+/**
+ * The class material this assignment is probably referring to.
+ *
+ * relatedCourseMaterials has been computed on every open since it was written,
+ * and handed to the tutor — which is how the tutor could say "the handout is
+ * probably the Tuesday material" while the student had no way to see the same
+ * list. The data and the API both supported it; only the UI did not.
+ *
+ * Presented as a guess, because it is one: the scorer infers the link from a
+ * shared course, title overlap and posting date, since Classroom's own data
+ * does not record it. Each chip opens that post in this same panel rather than
+ * bouncing out to Classroom, and is a real link so it can open in a new tab.
+ */
+function renderRelatedMaterials(a) {
+  const strip = $("aiRelatedMaterials");
+  if (!strip) return;
+  strip.hidden = true;
+  strip.innerHTML = "";
+  const related = relatedCourseMaterials(a, allAssignments);
+  if (related.length === 0) return;
+
+  const label = document.createElement("div");
+  label.className = "archive-strip-label";
+  label.textContent = "Probably the material for this";
+  strip.appendChild(label);
+
+  const row = document.createElement("div");
+  row.className = "archive-strip-row";
+  for (const material of related) {
+    const target = allAssignments.find((item) => item.id === material.id);
+    const chip = document.createElement("a");
+    chip.className = "btn-link archive-strip-item";
+    if (target) {
+      linkTo(chip, assignmentHref(target.id), () => openAi(target));
+    } else if (material.link) {
+      // Not in the loaded window (out of scope, or an older post): Classroom
+      // can still show it.
+      chip.href = material.link;
+      chip.target = "_blank";
+      chip.rel = "noopener";
+    }
+
+    const title = document.createElement("div");
+    title.className = "archive-strip-title";
+    title.textContent = material.title;
+
+    const meta = document.createElement("div");
+    meta.className = "archive-strip-meta";
+    meta.textContent = [material.kind === "material" ? "Class material" : "Assignment", material.why]
+      .filter(Boolean).join(" · ");
 
     chip.append(title, meta);
     row.appendChild(chip);
@@ -1810,6 +1872,12 @@ async function loadReport(epoch) {
   setStatus("");
 
   pruneChats(inScope.map((a) => a.id));
+
+  // The list has only just arrived, so this is the first moment a remembered
+  // assignment can be looked up. It covers the reload case — and on a phone a
+  // reload is not a deliberate act: an over-scroll at the top of the Planner
+  // IS pull-to-refresh, which is the accident session-position.js exists for.
+  if (currentView === "planner") restoreAssignmentPanel();
 
   if (need.length > 0) {
     let remaining = need.length;
@@ -2727,6 +2795,7 @@ async function openAi(a) {
     grounding.querySelector(".ai-grounding-sources").textContent = `Sources: ${tutorContext.sources.join(" · ")}`;
   }
   renderLibraryStrip(a);
+  renderRelatedMaterials(a);
   renderChatHistory();
   $("aiInput").placeholder = a.kind === "material" ? "Ask about this material…" : "Ask about this assignment…";
   renderQuickPrompts(DEFAULT_QUICK_PROMPTS);
@@ -2896,7 +2965,12 @@ function unlockBackgroundScroll() {
   window.scrollTo(0, y);
 }
 
-function closeAssignmentPanel() {
+/**
+ * `remember: true` hides the panel but keeps the assignment as the Planner's
+ * state, so switching to Study and back shows it again. Every other close —
+ * the ×, the scrim, a flick, Escape — means the reader is done with it.
+ */
+function closeAssignmentPanel({ remember = false } = {}) {
   const panel = $("ai");
   if (!panel || panel.hidden) return false;
   panel.hidden = true;
@@ -2908,12 +2982,51 @@ function closeAssignmentPanel() {
   const scrim = $("aiScrim");
   if (scrim) scrim.hidden = true;
   unlockBackgroundScroll();
+  if (!remember) stashAssignment("");
   activeAssignment = null;
   activeLibraryNotes = [];
   return true;
 }
 
-$("aiClose").addEventListener("click", closeAssignmentPanel);
+// ---------------------------------------------------------------------------
+// The open assignment is part of where you are.
+//
+// Pepuldo, 2026-09-16: "When you click on an assignment, it should stay open as
+// a part of the study/planner page. When you go to other page while having it
+// out, it goes away but when coming back, it shows itself."
+//
+// This also answers the phone report that the material suggestions could not be
+// opened with an assignment open: the "From your notes" chips switch to Study,
+// and the sheet is full-screen, so the note they opened was underneath it and
+// nothing appeared to happen. Leaving now hides the sheet; coming back restores
+// it. On the desktop rail the panel was never in the way, which is why this
+// only ever looked broken on a phone.
+// ---------------------------------------------------------------------------
+function stashAssignment(id) {
+  saveSessionPosition({ assignment: id });
+}
+
+function stashAssignmentPanel() {
+  const panel = $("ai");
+  if (!panel || panel.hidden || !activeAssignment) return;
+  const id = activeAssignment.id;
+  closeAssignmentPanel({ remember: true });
+  stashAssignment(id);
+}
+
+function restoreAssignmentPanel() {
+  const id = loadSessionPosition().assignment;
+  if (!id || activeAssignment) return;
+  // The list arrives from Classroom after boot. Until it does there is nothing
+  // to look the id up in, and a miss then would throw the record away for a
+  // reason that has nothing to do with the assignment still existing.
+  if (allAssignments.length === 0) return;
+  const a = allAssignments.find((item) => item.id === id);
+  if (!a) { stashAssignment(""); return; }
+  openAi(a);
+}
+
+$("aiClose").addEventListener("click", () => closeAssignmentPanel());
 
 // Tapping the page above the sheet dismisses it — and stops there. The scrim
 // is what makes the second half true: before it, the tap went through to the

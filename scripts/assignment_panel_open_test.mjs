@@ -28,7 +28,7 @@ const WORK = {
   dueDate: { year: tomorrow.getFullYear(), month: tomorrow.getMonth() + 1, day: tomorrow.getDate() },
 };
 
-async function openPlannerWithOneAssignment(context, { chatDelayMs = 0, chatMessages = [] } = {}) {
+async function openPlannerWithOneAssignment(context, { chatDelayMs = 0, chatMessages = [], extraWork = [] } = {}) {
   const page = await context.newPage();
   let chatCalls = 0;
   // Registration order matters and is COUNTER-INTUITIVE: Playwright matches
@@ -46,8 +46,8 @@ async function openPlannerWithOneAssignment(context, { chatDelayMs = 0, chatMess
   await page.route("**/accounts.google.com/**", (r) => r.fulfill({ status: 204, body: "" }));
   await page.route("https://classroom.googleapis.com/**", (r) => {
     const url = r.request().url();
-    const body = url.includes("/courseWork?") ? { courseWork: [WORK] }
-      : url.includes("studentSubmissions") ? { studentSubmissions: [{ courseWorkId: "w1", state: "CREATED" }] }
+    const body = url.includes("/courseWork?") ? { courseWork: [WORK, ...extraWork] }
+      : url.includes("studentSubmissions") ? { studentSubmissions: [{ courseWorkId: "w1", state: "CREATED" }, ...extraWork.map((w) => ({ courseWorkId: w.id, state: "CREATED" }))] }
       : url.includes("/courses?") ? { courses: [COURSE] }
       : {};
     return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
@@ -188,6 +188,101 @@ try {
   assert.equal(atBottom.jumpHidden, true, "Latest is still offering to do what it just did");
   await phone3.close();
   console.log("✓ a saved conversation opens at the assignment's details, and Latest jumps to the tail");
+
+  // --- the open assignment survives a trip to Study, and only a trip -------
+  // Pepuldo, 2026-09-16: "When you click on an assignment, it should stay open
+  // as a part of the study/planner page. When you go to other page while
+  // having it out, it goes away but when coming back, it shows itself." The
+  // same mechanism is why the material suggestions were unreachable on a
+  // phone: the "From your notes" chips switch to Study, and the full-screen
+  // sheet stayed on top of the note they opened.
+  //
+  // The route change is dispatched on the button itself rather than clicked at
+  // its coordinates: on a phone the scrim deliberately covers the switcher, so
+  // a positional tap is a dismissal by design. What is under test is what
+  // setView does when a route change arrives with a panel open — which is the
+  // path the in-sheet chips take.
+  const switchTo = (page, view) => page.evaluate(
+    (v) => document.querySelector(`.view-toggle-btn[data-view="${v}"]`).click(), view);
+
+  const phone4 = await browser.newContext({ ...devices["iPhone 13"] });
+  const { page: navPage } = await openPlannerWithOneAssignment(phone4);
+  await navPage.locator(".assignment").first().click();
+  await navPage.waitForSelector("#ai:not([hidden])", { timeout: 5000 });
+  const title = await navPage.locator("#aiTitle").textContent();
+
+  await switchTo(navPage, "kb");
+  await navPage.waitForTimeout(300);
+  const onStudy = await navPage.evaluate(() => ({
+    sheetHidden: document.getElementById("ai").hidden,
+    scrimHidden: document.getElementById("aiScrim").hidden,
+    studyVisible: !document.getElementById("kbView").hidden,
+    bodyLocked: getComputedStyle(document.body).position === "fixed",
+  }));
+  assert.equal(onStudy.studyVisible, true, "Study did not come up");
+  assert.equal(onStudy.sheetHidden, true, "the sheet stayed over the Study page — this is the phone report");
+  assert.equal(onStudy.scrimHidden, true, "the scrim stayed over the Study page");
+  assert.equal(onStudy.bodyLocked, false, "the background scroll lock outlived the sheet");
+
+  await switchTo(navPage, "planner");
+  await navPage.waitForSelector("#ai:not([hidden])", { timeout: 5000 });
+  assert.equal(await navPage.locator("#aiTitle").textContent(), title,
+    "coming back to the Planner did not show the assignment again");
+
+  // Closing it means closing it: that must not come back.
+  await navPage.locator("#aiClose").click();
+  await switchTo(navPage, "kb");
+  await navPage.waitForTimeout(200);
+  await switchTo(navPage, "planner");
+  await navPage.waitForTimeout(400);
+  assert.equal(await navPage.evaluate(() => document.getElementById("ai").hidden), true,
+    "an assignment the reader closed came back on its own");
+  await phone4.close();
+  console.log("✓ an open assignment hides for Study and returns with the Planner; a closed one stays closed");
+
+  // --- the class material an assignment is probably referring to -----------
+  // relatedCourseMaterials has been computed on every open since it was
+  // written and handed to the tutor, so the tutor could point at the handout
+  // while the student had no way to see the same list. Peter, 2026-09-16:
+  // related notes/materials on assignments, phone and iPad.
+  const SIBLING = {
+    id: "w2", courseId: "c1", title: "Pitch deck template and checklist", workType: "ASSIGNMENT",
+    state: "PUBLISHED", alternateLink: "https://classroom.google.com/c/x/a/z/details",
+    creationTime: new Date().toISOString(), updateTime: new Date().toISOString(),
+    dueDate: { year: tomorrow.getFullYear(), month: tomorrow.getMonth() + 1, day: tomorrow.getDate() },
+  };
+  const phone5 = await browser.newContext({ ...devices["iPhone 13"] });
+  const { page: matPage } = await openPlannerWithOneAssignment(phone5, { extraWork: [SIBLING] });
+  await matPage.locator(".assignment").first().click();
+  await matPage.waitForSelector("#ai:not([hidden])", { timeout: 5000 });
+
+  const strip = await matPage.evaluate(() => {
+    const el = document.getElementById("aiRelatedMaterials");
+    const scroll = document.getElementById("aiScroll");
+    return {
+      hidden: el.hidden,
+      label: el.querySelector(".archive-strip-label")?.textContent,
+      titles: [...el.querySelectorAll(".archive-strip-title")].map((t) => t.textContent),
+      insideScroller: scroll.contains(el),
+      overflows: el.scrollWidth > el.clientWidth + 1,
+    };
+  });
+  assert.equal(strip.hidden, false, "the suggested class material is not shown on a phone");
+  assert.equal(strip.insideScroller, true, "the strip must scroll with the sheet's body");
+  assert.equal(strip.overflows, false, "the strip spills sideways out of the sheet");
+  assert.ok(strip.titles.some((t) => t.includes("Pitch deck template")),
+    `expected the sibling post among ${JSON.stringify(strip.titles)}`);
+
+  // Tapping one opens it here, rather than bouncing out to Classroom — which
+  // is the half that was unreachable on a phone.
+  await matPage.locator("#aiRelatedMaterials .archive-strip-item").first().click();
+  await matPage.waitForFunction(
+    () => document.getElementById("aiTitle").textContent.includes("Pitch deck template"),
+    null, { timeout: 5000 });
+  assert.equal(await matPage.evaluate(() => document.getElementById("ai").hidden), false,
+    "opening a suggestion closed the panel instead of showing it");
+  await phone5.close();
+  console.log(`✓ the suggested class material shows on a phone and opens in the panel (${strip.titles.length} suggestion(s))`);
 
   console.log(`✓ panel opens immediately on tap; no keyboard on touch, caret kept on desktop; card footer one row (${footers[0].metaHeight}px)`);
 } finally {

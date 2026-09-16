@@ -6,19 +6,20 @@ import {
   positionNeedsRestore,
   canRestoreScroll,
   MAX_POSITION_QUERY,
+  MAX_POSITION_ASSIGNMENT,
 } from "../session-position.js";
 
 test("a cold load lands on the Planner, on Search, at the top", () => {
-  assert.deepEqual(sessionPositionModel(), { view: "planner", tab: "search", query: "", scroll: 0 });
-  assert.deepEqual(sessionPositionModel(null), { view: "planner", tab: "search", query: "", scroll: 0 });
-  assert.deepEqual(sessionPositionModel("kb"), { view: "planner", tab: "search", query: "", scroll: 0 });
-  assert.deepEqual(sessionPositionModel([]), { view: "planner", tab: "search", query: "", scroll: 0 });
+  assert.deepEqual(sessionPositionModel(), { view: "planner", tab: "search", query: "", scroll: 0, assignment: "" });
+  assert.deepEqual(sessionPositionModel(null), { view: "planner", tab: "search", query: "", scroll: 0, assignment: "" });
+  assert.deepEqual(sessionPositionModel("kb"), { view: "planner", tab: "search", query: "", scroll: 0, assignment: "" });
+  assert.deepEqual(sessionPositionModel([]), { view: "planner", tab: "search", query: "", scroll: 0, assignment: "" });
 });
 
 test("a real position round-trips", () => {
   assert.deepEqual(
-    sessionPositionModel({ view: "kb", tab: "browse", query: "quadratic", scroll: 1840 }),
-    { view: "kb", tab: "browse", query: "quadratic", scroll: 1840 },
+    sessionPositionModel({ view: "kb", tab: "browse", query: "quadratic", scroll: 1840, assignment: "w1" }),
+    { view: "kb", tab: "browse", query: "quadratic", scroll: 1840, assignment: "w1" },
   );
 });
 
@@ -46,6 +47,19 @@ test("the query is capped, so a pasted essay never reaches storage", () => {
   // Not trimmed: a trailing space is a query still being typed, and dropping it
   // would change the results the reader comes back to.
   assert.equal(sessionPositionModel({ query: "log " }).query, "log ");
+});
+
+test("the open assignment is remembered, and is not a boot-time restore", () => {
+  assert.equal(sessionPositionModel({ assignment: "w1" }).assignment, "w1");
+  assert.equal(sessionPositionModel({ assignment: 42 }).assignment, "", "only an id, and only a string");
+  assert.equal(
+    sessionPositionModel({ assignment: "x".repeat(MAX_POSITION_ASSIGNMENT + 50) }).assignment.length,
+    MAX_POSITION_ASSIGNMENT,
+    "the cap keeps anything but an id out of storage",
+  );
+  // Reopening a panel needs the Planner's list to have arrived from Classroom,
+  // so it is the route switch that restores it, never the boot-time scroll pass.
+  assert.equal(positionNeedsRestore({ assignment: "w1" }), false);
 });
 
 test("restoring is skipped when there is nothing to restore", () => {
