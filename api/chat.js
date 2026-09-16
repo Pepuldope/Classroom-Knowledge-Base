@@ -43,6 +43,23 @@ async function kvSet(key, value) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// How a chat stops taking up space.
+//
+// The live answer is pruneChats(): every Planner load posts the ids that are
+// still in scope to /api/chat-prune, which deletes every other chat this user
+// has. A student who opens the app keeps roughly a week of conversations and
+// nothing else.
+//
+// That covers everyone who still uses the site, and nobody who stopped. There
+// is no server-side sweep, so an account that goes quiet — a student who
+// leaves, or a browser that is never opened again — used to keep its chats
+// forever. This TTL is the backstop for exactly that case: refreshed on every
+// write, so it can only ever fire on a conversation nothing has touched in
+// three months, long after the prune would have taken it.
+// ---------------------------------------------------------------------------
+const CHAT_TTL_SECONDS = 90 * 24 * 60 * 60;
+
 function chatKey(sub, assignmentId) {
   return `chat:${sub}:${assignmentId}`;
 }
@@ -97,6 +114,13 @@ export default async function handler(req) {
     try {
       await kvSet(chatKey(sub, assignmentId), JSON.stringify(body.messages));
       await kv("sadd", indexKey(sub), assignmentId);
+      // Best effort, and deliberately after the write: a KV without EXPIRE
+      // should cost the reader their answer being saved, not their answer.
+      // The index gets the same TTL so it cannot outlive what it points at.
+      try {
+        await kv("expire", chatKey(sub, assignmentId), String(CHAT_TTL_SECONDS));
+        await kv("expire", indexKey(sub), String(CHAT_TTL_SECONDS));
+      } catch {}
       return new Response(JSON.stringify({ ok: true }), {
         headers: { "Content-Type": "application/json" },
       });

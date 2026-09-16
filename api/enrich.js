@@ -214,6 +214,106 @@ async function routerAttempt(userMsg, noteFailure) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Work that happens in the room, and what it actually is.
+//
+// Two different questions were being answered by one keyword list, and the
+// second answer was wrong. Everything here — "test", but also "na hodine",
+// "in class", "lab demo" — marked an assignment as done IN PERSON, which is
+// right. It then forced the KIND, and the else-branch of that force was
+// "Test". So a worksheet whose description said it would be done in class came
+// back as a Test, and a test the student did not have appeared on the Planner.
+// Peter, 2026-09-16: "It miscategorized a worksheet homework as a test."
+//
+// Where the work happens and what the work is are now separate lists. A place
+// word still makes it in-person; only an assessment word may call it a Test.
+// ---------------------------------------------------------------------------
+
+/** Names an assessment: the work IS the thing being marked. */
+export const ASSESSMENT_WORDS = [
+  "test", "tests", "exam", "exams", "midterm", "final",
+  "písomka", "pisomka", "písomky", "pisomky",
+  "skúška", "skuska", "skúšanie", "skusanie", "skúšky", "skusky",
+  "previerka", "previerky",
+  "diktát", "diktat",
+  "vstupný test", "vstupny test", "výstupný test", "vystupny test",
+  "písomné skúšanie", "pisomne skusanie",
+  "maturita", "maturity",
+];
+
+/** Assessments that are specifically a quiz. */
+export const QUIZ_WORDS = ["quiz", "quizzes", "kvíz", "kviz", "kvízu", "kvizu"];
+
+/** Assessments delivered by speaking. */
+export const PRESENTATION_WORDS = [
+  "presentation", "oral", "viva",
+  "prezentácia", "prezentacia", "prezentácie", "prezentacie",
+  "ústna skúška", "ustna skuska", "ústne", "ustne",
+];
+
+/**
+ * Says only WHERE the work happens. These never change the kind: a worksheet
+ * done in class is a worksheet.
+ */
+export const IN_PERSON_PLACE_WORDS = ["in-class", "in class", "lab demo", "v triede", "na hodine", "v škole", "v skole"];
+
+export const SUBMIT_WORDS = [
+  // explicit upload/turn-in verbs
+  "upload", "submit", "turn in", "turned in", "hand in",
+  "attach", "attached file", "google doc", "google form",
+  "odovzdaj", "odovzdajte", "odovzdať", "odovzdat",
+  "nahraj", "nahrajte", "nahrať", "nahrat",
+  "vlož", "vloz", "vložte", "vlozte",
+  "pošli", "posli", "pošlite", "poslite", "pošlite mi", "poslite mi",
+  "send the file", "submit your", "upload your",
+];
+
+// Word-boundary keyword matcher. Some keywords are multi-word; treat as
+// substrings, others as standalone words to avoid false matches like
+// "test yourself" / "contest".
+export function hasWord(text, words) {
+  const value = String(text || "");
+  return words.some((w) => {
+    if (w.includes(" ")) return value.includes(w);
+    return new RegExp(`(^|[^\\p{L}\\p{N}])${w}([^\\p{L}\\p{N}]|$)`, "u").test(value);
+  });
+}
+
+/**
+ * @returns the fields to override on the parsed enrichment — `actionType`
+ *          always when the work happens in person, `taskKind` only when an
+ *          assessment word says what it is.
+ */
+export function inPersonDecision({ title = "", desc = "", taskKind = "" } = {}) {
+  // Lowercased here rather than trusted from the caller: the word lists are
+  // lowercase, and "Písomka" in a title is how a title is actually written.
+  const t = String(title || "").toLowerCase();
+  const d = String(desc || "").toLowerCase();
+  const all = [ASSESSMENT_WORDS, QUIZ_WORDS, PRESENTATION_WORDS, IN_PERSON_PLACE_WORDS].flat();
+  const hasSubmitSignal = hasWord(`${t} ${d}`, SUBMIT_WORDS);
+
+  // WHERE the work happens: the title, or a description that does not also ask
+  // for a file. This is the question the list was written for.
+  const happensInPerson = hasWord(t, all) || (hasWord(d, all) && !hasSubmitSignal);
+  if (!happensInPerson) return {};
+
+  const out = { actionType: "in_person" };
+  // Kinds that already describe an in-class assessment are left alone.
+  if (!taskKind || /^(Test|Quiz|Presentation)$/i.test(taskKind)) return out;
+
+  // WHAT the work is: the TITLE only. A description mentioning an assessment
+  // is usually mentioning a DIFFERENT one — "prepare for the test on Friday"
+  // is the most ordinary sentence on a homework worksheet, and reading it as
+  // "this is a test" puts an exam on the Planner that does not exist. This
+  // override is a backstop under the model, which reads the whole text; when
+  // an assignment really is an assessment, teachers say so in the title.
+  if (hasWord(t, PRESENTATION_WORDS)) out.taskKind = "Presentation";
+  else if (hasWord(t, QUIZ_WORDS)) out.taskKind = "Quiz";
+  else if (hasWord(t, ASSESSMENT_WORDS)) out.taskKind = "Test";
+  // else: it happens in the room, and it is still whatever the model called it.
+  return out;
+}
+
 export default async function handler(req) {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
@@ -357,64 +457,8 @@ export default async function handler(req) {
     const desc = (a.description || "").slice(0, 400).toLowerCase();
     const haystack = `${title} ${desc}`;
 
-    // Word-boundary keyword matcher. Some keywords are multi-word; treat as substrings,
-    // others as standalone words to avoid false matches like "test yourself" / "contest".
-    const hasWord = (text, words) => words.some((w) => {
-      if (w.includes(" ")) return text.includes(w);
-      return new RegExp(`(^|[^\\p{L}\\p{N}])${w}([^\\p{L}\\p{N}]|$)`, "u").test(text);
-    });
-
-    const inPersonWords = [
-      // English
-      "test", "tests", "quiz", "quizzes", "exam", "exams", "midterm", "final",
-      "presentation", "oral", "viva", "in-class", "in class",
-      // Slovak / Czech
-      "písomka", "pisomka", "písomky", "pisomky",
-      "kvíz", "kviz", "kvízu", "kvizu",
-      "skúška", "skuska", "skúšanie", "skusanie", "skúšky", "skusky",
-      "previerka", "previerky",
-      "diktát", "diktat",
-      "prezentácia", "prezentacia", "prezentácie", "prezentacie",
-      "vstupný test", "vstupny test", "výstupný test", "vystupny test",
-      "ústna skúška", "ustna skuska", "ústne", "ustne",
-      "písomné skúšanie", "pisomne skusanie",
-      "lab demo", "v triede", "na hodine", "v škole", "v skole",
-      "maturita", "maturity",
-    ];
-
-    const submitWords = [
-      // explicit upload/turn-in verbs
-      "upload", "submit", "turn in", "turned in", "hand in",
-      "attach", "attached file", "google doc", "google form",
-      "odovzdaj", "odovzdajte", "odovzdať", "odovzdat",
-      "nahraj", "nahrajte", "nahrať", "nahrat",
-      "vlož", "vloz", "vložte", "vlozte",
-      "pošli", "posli", "pošlite", "poslite", "pošlite mi", "poslite mi",
-      "send the file", "submit your", "upload your",
-    ];
-
-    // Enforce the canonical list now that the assignment text is available to
-    // infer from. Done before the in-person override below, which refines a
-    // kind that is already valid.
     parsed.taskKind = normalizeTaskKind(parsed.taskKind, haystack);
-
-    const inTitle = hasWord(title, inPersonWords);
-    const inDesc = hasWord(desc, inPersonWords);
-    const hasSubmitSignal = hasWord(haystack, submitWords);
-
-    // Title is a very strong signal; description-only matches require no submit override.
-    const shouldForceInPerson = inTitle || (inDesc && !hasSubmitSignal);
-    if (shouldForceInPerson) {
-      parsed.actionType = "in_person";
-      // Only override a kind that does not already describe an in-class
-      // assessment. "Exam" and "Interview" were produced here and are no
-      // longer canonical kinds — Test and Presentation cover them.
-      if (parsed.taskKind && !/^(Test|Quiz|Presentation)$/i.test(parsed.taskKind)) {
-        if (/(prezent|present|ústn|ustn|oral|viva)/.test(haystack)) parsed.taskKind = "Presentation";
-        else if (/(kvíz|kviz|\bquiz\b)/.test(haystack)) parsed.taskKind = "Quiz";
-        else parsed.taskKind = "Test";
-      }
-    }
+    Object.assign(parsed, inPersonDecision({ title, desc, taskKind: parsed.taskKind }));
 
     if (hash) await kvSet(cacheKey, JSON.stringify(parsed));
     return { id: a.id, ...parsed };

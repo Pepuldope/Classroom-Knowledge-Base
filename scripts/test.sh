@@ -77,6 +77,7 @@ GATES=(
 "models,panel|-|Assignment panel model tests|node --test tests/assignment-panel.test.js"
 "models,api|-|Enrichment model chain fall-through tests|node --test tests/enrich-chain.test.js"
 "models,api|-|Streamed-model stall failover tests|node --test tests/stream-stall.test.js"
+"models,api|-|In-person vs assessment classification tests|node --test tests/enrich-in-person.test.js"
 "models,mobile|-|Session position + sheet drag model tests|node --test tests/session-position.test.js tests/sheet-drag.test.js"
 "models,mobile|-|Pull-to-refresh + report freshness model tests|node --test tests/pull-refresh.test.js"
 "mobile,panel|seed|Sheet scroll containment + pull-to-dismiss|node scripts/sheet_scroll_test.mjs"
