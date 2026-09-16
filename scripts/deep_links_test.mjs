@@ -86,7 +86,7 @@ try {
   const chip = page.locator("#kbResults .kb-related-preview-chip").first();
   const chipTitle = (await chip.textContent()).trim();
   assert.match(await chip.getAttribute("href"), /^#note=/, "a related chip is not a link");
-  const [noteTab] = await Promise.all([context.waitForEvent("page"), chip.click({ modifiers: ["Control"] })]);
+  const [noteTab] = await Promise.all([context.waitForEvent("page"), chip.click({ modifiers: ["ControlOrMeta"] })]);
   assert.equal(await page.locator("#kbNoteModal").isHidden(), true, "Ctrl-click also opened the note in this tab");
   await noteTab.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 20000 });
   assert.equal(await noteTab.locator("#kbNoteTitle").textContent(), chipTitle);
