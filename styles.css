@@ -3363,3 +3363,93 @@ a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); 
 }
 #kbNoteModal .kb-note-meta .kb-note-pin { margin-left: 0; }
 #kbNoteModal .kb-related { padding: 0.6rem 1.25rem 0; }
+
+/* ---------------------------------------------------------------------------
+   The class-category board.
+
+   Columns are categories, cards are classes, and a card is dragged from one to
+   another. Deliberately NOT the HTML5 drag-and-drop API: that has no touch
+   implementation at all, and this is a phone-first site. Pointer events cover
+   mouse, trackpad, pen and finger with one code path.
+
+   Every card also carries a "Move to" menu. On a 390px screen, dragging a card
+   to a column that is scrolled off the side is a worse experience than picking
+   from a list, and the menu is what makes the board usable with a keyboard or
+   a screen reader.
+   --------------------------------------------------------------------------- */
+.kb-board {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  align-items: flex-start;
+  scrollbar-width: thin;
+}
+.kb-board-status { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.5rem; }
+.kb-board-column {
+  flex: 0 0 15rem;
+  min-width: 0;
+  background: var(--surface-subtle);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+.kb-board-column.is-drop-target {
+  border-color: var(--accent);
+  background: var(--accent-bg);
+}
+.kb-board-column-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.kb-board-column-count { font-weight: 400; color: var(--muted); font-size: 0.75rem; }
+.kb-board-empty { font-size: 0.75rem; color: var(--muted); font-style: italic; padding: 0.35rem 0.2rem; }
+.kb-board-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  /* The whole card is the grab handle, so a drag must not also scroll the
+     board sideways underneath it. */
+  touch-action: none;
+  cursor: grab;
+}
+.kb-board-card:active { cursor: grabbing; }
+.kb-board-card.is-dragging { opacity: 0.35; }
+.kb-board-card.is-overridden { border-left: 3px solid var(--accent); }
+.kb-board-card-title { font-size: 0.82rem; font-weight: 500; overflow-wrap: anywhere; }
+.kb-board-card-meta { font-size: 0.72rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap; }
+.kb-board-card-move {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  max-width: 100%;
+}
+.kb-board-card-move:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* The card that follows the finger. Positioned in page coordinates, so it has
+   to sit above everything and ignore hit-testing or elementFromPoint would
+   only ever find the clone. */
+.kb-board-ghost {
+  position: fixed;
+  z-index: 200;
+  pointer-events: none;
+  opacity: 0.9;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .kb-board-column { flex-basis: 12.5rem; }
+}

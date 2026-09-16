@@ -23,6 +23,7 @@ import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel,
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
+import { classFamilyOverridesModel, applyFamilyOverrides, classBoardModel, moveClassToFamily } from "./class-overrides.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy, migrateNoteProgress } from "./study-progress.js";
 import { buildArchiveFromClassroom } from "./archive-builder.js";
 import { kbBundleFromClassroomArchive } from "./kb-client-build.js";
@@ -209,6 +210,7 @@ const STUDY_MODE_PROGRESS_KEY = "cwa_kb_study_mode_progress";
 const KB_SEARCH_SORTS = new Set(["relevance", "recency", "course", "title"]);
 const KB_PINNED_COURSES_KEY = "cwa_kb_pinned_courses";
 const KB_PINNED_NOTES_KEY = "cwa_kb_pinned_notes";
+const KB_CLASS_FAMILIES_KEY = "cwa_kb_class_families";
 
 /** Normalize the last-used local KB filter state; unknown values never persist. */
 export function kbSearchStateModel(value = {}) {
@@ -371,6 +373,236 @@ function savePinnedNotes(value) {
   try { localStorage.setItem(KB_PINNED_NOTES_KEY, JSON.stringify(notes)); } catch {}
   notePrefsChanged();
   return notes;
+}
+
+// ---------------------------------------------------------------------------
+// The class-category board.
+//
+// deriveFamily guesses a category from a course name and is wrong often enough
+// to matter. Peter, 2026-09-16: "make people able to rearrange them as they
+// please so they can fix errors." Columns are categories, cards are classes,
+// and dragging one to another column records an override.
+//
+// Pointer events, not the HTML5 drag-and-drop API. That API has no touch
+// implementation at all, and this is a phone-first site — dragging would simply
+// not work where it is needed most. Pointer events cover mouse, trackpad, pen
+// and finger with one code path.
+//
+// Every card ALSO carries a "Move to" menu. On a 390px screen, dragging a card
+// to a column scrolled off the side is worse than picking from a list, and the
+// menu is what makes the board work with a keyboard or a screen reader.
+// ---------------------------------------------------------------------------
+
+function loadClassFamilies() {
+  try { return classFamilyOverridesModel(JSON.parse(localStorage.getItem(KB_CLASS_FAMILIES_KEY) || "[]")); }
+  catch { return []; }
+}
+
+function saveClassFamilies(value) {
+  const list = classFamilyOverridesModel(value);
+  try { localStorage.setItem(KB_CLASS_FAMILIES_KEY, JSON.stringify(list)); } catch {}
+  notePrefsChanged();
+  return list;
+}
+
+/**
+ * Record a move, re-stamp the corpus, and redraw whatever is showing it.
+ *
+ * The re-stamp is what keeps every other consumer ignorant of overrides: the
+ * search facet, Browse and the Curriculum matrix all keep reading
+ * `note.family`, which now holds the student's answer.
+ */
+function moveClassCard(courseName, family) {
+  const before = loadClassFamilies();
+  const after = moveClassToFamily(before, courseName, family);
+  if (JSON.stringify(before) === JSON.stringify(after)) return false;
+  saveClassFamilies(after);
+  reapplyClassFamilies(after);
+  renderClassBoard();
+  if (activeStudyTab === "curriculum") renderStudyCurriculum();
+  return true;
+}
+
+function classBoardCard(entry, columns) {
+  const card = document.createElement("article");
+  card.className = "kb-board-card" + (entry.overridden ? " is-overridden" : "");
+  card.dataset.course = entry.name;
+
+  const title = document.createElement("div");
+  title.className = "kb-board-card-title";
+  title.textContent = entry.name;
+
+  const meta = document.createElement("div");
+  meta.className = "kb-board-card-meta";
+  const facts = document.createElement("span");
+  const years = entry.years.length ? ` · ${entry.years[0]}${entry.years.length > 1 ? `–${entry.years[entry.years.length - 1]}` : ""}` : "";
+  facts.textContent = `${entry.noteCount} note${entry.noteCount === 1 ? "" : "s"}${years}`;
+  meta.appendChild(facts);
+
+  // The accessible equivalent of the drag, and the better control on a phone.
+  const move = document.createElement("select");
+  move.className = "kb-board-card-move";
+  move.setAttribute("aria-label", `Category for ${entry.name}`);
+  for (const column of columns) {
+    const option = document.createElement("option");
+    option.value = column.family;
+    option.textContent = column.label;
+    move.appendChild(option);
+  }
+  move.value = entry.overridden || !entry.derived ? (entry.overridden ? columnOf(entry, columns) : "") : entry.derived;
+  move.addEventListener("change", () => moveClassCard(entry.name, move.value));
+  move.addEventListener("pointerdown", (e) => e.stopPropagation());
+  meta.appendChild(move);
+
+  card.append(title, meta);
+  return card;
+}
+
+/** Which column a card is currently drawn in. */
+function columnOf(entry, columns) {
+  for (const column of columns) {
+    if (column.classes.some((c) => c.name === entry.name)) return column.family;
+  }
+  return "";
+}
+
+function renderClassBoard() {
+  const host = $("kbClassBoard");
+  if (!host) return;
+  const status = $("kbClassBoardStatus");
+  const reset = $("kbClassBoardReset");
+  const overrides = loadClassFamilies();
+  const model = classBoardModel(localKbBundle, overrides);
+
+  if (model.totalClasses === 0) {
+    host.replaceChildren();
+    if (status) status.textContent = "Build your database first and your classes will show up here.";
+    if (reset) reset.hidden = true;
+    return;
+  }
+  if (status) {
+    status.textContent = model.overriddenCount
+      ? `${model.totalClasses} classes · ${model.overriddenCount} you sorted yourself`
+      : `${model.totalClasses} classes, all sorted automatically`;
+  }
+  if (reset) reset.hidden = model.overriddenCount === 0;
+
+  host.replaceChildren();
+  for (const column of model.columns) {
+    const el = document.createElement("section");
+    el.className = "kb-board-column";
+    el.dataset.family = column.family;
+    const head = document.createElement("div");
+    head.className = "kb-board-column-head";
+    const label = document.createElement("span");
+    label.textContent = column.label;
+    const count = document.createElement("span");
+    count.className = "kb-board-column-count";
+    count.textContent = String(column.classes.length);
+    head.append(label, count);
+    el.appendChild(head);
+    if (column.classes.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "kb-board-empty";
+      empty.textContent = "Drop a class here";
+      el.appendChild(empty);
+    }
+    for (const entry of column.classes) el.appendChild(classBoardCard(entry, model.columns));
+    host.appendChild(el);
+  }
+}
+
+/**
+ * Dragging, in pointer events.
+ *
+ * A clone follows the pointer and the real card stays faded in place, so the
+ * board never reflows mid-drag — a column that resizes under a moving finger
+ * makes the drop land somewhere the reader did not aim. The clone is
+ * `pointer-events: none` because elementFromPoint would otherwise only ever
+ * find the clone.
+ */
+function installClassBoardDrag(host) {
+  if (!host) return;
+  let card = null;
+  let ghost = null;
+  let column = null;
+  let startX = 0;
+  let startY = 0;
+  let dragging = false;
+  const SLOP = 6;
+
+  const columnAt = (x, y) => {
+    const el = document.elementFromPoint(x, y);
+    return el ? el.closest(".kb-board-column") : null;
+  };
+
+  const highlight = (next) => {
+    if (column === next) return;
+    column?.classList.remove("is-drop-target");
+    column = next;
+    column?.classList.add("is-drop-target");
+  };
+
+  const cleanup = () => {
+    ghost?.remove();
+    ghost = null;
+    card?.classList.remove("is-dragging");
+    column?.classList.remove("is-drop-target");
+    card = null;
+    column = null;
+    dragging = false;
+  };
+
+  host.addEventListener("pointerdown", (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    const target = e.target instanceof Element ? e.target.closest(".kb-board-card") : null;
+    if (!target) return;
+    card = target;
+    startX = e.clientX;
+    startY = e.clientY;
+    dragging = false;
+  });
+
+  host.addEventListener("pointermove", (e) => {
+    if (!card) return;
+    if (!dragging) {
+      // Until the pointer clears the slop this is a tap, or the start of a
+      // sideways scroll of the board. Committing sooner makes the board
+      // impossible to scroll on a phone.
+      if (Math.hypot(e.clientX - startX, e.clientY - startY) < SLOP) return;
+      dragging = true;
+      const rect = card.getBoundingClientRect();
+      ghost = card.cloneNode(true);
+      ghost.classList.add("kb-board-ghost");
+      ghost.style.width = `${rect.width}px`;
+      document.body.appendChild(ghost);
+      card.classList.add("is-dragging");
+      host.setPointerCapture?.(e.pointerId);
+    }
+    e.preventDefault();
+    if (ghost) {
+      ghost.style.left = `${e.clientX - 40}px`;
+      ghost.style.top = `${e.clientY - 20}px`;
+    }
+    // With the pointer captured, elementFromPoint still reports the board, but
+    // the ghost must be skipped — hence pointer-events: none on it.
+    highlight(columnAt(e.clientX, e.clientY));
+  });
+
+  const finish = (e) => {
+    if (!card) return;
+    const moved = dragging;
+    const name = card.dataset.course;
+    const target = column;
+    if (moved && target) {
+      cleanup();
+      moveClassCard(name, target.dataset.family);
+      return;
+    }
+    cleanup();
+  };
+  host.addEventListener("pointerup", finish);
+  host.addEventListener("pointercancel", cleanup);
 }
 
 function notePinId(note) {
@@ -1099,6 +1331,7 @@ export function setStudyTab(requested) {
   else hideBrowsePanel();
   if (model.active === "curriculum") renderStudyCurriculum();
   if (model.active === "saved") renderStudyList();
+  if (model.active === "manage") renderClassBoard();
   return model.active;
 }
 
@@ -1174,6 +1407,28 @@ export function kbSearchTopic(topic) {
 }
 
 let localKbBundle = null;
+/**
+ * The corpus exactly as it was loaded, before the student's category
+ * corrections were stamped onto it.
+ *
+ * Kept because applyFamilyOverrides is a projection, not an edit: re-applying
+ * an EMPTY set of overrides to an already-stamped bundle cannot undo anything,
+ * so moving a class back to automatic would leave the old category in memory
+ * until the next reload. Every re-application starts from this.
+ */
+let localKbBundleBase = null;
+
+/** Hold a freshly loaded corpus, and show it with the student's corrections. */
+function setLocalKbBundle(bundle) {
+  localKbBundleBase = bundle;
+  localKbBundle = applyFamilyOverrides(bundle, loadClassFamilies());
+  return localKbBundle;
+}
+
+/** Redraw the corpus after the board changed. */
+function reapplyClassFamilies(overrides) {
+  localKbBundle = applyFamilyOverrides(localKbBundleBase, overrides);
+}
 let noteModalOrigin = null;
 /** The saved tab/query is applied once per page load, not on every refresh. */
 let kbPositionRestored = false;
@@ -1199,7 +1454,7 @@ export async function refreshKb() {
   let meta = null;
   let checkpoint = null;
   try {
-    localKbBundle = await loadKbBundle();
+    setLocalKbBundle(await loadKbBundle());
     checkpoint = kbBuildCheckpointModel(await loadKbBuildCheckpoint().catch(() => null));
     renderStudyProgress();
     renderReviewDigest();
@@ -1217,6 +1472,7 @@ export async function refreshKb() {
     }
   } catch (error) {
     localKbBundle = null;
+    localKbBundleBase = null;
     checkpoint = null;
     console.warn("[KB] local state discovery failed", error?.name || "unknown");
   }
@@ -1457,7 +1713,7 @@ async function maybeBackgroundSync() {
     // anything belonging to the years it skips.
     const archive = await buildArchiveFromClassroom(gFetch, { courseStates: ["ACTIVE"] });
     const bundle = await saveMergedKbBundle(kbBundleFromClassroomArchive(archive));
-    localKbBundle = bundle;
+    setLocalKbBundle(bundle);
     const added = Math.max(0, bundle.notes.length - before + (bundle.prunedCount || 0));
     renderSyncStatus("done", { added, removed: bundle.prunedCount || 0 });
     // Re-render what is on screen so new notes are actually reachable.
@@ -1776,6 +2032,13 @@ export function wireKbEvents() {
   // state), so this is one build path and one import path with two entry points.
   $("kbRebuildBtn")?.addEventListener("click", () => startScrape());
   $("kbManageLoadFileLink")?.addEventListener("click", () => fileInput?.click());
+  installClassBoardDrag($("kbClassBoard"));
+  $("kbClassBoardReset")?.addEventListener("click", () => {
+    saveClassFamilies([]);
+    reapplyClassFamilies([]);
+    renderClassBoard();
+    if (activeStudyTab === "curriculum") renderStudyCurriculum();
+  });
   $("kbBuildCancelBtn")?.addEventListener("click", () => cancelKbBuild());
 
   tutorOpen?.addEventListener("click", () => {
@@ -2093,7 +2356,7 @@ async function doScrape(token) {
     // Merge, never replace: a rebuild must not discard past years that were
     // imported from a School Backup export.
     const bundle = await saveMergedKbBundle(kbBundleFromClassroomArchive(archive));
-    localKbBundle = bundle;
+    setLocalKbBundle(bundle);
     await removeKbBuildCheckpoint();
     if (progress) progress.style.width = "100%";
     const done = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
@@ -2148,7 +2411,7 @@ async function handleKbFile(e) {
     // Same rule in the other direction: importing past years must not discard
     // the current Classroom build.
     const bundle = await saveMergedKbBundle(kbBundleFromClassroomArchive(parsed));
-    localKbBundle = bundle;
+    setLocalKbBundle(bundle);
     if (statusEl) statusEl.textContent = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
     setTimeout(() => refreshKb(), 600);
   } catch (err) { setKbBuildError(err.message); }
@@ -3925,7 +4188,7 @@ function cardTitleLink(text, href, open) {
 export async function openKbNoteByKey(key) {
   showKbView();
   if (!localKbBundle?.notes?.length) {
-    try { localKbBundle = await loadKbBundle(); } catch { /* handled below */ }
+    try { setLocalKbBundle(await loadKbBundle()); } catch { /* handled below */ }
   }
   const index = noteKeyIndex(localKbBundle?.notes).get(key);
   if (index == null) {

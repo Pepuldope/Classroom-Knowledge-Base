@@ -33,6 +33,7 @@ export const STORAGE_KEYS = {
   pinnedCourses: "cwa_kb_pinned_courses",
   pinnedNotes: "cwa_kb_pinned_notes",
   studyList: "cwa_tutor_study_list",
+  classFamilies: "cwa_kb_class_families",
   studyActivity: "cwa_kb_study_activity",
   noteProgress: "cwa_kb_note_progress",
   kbSettings: "cwa_kb_settings",
@@ -64,6 +65,7 @@ const TRACKED_SHAPES = {
   pinnedCourses: { idsOnly: true },
   pinnedNotes: { idsOnly: false, fields: ["title"] },
   studyList: { idsOnly: false, fields: ["text", "savedAt", "title", "question", "course", "sources"] },
+  classFamilies: { idsOnly: false, fields: ["family"] },
 };
 
 function liveList(section) {

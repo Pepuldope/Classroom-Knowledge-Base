@@ -297,6 +297,11 @@ export const TRACKED_SECTIONS = {
   // The Notebook's saved answers. title/question/course/sources were added
   // 2026-09-13; a record from before simply has none of them.
   studyList: { fields: ["text", "savedAt", "title", "question", "course", "sources"] },
+  // Study: the categories the student corrected by hand. Tracked rather than
+  // last-write-wins because moving a class BACK to automatic is a removal, and
+  // a removal has to beat a stale copy on the other device — the same reason
+  // pins are tracked.
+  classFamilies: { fields: ["family"] },
 };
 
 /**
