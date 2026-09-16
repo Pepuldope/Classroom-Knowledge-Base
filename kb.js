@@ -23,6 +23,7 @@ import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel,
 import { loadKbBundle, saveMergedKbBundle, removeKbBundle, browseKbBundle, browseYearFacet, browseFamilyFacet, browseTopicFacet, loadKbBuildCheckpoint, saveKbBuildCheckpoint, removeKbBuildCheckpoint } from "./kb-local.js";
 import { searchNotes, makeSortFn, deriveFamily, suggestCorrection, relatedNotesPreview, relatedTokenCacheStats, recordRelatedPreviewTiming } from "./kb-client-search.js";
 import { studyStreakModel, recordStudyActivity } from "./study-streak.js";
+import { byokRequestFields } from "./byok.js";
 import { classFamilyOverridesModel, applyFamilyOverrides, classBoardModel, moveClassToFamily } from "./class-overrides.js";
 import { recordNoteProgress, studyProgressModel, studyProgressCopy, migrateNoteProgress } from "./study-progress.js";
 import { buildArchiveFromClassroom } from "./archive-builder.js";
@@ -3881,6 +3882,8 @@ async function sendTutor(text, { retry = false, avoidModel = "" } = {}) {
       today, currentYear, pendingWork,
       ...(planned.match ? { likelyWork: { title: planned.match.title, course: planned.match.course, dueDate: planned.match.dueDate } } : {}),
       ...(avoidModel ? { avoidModel } : {}),
+      // Their own provider key, when they set one in Settings.
+      ...byokRequestFields(),
     });
     const send = () => fetch("/api/tutor", {
       method: "POST",

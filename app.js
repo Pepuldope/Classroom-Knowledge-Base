@@ -29,6 +29,7 @@ import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STAT
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
+import { loadByok, saveByok, clearByok, byokRequestFields, maskKey, BYOK_PROVIDER_LABELS } from "./byok.js";
 import { sheetDragModel, sheetContentDragModel, sheetGestureIntent, sheetThrowDuration, viewportBottomInset, SHEET_GESTURE_SLOP, SHEET_SETTLE_MS } from "./sheet-drag.js";
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
 import { pullRefreshModel, pullRefreshEnabled, isStandaloneDisplay } from "./pull-refresh.js";
@@ -1270,6 +1271,21 @@ document.addEventListener("DOMContentLoaded", () => {
   if (w) w.addEventListener("toggle", maybeLazyEnrichRest);
 
   $("settingsBtn").addEventListener("click", () => { closeMenu(); openSettingsModal(); });
+  // Saved as they are set, not on a Save button: the pane sits beside controls
+  // that already apply immediately, and a key that silently did not save is a
+  // tutor that silently kept using the shared models.
+  $("byokProvider")?.addEventListener("change", () => persistByokFromPane());
+  $("byokKey")?.addEventListener("change", () => persistByokFromPane());
+  $("byokModel")?.addEventListener("change", () => persistByokFromPane());
+  $("byokTest")?.addEventListener("click", () => { persistByokFromPane(); testByok(); });
+  $("byokClear")?.addEventListener("click", () => {
+    clearByok();
+    const c = byokControls();
+    if (c.provider) c.provider.value = "";
+    if (c.model) c.model.value = "";
+    renderByokPane();
+    setByokStatus("Key removed. Back to the shared free models.");
+  });
   $("settingsClose").addEventListener("click", () => { $("settingsModal").hidden = true; });
   $("settingsSaveBtn").addEventListener("click", saveSettingsAndReload);
   document.querySelectorAll(".settings-tab").forEach((tab) => {
@@ -1397,6 +1413,7 @@ async function configureKbSettingsUi() {
 
 function openSettingsModal() {
   configureKbSettingsUi().catch(() => {});
+  renderByokPane();
   const list = $("classesList");
   list.innerHTML = "";
   if (allCourses.length === 0) {
@@ -3594,6 +3611,9 @@ async function sendAi(userText) {
         notes: tutorNotes,
         focus,
         language: displayPrefs.language === "sk" ? "sk" : "en",
+        // Their own provider key, when they set one. byok.js is the only place
+        // that decides a request carries it.
+        ...byokRequestFields(),
       }),
     });
     if (r.status === 429) {
@@ -3760,6 +3780,120 @@ document.addEventListener("keydown", (e) => {
   // panel or the modal behind it.
   if (document.querySelector(".ai-quick-menu[open]")) { e.stopPropagation(); closeQuickMenus(null); }
 }, true);
+
+// ---------------------------------------------------------------------------
+// Settings -> AI: bring your own provider key.
+//
+// The pane was two dead controls and a "Coming soon" line. What is deliberately
+// NOT here: any path that writes the key into the prefs document. It lives in
+// this browser, and setting it up again on a second device is the price of the
+// site never being worth attacking for its key store. See byok.js.
+// ---------------------------------------------------------------------------
+function byokControls() {
+  return {
+    provider: $("byokProvider"),
+    key: $("byokKey"),
+    model: $("byokModel"),
+    test: $("byokTest"),
+    clear: $("byokClear"),
+    status: $("byokStatus"),
+  };
+}
+
+function setByokStatus(text, isError = false) {
+  const { status } = byokControls();
+  if (!status) return;
+  status.textContent = text || "";
+  status.hidden = !text;
+  status.classList.toggle("error", !!isError);
+}
+
+function renderByokPane() {
+  const c = byokControls();
+  if (!c.provider) return;
+  if (c.provider.options.length <= 1) {
+    for (const [value, label] of Object.entries(BYOK_PROVIDER_LABELS)) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      c.provider.appendChild(option);
+    }
+  }
+  const saved = loadByok();
+  c.provider.value = saved?.provider || "";
+  // Masked, never echoed in full: a key shown in full is a key in a screenshot.
+  // The real value is only ever read back out of storage.
+  c.key.value = "";
+  c.key.placeholder = saved ? maskKey(saved.apiKey) : "Paste your key…";
+  c.model.value = saved?.model || "";
+  if (c.clear) c.clear.hidden = !saved;
+  setByokStatus(saved ? `Using your own ${BYOK_PROVIDER_LABELS[saved.provider]} key.` : "");
+}
+
+/** What the pane currently describes — the typed key, or the stored one. */
+function byokFromPane() {
+  const c = byokControls();
+  const provider = c.provider?.value || "";
+  if (!provider) return null;
+  const typed = c.key?.value.trim() || "";
+  const stored = loadByok();
+  const apiKey = typed || (stored?.provider === provider ? stored.apiKey : "");
+  if (!apiKey) return null;
+  return { provider, apiKey, model: c.model?.value.trim() || "" };
+}
+
+function persistByokFromPane() {
+  const c = byokControls();
+  if (!c.provider?.value) {
+    clearByok();
+    renderByokPane();
+    setByokStatus("Back to the shared free models.");
+    return null;
+  }
+  const next = byokFromPane();
+  if (!next) {
+    setByokStatus("Paste your key to use this provider.", true);
+    return null;
+  }
+  const saved = saveByok(next);
+  renderByokPane();
+  if (!saved) setByokStatus("That key does not look usable.", true);
+  return saved;
+}
+
+async function testByok() {
+  const candidate = byokFromPane();
+  if (!candidate) {
+    setByokStatus("Pick a provider and paste a key first.", true);
+    return;
+  }
+  setByokStatus("Asking your provider…");
+  try {
+    const r = await fetch("/api/tutor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) },
+      body: JSON.stringify({
+        messages: [{ role: "user", content: "Reply with the single word: ready." }],
+        notes: [],
+        byok: candidate,
+      }),
+    });
+    if (!r.ok) {
+      setByokStatus(r.status === 429 ? "Daily limit reached — try again later." : `Your provider refused (HTTP ${r.status}).`, true);
+      return;
+    }
+    // The tutor streams, and names the model that answered in a `route` event.
+    // Reading just that is enough to tell "your key worked" from "the shared
+    // chain rescued it", which is the distinction the reader actually wants.
+    const text = await r.text();
+    const match = /"type"\s*:\s*"route"[^}]*"provider"\s*:\s*"([^"]+)"[^}]*"model"\s*:\s*"([^"]+)"/.exec(text);
+    if (match && match[1].startsWith("yours:")) setByokStatus(`Working — answered with ${match[2]}.`);
+    else if (match) setByokStatus(`Your key did not answer; the shared models did (${match[2]}).`, true);
+    else setByokStatus("No answer came back. Check the key and the model name.", true);
+  } catch {
+    setByokStatus("Could not reach the tutor. Check your connection.", true);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Sticky-header height, published as --header-h.

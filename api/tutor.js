@@ -494,9 +494,13 @@ export default async function handler(req) {
     ? [body.avoidModel.trim().slice(0, 200)]
     : null;
 
+  // The student's own provider key, if they set one in Settings. It arrives
+  // with the request, is used for this request, and is never stored or logged
+  // — see byokProviderModel, which also decides the endpoint, so the browser
+  // can name a provider but never a URL.
   return new Response(tutorEventStream({
     sourcesEvent,
-    route: () => routeChat(messages, { task, stream: true, avoid }),
+    route: () => routeChat(messages, { task, stream: true, avoid, byok: body.byok }),
   }), {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",

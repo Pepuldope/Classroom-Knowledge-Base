@@ -3453,3 +3453,6 @@ a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); 
 @media (max-width: 640px) {
   .kb-board-column { flex-basis: 12.5rem; }
 }
+
+.settings-optional { color: var(--muted); font-weight: 400; font-size: 0.85em; }
+.settings-row-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }

@@ -451,18 +451,27 @@
         <div id="classesList"></div>
       </section>
       <section id="settingsPane-ai" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-ai" data-pane="ai" hidden>
-        <p class="modal-sub">AI model and personal API key. Bring your own OpenRouter key to bypass the daily limit.</p>
+        <p class="modal-sub">Use your own AI provider. Your key is tried first, and the shared free models stay behind it as a backup, so a key that expires or runs out costs you one slow answer rather than the tutor.</p>
         <label class="settings-row">
-          <span>AI model</span>
-          <select id="aiModelSelect">
-            <option value="default">Default (curated)</option>
+          <span>Provider</span>
+          <select id="byokProvider" class="settings-select">
+            <option value="">Shared free models (default)</option>
           </select>
         </label>
         <label class="settings-row">
-          <span>Paste your AI's API key</span>
-          <input id="apiKeyInput" type="password" placeholder="Your provider's API key…" autocomplete="off" />
+          <span>API key</span>
+          <input id="byokKey" type="password" placeholder="Paste your key…" autocomplete="off" spellcheck="false" />
         </label>
-        <p class="settings-hint">Coming soon — currently uses the shared default key with a daily limit.</p>
+        <label class="settings-row">
+          <span>Model <span class="settings-optional">(optional)</span></span>
+          <input id="byokModel" type="text" placeholder="Leave blank for the provider's default" autocomplete="off" spellcheck="false" />
+        </label>
+        <div class="settings-row settings-row-actions">
+          <button id="byokTest" class="ghost-btn" type="button">Test this key</button>
+          <button id="byokClear" class="ghost-btn" type="button" hidden>Remove key</button>
+          <span id="byokStatus" class="kb-export-status" role="status" aria-live="polite"></span>
+        </div>
+        <p class="settings-hint">Your key stays in this browser. It is sent with each question so the tutor can use it, and it is never saved on the server or synced to your other devices — you will need to paste it again on each device you use.</p>
       </section>
       <section id="settingsPane-display" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-display" data-pane="display" hidden>
         <p class="modal-sub">How the report looks and behaves.</p>

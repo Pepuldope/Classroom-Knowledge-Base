@@ -222,6 +222,104 @@ function enabledProviders() {
   return PROVIDERS.filter((p) => p.apiKey && p.baseURL);
 }
 
+// ---------------------------------------------------------------------------
+// Bring your own key.
+//
+// A student can paste their own provider key in Settings and have the tutor
+// use it first, falling back to the shared free chain when it fails. The key
+// lives in their browser and is sent with the request; nothing here stores it,
+// and nothing here logs it.
+//
+// THE ENDPOINT NAME IS OURS, NOT THEIRS. The client sends a provider NAME and a
+// key, never a URL. Accepting a baseURL from the browser would turn this into
+// an open request proxy — anyone could POST a URL and have the server fetch it
+// with credentials attached. So the name indexes a fixed table below, and an
+// unknown name is simply no provider.
+//
+// A model is accepted, because that is half the point of bringing a key, but it
+// is only ever a string placed in a JSON body sent to an endpoint we chose.
+// ---------------------------------------------------------------------------
+
+/** Providers a student may bring a key for, and the only endpoints we will call. */
+export const BYOK_PROVIDERS = {
+  openrouter: {
+    label: "OpenRouter",
+    baseURL: "https://openrouter.ai/api/v1/chat/completions",
+    model: "openai/gpt-oss-120b:free",
+    capabilities: ["tools", "json", "long_context"],
+    help: "openrouter.ai/keys",
+  },
+  groq: {
+    label: "Groq",
+    baseURL: "https://api.groq.com/openai/v1/chat/completions",
+    model: "llama-3.3-70b-versatile",
+    capabilities: ["tools", "json"],
+    help: "console.groq.com/keys",
+  },
+  google: {
+    label: "Google Gemini",
+    baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    model: "gemini-2.5-flash",
+    capabilities: ["tools", "json", "long_context"],
+    help: "aistudio.google.com/apikey",
+  },
+  mistral: {
+    label: "Mistral",
+    baseURL: "https://api.mistral.ai/v1/chat/completions",
+    model: "mistral-large-latest",
+    capabilities: ["tools", "json"],
+    help: "console.mistral.ai/api-keys",
+  },
+  cerebras: {
+    label: "Cerebras",
+    baseURL: "https://api.cerebras.ai/v1/chat/completions",
+    model: "llama3.1-70b",
+    capabilities: ["json"],
+    help: "cloud.cerebras.ai",
+  },
+  openai: {
+    label: "OpenAI",
+    baseURL: "https://api.openai.com/v1/chat/completions",
+    model: "gpt-4o-mini",
+    capabilities: ["tools", "json", "long_context"],
+    help: "platform.openai.com/api-keys",
+  },
+};
+
+/** A model id is a string in a body we send; bound it anyway. */
+const BYOK_MODEL_RE = /^[A-Za-z0-9._:\/-]{1,120}$/;
+const BYOK_KEY_MAX = 400;
+
+/**
+ * Turn what the browser sent into a provider entry, or null.
+ *
+ * `effort: 3` and a name of its own: the student's key goes to the FRONT of the
+ * chain rather than into the tier bands, and it must not share a circuit
+ * breaker with the shared provider of the same name — one student's expired key
+ * must not open the breaker on the shared Groq for everybody.
+ */
+export function byokProviderModel(value) {
+  if (!value || typeof value !== "object") return null;
+  const name = typeof value.provider === "string" ? value.provider.trim().toLowerCase() : "";
+  const spec = Object.prototype.hasOwnProperty.call(BYOK_PROVIDERS, name) ? BYOK_PROVIDERS[name] : null;
+  if (!spec) return null;
+  const apiKey = typeof value.apiKey === "string" ? value.apiKey.trim() : "";
+  if (!apiKey || apiKey.length > BYOK_KEY_MAX) return null;
+  const asked = typeof value.model === "string" ? value.model.trim() : "";
+  // A model id is only ever a string in a body we send to an endpoint we chose,
+  // so this is belt and braces — but a path-traversal shape is never a model.
+  const model = asked && BYOK_MODEL_RE.test(asked) && !asked.includes("..") ? asked : spec.model;
+  return {
+    name: `yours:${name}`,
+    baseURL: spec.baseURL,
+    apiKey,
+    model,
+    effort: 3,
+    capabilities: spec.capabilities,
+    byok: true,
+  };
+}
+
 /**
  * Which providers actually have a key in this deployment — names and models
  * only, never key material. Without this the only way to know whether e.g.
@@ -395,6 +493,10 @@ function beginProbe(p) {
   if (h.state === "half_open") h.halfOpenInflight++;
 }
 function recordOutcome(p, ok) {
+  // A student's own key is theirs alone. Recording its outcomes in the shared
+  // health map would let one expired key open the circuit breaker for every
+  // other reader of the site.
+  if (p.byok) return;
   const h = getHealth(p.name);
   h.outcomes.push(ok);
   if (h.outcomes.length > BREAKER.recentMax) h.outcomes.shift();
@@ -799,6 +901,7 @@ export async function routeChat(messages, opts = {}) {
     requires = null,
     avoid = null,
     firstDataMs,
+    byok = null,
   } = opts;
 
   const TASK_PROFILES = {
@@ -876,6 +979,14 @@ export async function routeChat(messages, opts = {}) {
   const ordered = main.length
     ? [...main.slice(start), ...main.slice(0, start), ...fallback]
     : [...fallback];
+
+  // The student's own key goes first, and the shared free chain stays behind it
+  // as the fallback — so a key that expires, runs out or is mistyped costs them
+  // one slow answer, not a dead tutor. It bypasses the tier bands and the
+  // rotation deliberately: they supplied it to be used.
+  const userProvider = byokProviderModel(byok);
+  if (userProvider) ordered.unshift(userProvider);
+
   if (ordered.length === 0) throw new Error("No AI providers configured");
 
   bump(_metrics, "selections");
