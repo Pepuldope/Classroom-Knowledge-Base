@@ -127,6 +127,23 @@ try {
   assert.equal(await page.locator(".kb-notebook-item").count(), before, "Undo did not bring the pin back");
   console.log("✓ delete asks for no dialog and can be undone");
 
+  // Unpinning from the NOTE MODAL, which is the path you take from a pin card:
+  // tap the card, the note opens, tap the star. Pepuldo, 2026-09-16: "When
+  // unpinning in notebook the material does not automatically disappear." The
+  // pin left storage; only the Notebook's own Unpin button re-rendered the tab.
+  const pinnedBefore = await page.locator(".kb-notebook-item.is-pin").count();
+  assert.equal(pinnedBefore, 1, "the fixture should have one pin at this point");
+  await page.locator(".kb-notebook-item.is-pin .kb-notebook-title a").click();
+  await page.waitForSelector("#kbNoteModal:not([hidden])", { timeout: 8000 });
+  await page.locator("#kbNoteModal .kb-note-pin").click();
+  assert.equal(await page.locator("#kbNoteModal .kb-note-pin").textContent(), "☆ Pin note", "the star did not unpin");
+  await page.click("#kbNoteClose");
+  assert.equal(await page.locator(".kb-notebook-item.is-pin").count(), 0,
+    "the unpinned note is still in the Notebook");
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem("cwa_kb_pinned_notes") || "[]")), [],
+    "the pin is still in storage");
+  console.log("✓ unpinning from the note itself clears the Notebook card too");
+
   // --- items 1 + 7: Save chat, then continue it from the Notebook -----------
   await page.click('.study-tab-btn[data-tab="search"]');
   await page.click("#kbTutorOpen");

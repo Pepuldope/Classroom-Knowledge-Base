@@ -2753,7 +2753,12 @@ async function openAi(a) {
   }
   if (activeAssignment?.id !== a.id) return;
   aiHistory = chatHistories.get(a.id);
-  renderChatHistory();
+  // Not "auto": a saved conversation must not pull the panel past the
+  // assignment's own details, which are the reason the panel was opened.
+  renderChatHistory({ stick: false });
+  const opened = chatScroller();
+  if (opened) opened.scrollTop = 0;
+  updateJumpToLatest();
   if (aiHistory.length >= 2) refreshSuggestions();
 }
 
@@ -3000,12 +3005,65 @@ $("aiScrim")?.addEventListener("click", (event) => {
  * On a phone the whole sheet body is one scroller and `.ai-messages` is an
  * ordinary block inside it, so scrolling `.ai-messages` moves nothing.
  */
-function scrollChatToBottom() {
+function chatScroller() {
   const messages = $("aiMessages");
   const scroller = $("aiScroll");
-  if (!messages) return;
-  const el = scroller && scroller.scrollHeight > scroller.clientHeight ? scroller : messages;
-  el.scrollTop = el.scrollHeight;
+  if (!messages) return null;
+  return scroller && scroller.scrollHeight > scroller.clientHeight ? scroller : messages;
+}
+
+function scrollChatToBottom() {
+  const el = chatScroller();
+  if (el) el.scrollTop = el.scrollHeight;
+}
+
+/** Far enough from the bottom that the reader has deliberately scrolled up. */
+const CHAT_BOTTOM_SLACK_PX = 120;
+
+function chatIsNearBottom(el) {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= CHAT_BOTTOM_SLACK_PX;
+}
+
+// ---------------------------------------------------------------------------
+// "Jump to latest".
+//
+// Pepuldo, 2026-09-16: an assignment with a saved conversation opened at the
+// BOTTOM of that conversation, so the first thing on screen was the tail of an
+// old chat and the assignment's own details were somewhere above. addMsg used
+// to scroll on every message it drew, which made re-rendering a saved history
+// indistinguishable from twenty messages arriving at once.
+//
+// So: a render restores where the reader was, an arriving message scrolls, and
+// when the two disagree this button says so. It is sticky inside the
+// conversation rather than absolutely positioned against the panel, because
+// which element scrolls differs between the desktop rail and the phone sheet.
+// ---------------------------------------------------------------------------
+let jumpToLatestBtn = null;
+
+function jumpToLatest() {
+  if (jumpToLatestBtn) return jumpToLatestBtn;
+  const btn = document.createElement("button");
+  btn.id = "aiJumpLatest";
+  btn.type = "button";
+  btn.className = "chat-jump";
+  btn.hidden = true;
+  btn.setAttribute("aria-label", "Jump to the latest message");
+  btn.innerHTML = '<span aria-hidden="true">\u2193</span> Latest';
+  btn.addEventListener("click", () => { scrollChatToBottom(); updateJumpToLatest(); });
+  jumpToLatestBtn = btn;
+  return btn;
+}
+
+function updateJumpToLatest() {
+  const btn = jumpToLatestBtn;
+  if (!btn) return;
+  const el = chatScroller();
+  const hasMessages = !!$("aiMessages")?.querySelector(".ai-msg");
+  btn.hidden = !el || !hasMessages || chatIsNearBottom(el);
+}
+
+for (const id of ["aiScroll", "aiMessages"]) {
+  $(id)?.addEventListener("scroll", updateJumpToLatest, { passive: true });
 }
 
 // ---------------------------------------------------------------------------
@@ -3278,15 +3336,29 @@ function addMsg(role, text, index) {
   }
 
   $("aiMessages").appendChild(el);
-  scrollChatToBottom();
   return el;
 }
 
-function renderChatHistory() {
-  $("aiMessages").innerHTML = "";
+/**
+ * `stick` decides where the reader ends up:
+ *   "auto"  keep following the bottom if they were already there (the default,
+ *           and what an answer finishing should do);
+ *   false   stay exactly where they were — a delete, an edit, or opening an
+ *           assignment, where the details above matter more than the tail.
+ */
+function renderChatHistory({ stick = "auto" } = {}) {
+  const messages = $("aiMessages");
+  const scroller = chatScroller();
+  const wasAtBottom = scroller ? chatIsNearBottom(scroller) : false;
+  const previousTop = scroller ? scroller.scrollTop : 0;
+  messages.innerHTML = "";
   for (let i = 0; i < aiHistory.length; i++) {
     addMsg(aiHistory[i].role, aiHistory[i].content, i);
   }
+  messages.appendChild(jumpToLatest());
+  const after = chatScroller();
+  if (after) after.scrollTop = (stick === "auto" ? wasAtBottom : stick) ? after.scrollHeight : previousTop;
+  updateJumpToLatest();
 }
 
 function persistChat() {
@@ -3296,14 +3368,14 @@ function persistChat() {
 function deleteMessage(index) {
   const drop = aiHistory[index + 1]?.role === "assistant" ? 2 : 1;
   aiHistory.splice(index, drop);
-  renderChatHistory();
+  renderChatHistory({ stick: false });
   persistChat();
 }
 
 function rewindToMessage(index) {
   aiHistory = aiHistory.slice(0, index);
   if (activeAssignment) chatHistories.set(activeAssignment.id, aiHistory);
-  renderChatHistory();
+  renderChatHistory({ stick: false });
   persistChat();
 }
 

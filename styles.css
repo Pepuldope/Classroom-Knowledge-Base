@@ -842,6 +842,35 @@ summary::-webkit-details-marker { color: var(--muted); }
   flex-direction: column;
   gap: 0.75rem;
 }
+/* "Jump to latest".
+ *
+ * Sticky rather than absolutely positioned: which element actually scrolls
+ * differs between the desktop rail (.ai-messages) and the phone sheet
+ * (.ai-scroll), and sticky asks the nearest scrolling ancestor rather than
+ * making us name it. Last child of the conversation, so its resting place is
+ * the bottom of the transcript — exactly where it stops being needed. */
+.chat-jump {
+  position: sticky;
+  bottom: 0.5rem;
+  align-self: center;
+  z-index: 4;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  cursor: pointer;
+}
+.chat-jump[hidden] { display: none; }
+.chat-jump:hover { border-color: var(--accent); color: var(--accent); }
+.chat-jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+  /* A thumb target, and clear of the composer below it. */
+  .chat-jump { padding: 0.55rem 1.1rem; bottom: 0.75rem; }
+}
+
 .ai-msg {
   padding: 0.6rem 0.85rem;
   border-radius: 8px;

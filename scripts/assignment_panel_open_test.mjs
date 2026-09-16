@@ -28,16 +28,21 @@ const WORK = {
   dueDate: { year: tomorrow.getFullYear(), month: tomorrow.getMonth() + 1, day: tomorrow.getDate() },
 };
 
-async function openPlannerWithOneAssignment(context, { chatDelayMs = 0 } = {}) {
+async function openPlannerWithOneAssignment(context, { chatDelayMs = 0, chatMessages = [] } = {}) {
   const page = await context.newPage();
   let chatCalls = 0;
+  // Registration order matters and is COUNTER-INTUITIVE: Playwright matches
+  // routes in reverse registration order, so the catch-all has to go FIRST or
+  // it swallows every specific stub below it. It used to be last, which meant
+  // /api/chat answered 404 and neither chatDelayMs nor chatMessages ever
+  // reached the app.
+  await page.route("**/api/**", (r) => r.fulfill({ status: 404, body: "{}" }));
   await page.route("**/api/oauth-config*", (r) => r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ hasRefreshTokens: false }) }));
   await page.route("**/api/chat**", async (r) => {
     chatCalls++;
     if (chatDelayMs) await new Promise((res) => setTimeout(res, chatDelayMs));
-    return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ messages: [] }) });
+    return r.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ messages: chatMessages }) });
   });
-  await page.route("**/api/**", (r) => r.fulfill({ status: 404, body: "{}" }));
   await page.route("**/accounts.google.com/**", (r) => r.fulfill({ status: 204, body: "" }));
   await page.route("https://classroom.googleapis.com/**", (r) => {
     const url = r.request().url();
@@ -142,6 +147,47 @@ try {
       `the title line should clear the buttons (title ${f.titleLineWidth}px vs body ${f.bodyWidth}px)`);
   }
   await phone2.close();
+
+  // --- a saved conversation opens at the TOP, with a way back to the tail ---
+  // Pepuldo, 2026-09-16: "When opening assignment with an ai history it should
+  // start at the top of the scroll thingy so that you see the details of the
+  // assignment first." addMsg used to scroll on every message it drew, so
+  // re-rendering a saved history landed the reader at its end.
+  const phone3 = await browser.newContext({ ...devices["iPhone 13"] });
+  const history = [];
+  for (let i = 0; i < 12; i++) {
+    history.push({ role: "user", content: `Question number ${i} about the pitch deck, long enough to take a line or two on a phone.` });
+    history.push({ role: "assistant", content: `Answer number ${i}. ${"Detail ".repeat(30)}` });
+  }
+  const { page: histPage, chatCalls: histChatCalls } = await openPlannerWithOneAssignment(phone3, { chatMessages: history });
+  await histPage.locator(".assignment").first().click();
+  await histPage.waitForSelector("#ai:not([hidden])", { timeout: 5000 });
+  await histPage.waitForFunction(() => document.querySelectorAll("#aiMessages .ai-msg").length >= 24, null, { timeout: 5000 });
+  assert.ok(histChatCalls() > 0, "the /api/chat stub was never reached — the route order regressed");
+
+  const atOpen = await histPage.evaluate(() => {
+    const el = document.getElementById("aiScroll");
+    return {
+      top: Math.round(el.scrollTop),
+      scrollable: el.scrollHeight > el.clientHeight,
+      jumpHidden: document.getElementById("aiJumpLatest")?.hidden,
+      contextVisible: document.getElementById("aiContext").getBoundingClientRect().top >= el.getBoundingClientRect().top - 1,
+    };
+  });
+  assert.equal(atOpen.scrollable, true, "24 messages did not make the sheet scrollable — the fixture is wrong, not the app");
+  assert.equal(atOpen.top, 0, `a saved conversation opened ${atOpen.top}px down instead of at the assignment's details`);
+  assert.equal(atOpen.contextVisible, true, "the assignment's own details are not on screen when it opens");
+  assert.equal(atOpen.jumpHidden, false, "no way back to the latest message from the top of a long chat");
+
+  await histPage.locator("#aiJumpLatest").click();
+  const atBottom = await histPage.evaluate(() => {
+    const el = document.getElementById("aiScroll");
+    return { distance: Math.round(el.scrollHeight - el.scrollTop - el.clientHeight), jumpHidden: document.getElementById("aiJumpLatest")?.hidden };
+  });
+  assert.ok(atBottom.distance <= 2, `Latest left the reader ${atBottom.distance}px from the bottom`);
+  assert.equal(atBottom.jumpHidden, true, "Latest is still offering to do what it just did");
+  await phone3.close();
+  console.log("✓ a saved conversation opens at the assignment's details, and Latest jumps to the tail");
 
   console.log(`✓ panel opens immediately on tap; no keyboard on touch, caret kept on desktop; card footer one row (${footers[0].metaHeight}px)`);
 } finally {

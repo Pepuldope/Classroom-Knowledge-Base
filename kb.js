@@ -392,6 +392,11 @@ function renderNotePinButton(note) {
     event.stopPropagation();
     savePinnedNotes(togglePinnedNote(loadPinnedNotes(), note));
     update();
+    // The Notebook is built from this same list, and unpinning from the note
+    // modal is how you get there from a pin card: tap the card, the note
+    // opens, tap the star. Without this the pin left storage and the card
+    // stayed on screen until something else happened to re-render the tab.
+    renderStudyList();
   });
   update();
   return button;
