@@ -135,7 +135,11 @@ try {
   await page.click("#kbTutorSaveChat");
   assert.equal(await page.locator("#kbTutorSaveChat").textContent(), "Saved ✓");
   assert.equal(await page.locator('#kbTutorMessages [data-role="assistant"]').count(), 1, "saving cleared the chat, as Archive did");
-  await page.click("#kbTutorNewTopic");
+  // Clear chat is the only reset now — "New topic" was the same function with
+  // one extra line, so Clear chat took over the thread-name reset.
+  await page.click("#kbTutorClearChat");
+  assert.equal(await page.locator("#kbTutorNewTopic").count(), 0, "New topic is back — it duplicated Clear chat");
+  assert.equal(await page.locator("#kbTutorThreadTitle").textContent(), "New tutor thread", "Clear chat left the old thread's name behind");
   await page.click("#kbTutorClose");
   await page.click('.study-tab-btn[data-tab="saved"]');
   const chatCard = page.locator(".kb-notebook-item.is-chat");

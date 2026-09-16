@@ -3504,13 +3504,17 @@ const DEFAULT_QUICK_PROMPTS = [
   { label: "Key points", prompt: "Give me the key points I need to know from this assignment and any attached materials. Be concrete: list the main concepts, formulas, dates, names, or rules. Use bullet points grouped by topic. Reference materials by name when relevant." },
 ];
 
-function renderQuickPrompts(items) {
-  const container = document.querySelector(".ai-quick");
+function renderQuickPrompts(items, label = "Quick prompts") {
+  const container = document.querySelector(".ai-quick .ai-quick-list");
   if (!container) return;
+  const toggle = container.closest(".ai-quick-menu")?.querySelector(".ai-quick-toggle");
+  if (toggle) toggle.textContent = label;
   container.innerHTML = "";
   for (const item of items) {
     const btn = document.createElement("button");
+    btn.type = "button";
     btn.textContent = item.label;
+    btn.title = item.prompt;
     btn.dataset.prompt = item.prompt;
     btn.addEventListener("click", () => sendAi(btn.dataset.prompt));
     container.appendChild(btn);
@@ -3532,9 +3536,45 @@ async function refreshSuggestions() {
     const data = await r.json();
     const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
     if (suggestions.length === 0) return;
-    renderQuickPrompts(suggestions.map((s) => ({ label: s.length > 32 ? s.slice(0, 30) + "…" : s, prompt: s })));
+    renderQuickPrompts(
+      suggestions.map((s) => ({ label: s.length > 64 ? s.slice(0, 62) + "…" : s, prompt: s })),
+      "Suggested questions",
+    );
   } catch {}
 }
+
+// ---------------------------------------------------------------------------
+// The quick-prompt disclosures close like a menu, not like a <details>.
+//
+// A bare <details> stays open until you click its own summary again, which on
+// a phone means a list covering the answer with no obvious way back. One
+// document-level pair of listeners serves every .ai-quick-menu on the page —
+// the assignment panel's and the Study tutor's — so neither has to own this,
+// and the static markup, app.js's rendered suggestions and kb.js's prompts all
+// behave the same without each wiring it.
+// ---------------------------------------------------------------------------
+function closeQuickMenus(except) {
+  for (const menu of document.querySelectorAll(".ai-quick-menu[open]")) {
+    if (menu !== except) menu.open = false;
+  }
+}
+document.addEventListener("click", (e) => {
+  const el = e.target instanceof Element ? e.target : null;
+  // Only the summary (which toggles) and dead space inside the list keep a
+  // menu open. Picking a prompt closes it — leaving it up would cover the
+  // answer it just asked for — and so does a click anywhere else.
+  const onToggle = el?.closest(".ai-quick-toggle");
+  const inList = el?.closest(".ai-quick-list");
+  const onPrompt = el?.closest(".ai-quick-list button");
+  const keep = onToggle || (inList && !onPrompt) ? el.closest(".ai-quick-menu") : null;
+  closeQuickMenus(keep);
+}, true);
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  // Escape belongs to the menu while one is open; only then does it reach the
+  // panel or the modal behind it.
+  if (document.querySelector(".ai-quick-menu[open]")) { e.stopPropagation(); closeQuickMenus(null); }
+}, true);
 
 // ---------------------------------------------------------------------------
 // Sticky-header height, published as --header-h.

@@ -717,8 +717,9 @@ try {
     const noteTitle = await page.locator("#kbNoteTitle").textContent();
     assert.ok(noteTitle && noteTitle.length > 0, "clicking a source chip should open the note");
     await page.click("#kbNoteClose");
-    await page.click("#kbTutorNewTopic");
-    assert.equal(await page.locator("#kbTutorMessages .ai-msg").count(), 0, "new topic should clear the current thread");
+    await page.click("#kbTutorClearChat");
+    assert.equal(await page.locator("#kbTutorMessages .ai-msg").count(), 0, "Clear chat should clear the current thread");
+    assert.equal(await page.locator("#kbTutorNewTopic").count(), 0, "New topic is back — it duplicated Clear chat");
     await page.click("#kbTutorClose");
   });
 

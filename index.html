@@ -334,14 +334,18 @@
       <textarea id="kbTutorInput" rows="1" placeholder="Ask about anything in your notes…  (Shift+Enter for a new line)" autocomplete="off"></textarea>
       <button type="submit">Send</button>
       <button id="kbTutorClearChat" type="button" title="Clear the current chat">Clear chat</button>
-      <button id="kbTutorNewTopic" type="button" title="Start a fresh tutor conversation">New topic</button>
     </form>
     <div class="ai-quick">
-      <button data-prompt="Explain this topic to me like I'm starting from zero, using only what's in the knowledge base.">Explain from scratch</button>
-      <button data-prompt="Quiz me on this topic. Ask one question at a time and give feedback, using the knowledge base.">Quiz me</button>
-      <button data-prompt="Summarize the key points on this topic from the knowledge base, as bullet points.">Key points</button>
-      <button data-prompt="Explain this like I'm 12 years old — simple words, a relatable everyday analogy, no jargon, using only the knowledge base.">Explain like I'm 12</button>
-      <button data-prompt="Give me a practice problem on this topic from the knowledge base, then wait for my answer and give feedback.">Practice problem</button>
+      <details class="ai-quick-menu">
+        <summary class="ai-quick-toggle">Quick prompts</summary>
+        <div class="ai-quick-list">
+          <button data-prompt="Explain this topic to me like I'm starting from zero, using only what's in the knowledge base.">Explain from scratch</button>
+          <button data-prompt="Quiz me on this topic. Ask one question at a time and give feedback, using the knowledge base.">Quiz me</button>
+          <button data-prompt="Summarize the key points on this topic from the knowledge base, as bullet points.">Key points</button>
+          <button data-prompt="Explain this like I'm 12 years old — simple words, a relatable everyday analogy, no jargon, using only the knowledge base.">Explain like I'm 12</button>
+          <button data-prompt="Give me a practice problem on this topic from the knowledge base, then wait for my answer and give feedback.">Practice problem</button>
+        </div>
+      </details>
     </div>
   </div>
 </div>
@@ -403,9 +407,18 @@
     <button id="aiClearBtn" type="button" title="Clear this chat">Clear</button>
   </form>
   <div class="ai-quick">
-    <button data-prompt="Make me a structured study guide for this assignment. Break the topics into sections — one ## heading per topic. Under each: brief explanation, key terms in bold, a short worked example, and a self-check question. Reference attached materials by name where relevant.">Study guide</button>
-    <button data-prompt="Quiz me on this assignment. Ask one question at a time, wait for my answer, then give brief feedback and the next question. Cover all the key topics across 5-7 questions, drawing on the attached materials.">Quiz me</button>
-    <button data-prompt="Give me the key points I need to know from this assignment and any attached materials. Be concrete: list the main concepts, formulas, dates, names, or rules. Use bullet points grouped by topic. Reference materials by name when relevant.">Key points</button>
+    <details class="ai-quick-menu">
+      <summary class="ai-quick-toggle">Quick prompts</summary>
+      <!-- The same three DEFAULT_QUICK_PROMPTS app.js renders. Kept in the
+           markup so the list is never momentarily empty, and so a gate that
+           inspects .ai-quick button has something to inspect before the panel
+           has ever been opened. renderQuickPrompts replaces them. -->
+      <div class="ai-quick-list">
+        <button type="button" data-prompt="Make me a structured study guide for this assignment. Break the topics into sections — one ## heading per topic. Under each: brief explanation, key terms in bold, a short worked example, and a self-check question. Reference attached materials by name where relevant.">Study guide</button>
+        <button type="button" data-prompt="Quiz me on this assignment. Ask one question at a time, wait for my answer, then give brief feedback and the next question. Cover all the key topics across 5-7 questions, drawing on the attached materials.">Quiz me</button>
+        <button type="button" data-prompt="Give me the key points I need to know from this assignment and any attached materials. Be concrete: list the main concepts, formulas, dates, names, or rules. Use bullet points grouped by topic. Reference materials by name when relevant.">Key points</button>
+      </div>
+    </details>
   </div>
 </aside>
 

@@ -123,6 +123,51 @@ await check("the quick-prompt buttons are disabled while a reply is in flight", 
   assert.ok(s.quick.every(Boolean), "a quick-prompt button stayed live mid-reply");
 });
 
+await check("the quick prompts are one collapsed menu that opens upwards", async () => {
+  // They used to be a row of three truncated buttons on the panel's floor.
+  // As a disclosure the row is one control; and because that row sits at the
+  // bottom of a phone sheet, the list has to open ABOVE it or it opens off
+  // the bottom of the screen.
+  const shut = await page.evaluate(() => {
+    const menu = document.querySelector("#ai .ai-quick-menu");
+    return { exists: !!menu, open: !!menu?.open, listVisible: !!menu?.querySelector(".ai-quick-list")?.getClientRects().length };
+  });
+  assert.equal(shut.exists, true, "the panel's quick prompts are not a disclosure");
+  assert.equal(shut.open, false, "the quick-prompt menu starts open");
+  assert.equal(shut.listVisible, false, "the collapsed menu still renders its list");
+
+  const open = await page.evaluate(() => {
+    const menu = document.querySelector("#ai .ai-quick-menu");
+    menu.open = true;
+    const list = menu.querySelector(".ai-quick-list").getBoundingClientRect();
+    const toggle = menu.querySelector(".ai-quick-toggle").getBoundingClientRect();
+    return { listBottom: list.bottom, toggleTop: toggle.top, count: menu.querySelectorAll("button").length };
+  });
+  assert.ok(open.count >= 3, `the open menu offered ${open.count} prompts`);
+  assert.ok(open.listBottom <= open.toggleTop + 1,
+    `the list opens downwards: its bottom is ${open.listBottom}px, the toggle starts at ${open.toggleTop}px`);
+
+  // Picking one folds the menu away — otherwise it covers the answer it asked for.
+  const afterPick = await page.evaluate(() => {
+    const menu = document.querySelector("#ai .ai-quick-menu");
+    // The busy-state check above left these disabled, and a disabled button
+    // dispatches no click at all. Idle is the state this check is about.
+    for (const b of menu.querySelectorAll("button")) b.disabled = false;
+    menu.querySelector("button").click();
+    return menu.open;
+  });
+  assert.equal(afterPick, false, "the menu stayed open over the answer it just asked for");
+
+  // Escape closes it too, and a click anywhere else does.
+  const afterEscape = await page.evaluate(() => {
+    const menu = document.querySelector("#ai .ai-quick-menu");
+    menu.open = true;
+    document.body.click();
+    return menu.open;
+  });
+  assert.equal(afterEscape, false, "clicking away left the menu open");
+});
+
 await check("the thinking dots respect prefers-reduced-motion", async () => {
   const reduced = await browser.newPage();
   await reduced.emulateMedia({ reducedMotion: "reduce" });

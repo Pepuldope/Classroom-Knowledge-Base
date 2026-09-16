@@ -156,14 +156,18 @@
         <input id="kbTutorInput" type="text" placeholder="Ask about the knowledge base…" autocomplete="off" />
         <button type="submit">Send</button>
         <button id="kbTutorClearChat" type="button" title="Clear the current chat">Clear chat</button>
-        <button id="kbTutorNewTopic" type="button" title="Start a fresh tutor conversation">New topic</button>
-      </form>
+        </form>
       <div class="ai-quick">
-        <button data-prompt="Explain from scratch">Explain from scratch</button>
-        <button data-prompt="Quiz me">Quiz me</button>
-        <button data-prompt="Key points">Key points</button>
-        <button data-prompt="Explain like I'm 12">Explain like I'm 12</button>
-        <button data-prompt="Practice problem">Practice problem</button>
+        <details class="ai-quick-menu">
+          <summary class="ai-quick-toggle">Quick prompts</summary>
+          <div class="ai-quick-list">
+            <button data-prompt="Explain from scratch">Explain from scratch</button>
+            <button data-prompt="Quiz me">Quiz me</button>
+            <button data-prompt="Key points">Key points</button>
+            <button data-prompt="Explain like I'm 12">Explain like I'm 12</button>
+            <button data-prompt="Practice problem">Practice problem</button>
+          </div>
+        </details>
       </div>
     </div>
   </div>

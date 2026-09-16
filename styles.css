@@ -1054,17 +1054,76 @@ summary::-webkit-details-marker { color: var(--muted); }
 .ai-form button[type="submit"]:hover { background: var(--accent-hover); }
 #aiClearBtn { color: var(--muted); font-size: 0.85rem; }
 #aiClearBtn:hover { color: var(--danger); }
+/* The quick prompts.
+ *
+ * They used to be a row of 3-5 buttons on the panel's floor, which on a phone
+ * was a wall of truncated labels ("Explain like I…") eating a line of the
+ * sheet. They are one disclosure now, and it opens UPWARDS: the row sits on
+ * the floor of a bottom sheet, so a list that opened downwards would open off
+ * the bottom of the screen. Absolutely positioned so opening it never reflows
+ * the conversation above. */
 .ai-quick {
   display: flex;
   gap: 0.4rem;
   padding: 0 1rem 0.75rem;
+  position: relative;
+}
+.ai-quick-menu { flex: 1 1 auto; min-width: 0; }
+.ai-quick-toggle {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--card);
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.ai-quick-toggle::-webkit-details-marker { display: none; }
+.ai-quick-toggle::after {
+  content: "▾";
+  font-size: 0.8em;
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+.ai-quick-menu[open] > .ai-quick-toggle::after { transform: rotate(180deg); }
+.ai-quick-toggle:hover { border-color: var(--accent); }
+.ai-quick-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Hide it explicitly rather than leaning on the closed <details>. An
+ * absolutely-positioned child escapes the UA's ::details-content hiding, so a
+ * closed menu still painted its list straight over the composer. */
+.ai-quick-menu:not([open]) > .ai-quick-list { display: none; }
+.ai-quick-list {
+  position: absolute;
+  bottom: 100%;
+  left: 1rem;
+  right: 1rem;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-bottom: 0.4rem;
+  padding: 0.4rem;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
 }
 .ai-quick button {
   font-size: 0.85rem;
-  padding: 0.55rem 0.5rem;
-  flex: 1 1 0;
+  padding: 0.55rem 0.6rem;
   min-width: 0;
   width: 100%;
+  text-align: left;
+}
+@media (prefers-reduced-motion: reduce) {
+  .ai-quick-toggle::after { transition: none; }
 }
 
 .open-link {
@@ -1906,7 +1965,8 @@ summary::-webkit-details-marker { color: var(--muted); }
     padding-bottom: max(0.6rem, env(safe-area-inset-bottom));
     gap: 0.35rem;
   }
-  .ai-quick button { padding: 0.6rem 0.35rem; }
+  .ai-quick-list { left: 0.85rem; right: 0.85rem; }
+  .ai-quick button { padding: 0.7rem 0.6rem; }
 
   .original-desc { padding: 0.7rem 0.8rem; }
   /* No cap. This rule and the one above it used to disagree: the sheet's own

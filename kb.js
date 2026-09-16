@@ -1742,7 +1742,6 @@ export function wireKbEvents() {
   const tutorForm = $("kbTutorForm");
   const tutorInput = $("kbTutorInput");
   const tutorClearChat = $("kbTutorClearChat");
-  const tutorNewTopic = $("kbTutorNewTopic");
   tutorThreadTitle = loadTutorThreadTitle();
   const threadTitle = $("kbTutorThreadTitle");
   if (threadTitle) threadTitle.textContent = tutorThreadTitle;
@@ -1782,7 +1781,6 @@ export function wireKbEvents() {
   });
   tutorClose?.addEventListener("click", () => { const m = $("kbTutorModal"); if (m) m.hidden = true; });
   tutorClearChat?.addEventListener("click", clearTutorUi);
-  tutorNewTopic?.addEventListener("click", resetTutorUi);
   tutorForm?.addEventListener("submit", (e) => {
     e.preventDefault();
     // One button, two jobs — which one depends on whether a reply is running.
@@ -1801,7 +1799,11 @@ export function wireKbEvents() {
   });
   setTutorBusy(false);
   document.querySelectorAll("#kbTutorModal .ai-quick button").forEach((b) =>
-    b.addEventListener("click", () => { const p = b.dataset.prompt; if (p) sendTutor(p); })
+    b.addEventListener("click", () => {
+      b.closest(".ai-quick-menu")?.removeAttribute("open");
+      const p = b.dataset.prompt;
+      if (p) sendTutor(p);
+    })
   );
 
   // Note-detail modal (opened by clicking a result card).
@@ -3495,22 +3497,18 @@ function renderTutorWelcome() {
   wrap.replaceChildren(el);
 }
 
-function resetTutorUi() {
-  tutorMessages = resetTutorConversation();
-  tutorThreadId = null;
-  tutorThreadCourse = "";
-  saveTutorThreadTitle("New tutor thread");
-  const messages = $("kbTutorMessages");
-  if (messages) messages.replaceChildren();
-  $("kbTutorSources")?.replaceChildren();
-  renderTutorWelcome();
-  $("kbTutorInput")?.focus();
-}
-
+/**
+ * Clear chat. There were two buttons doing this — "Clear chat" and "New topic"
+ * — whose implementations were byte-identical apart from one line: New topic
+ * also reset the thread name. Nobody could tell them apart from the labels, so
+ * Clear chat is the survivor and it resets the name too: the title named the
+ * conversation that is now gone.
+ */
 function clearTutorUi() {
   tutorMessages = resetTutorConversation();
   tutorThreadId = null;
   tutorThreadCourse = "";
+  saveTutorThreadTitle("New tutor thread");
   const messages = $("kbTutorMessages");
   if (messages) messages.replaceChildren();
   $("kbTutorSources")?.replaceChildren();
