@@ -902,6 +902,11 @@ export async function routeChat(messages, opts = {}) {
     avoid = null,
     firstDataMs,
     byok = null,
+    // False means "their key, or nothing". Set when the student has spent the
+    // shared daily allowance: their own key still works, and a failure of it is
+    // an error they can see rather than a silent charge against a quota they
+    // have already used up.
+    sharedFallback = true,
   } = opts;
 
   const TASK_PROFILES = {
@@ -976,7 +981,7 @@ export async function routeChat(messages, opts = {}) {
   // single endpoint gets hammered.
   const start = main.length ? _rotate % main.length : 0;
   _rotate = (_rotate + 1) % Math.max(1, all.length);
-  const ordered = main.length
+  const shared = main.length
     ? [...main.slice(start), ...main.slice(0, start), ...fallback]
     : [...fallback];
 
@@ -985,7 +990,9 @@ export async function routeChat(messages, opts = {}) {
   // one slow answer, not a dead tutor. It bypasses the tier bands and the
   // rotation deliberately: they supplied it to be used.
   const userProvider = byokProviderModel(byok);
-  if (userProvider) ordered.unshift(userProvider);
+  const ordered = userProvider
+    ? (sharedFallback ? [userProvider, ...shared] : [userProvider])
+    : shared;
 
   if (ordered.length === 0) throw new Error("No AI providers configured");
 

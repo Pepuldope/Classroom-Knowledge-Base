@@ -114,10 +114,6 @@ export function relatedCourseMaterials(item, all, { limit = 5 } = {}) {
     .sort((a, b) => b.score - a.score || String(a.item.title || "").localeCompare(String(b.item.title || "")))
     .slice(0, Math.max(0, limit))
     .map(({ item: candidate, why }) => ({
-      // The id is for the UI, which opens the post in the panel rather than
-      // bouncing to Classroom. api/tutor.js whitelists the fields it forwards,
-      // so this never reaches a prompt.
-      id: String(candidate.id || ""),
       title: String(candidate.title || "Untitled"),
       kind: candidate.kind === "material" ? "material" : "assignment",
       link: String(candidate.alternateLink || ""),

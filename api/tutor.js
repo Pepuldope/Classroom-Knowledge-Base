@@ -1,5 +1,5 @@
-import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
-import { routeChat } from "./ai-router.js";
+import { verifyUser, checkAndIncrementRate, peekRate, chargeRate, jsonResponse } from "./_helpers.js";
+import { routeChat, byokProviderModel } from "./ai-router.js";
 
 export const config = { runtime: "edge" };
 
@@ -446,19 +446,61 @@ export function tutorQuestionTier(messages) {
   return "tutor";
 }
 
+/**
+ * Who pays for this request.
+ *
+ * The daily limit protects the SHARED key, and it used to be charged and
+ * enforced before anything was routed. That meant a student who had pasted
+ * their own key still got a 429 once the shared allowance ran out — which is
+ * precisely the moment anybody bothers to paste a key. The limit was refusing
+ * requests it was not paying for.
+ *
+ * @param hasOwnKey  the request carries a usable provider key of their own
+ * @param overLimit  the shared allowance is already spent
+ */
+export function tutorRatePolicy({ hasOwnKey = false, overLimit = false } = {}) {
+  if (!hasOwnKey) {
+    // Unchanged: spend one up front, and refuse past the limit.
+    return { refuse: overLimit, chargeUpFront: !overLimit, chargeIfShared: false, sharedFallback: true };
+  }
+  if (overLimit) {
+    // Their key, or a visible error. Never a silent charge against an
+    // allowance they have already spent, and never a silent downgrade to a
+    // shared key that has nothing left to give.
+    return { refuse: false, chargeUpFront: false, chargeIfShared: false, sharedFallback: false };
+  }
+  // Their key first, the shared chain behind it — and the shared allowance is
+  // spent only if the shared chain is what actually answered.
+  return { refuse: false, chargeUpFront: false, chargeIfShared: true, sharedFallback: true };
+}
+
 export default async function handler(req) {
   if (req.method !== "POST") return jsonResponse({ error: "Method not allowed" }, 405);
 
   const sub = await verifyUser(req);
   if (!sub) return jsonResponse({ error: "unauthorized" }, 401);
 
-  const rate = await checkAndIncrementRate(sub);
-  if (!rate.ok) {
-    return jsonResponse({ error: "rate_limited", limit: rate.limit, message: `Daily tutor limit reached (${rate.limit}). Resets at midnight UTC.` }, 429);
-  }
-
   const body = await req.json().catch(() => null);
   if (!body || !Array.isArray(body.messages)) return jsonResponse({ error: "messages array required" }, 400);
+
+  // ---- The daily limit, and who it is actually for ------------------------
+  // It exists to protect the SHARED key. Charging it up front meant a student
+  // who had pasted their own key still got a 429 once the shared allowance ran
+  // out — which is the one moment anybody bothers to paste a key. So:
+  //
+  //   no key of their own -> unchanged: spend one, refuse past the limit;
+  //   key, under the limit -> spend one only if the SHARED chain answers;
+  //   key, over the limit  -> their key only, and nothing is charged. A bad key
+  //                           is then an error they can see, rather than a
+  //                           silent charge against an allowance already spent.
+  const userProvider = byokProviderModel(body.byok);
+  // Peeked, not spent: whether this request costs a shared request is not known
+  // until it is known whose key answered.
+  const rate = userProvider ? await peekRate(sub) : await checkAndIncrementRate(sub);
+  const policy = tutorRatePolicy({ hasOwnKey: !!userProvider, overLimit: !rate.ok });
+  if (policy.refuse) {
+    return jsonResponse({ error: "rate_limited", limit: rate.limit, message: `Daily tutor limit reached (${rate.limit}). Resets at midnight UTC.` }, 429);
+  }
 
   // The browser performs retrieval over its private IndexedDB bundle. The
   // server never reads a shared bundle and receives only this bounded context.
@@ -500,7 +542,14 @@ export default async function handler(req) {
   // can name a provider but never a URL.
   return new Response(tutorEventStream({
     sourcesEvent,
-    route: () => routeChat(messages, { task, stream: true, avoid, byok: body.byok }),
+    route: () => routeChat(messages, { task, stream: true, avoid, byok: body.byok, sharedFallback: policy.sharedFallback }),
+    // Charged here rather than at the top, because only now is it known whose
+    // key answered. A provider named "yours:…" is the student's own.
+    onRouted: (routed) => {
+      if (!policy.chargeIfShared) return null;
+      if (String(routed?.provider || "").startsWith("yours:")) return null;
+      return chargeRate(sub);
+    },
   }), {
     headers: {
       "Content-Type": "text/event-stream; charset=utf-8",
@@ -524,7 +573,7 @@ export default async function handler(req) {
  * with the sources, and the model — which used to travel in X-AI-Model — is an
  * event. A routing failure is an `error` event: the status is already 200.
  */
-export function tutorEventStream({ sourcesEvent, route, keepAliveMs = 10_000 }) {
+export function tutorEventStream({ sourcesEvent, route, keepAliveMs = 10_000, onRouted = null }) {
   const enc = new TextEncoder();
   const event = (obj) => enc.encode(`data: ${JSON.stringify(obj)}\n\n`);
   return new ReadableStream({
@@ -553,6 +602,9 @@ export function tutorEventStream({ sourcesEvent, route, keepAliveMs = 10_000 }) 
         attempts: routed.meta?.attempts ?? 1,
         fallback: routed.meta?.fallbackReason || null,
       }));
+      // Accounting, never the reader's problem: a failure here must not cost
+      // them the answer that is already on its way.
+      try { await onRouted?.(routed); } catch {}
       const reader = routed.stream.getReader();
       try {
         while (true) {

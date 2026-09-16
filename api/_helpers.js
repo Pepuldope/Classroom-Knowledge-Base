@@ -42,6 +42,32 @@ export function rateKey(sub) {
   return `rate:${sub}:${todayUTC()}`;
 }
 
+/**
+ * Read the day's count WITHOUT spending one.
+ *
+ * The daily limit exists to protect the SHARED key. A student who brought their
+ * own should not be charged for a request that never touches it — and finding
+ * that out requires knowing which provider answered, which is only known after
+ * routing. So the tutor peeks first and charges afterwards, if at all.
+ */
+export async function peekRate(sub, limit = DEFAULT_DAILY_LIMIT) {
+  if (!KV_URL || !KV_TOKEN) return { ok: true, count: 0, limit };
+  try {
+    const r = await fetch(`${KV_URL}/get/${encodeURIComponent(rateKey(sub))}`, {
+      headers: { Authorization: `Bearer ${KV_TOKEN}` },
+    });
+    if (!r.ok) return { ok: true, count: 0, limit };
+    const data = await r.json();
+    const count = Number(data.result) || 0;
+    return { ok: count < limit, count, limit };
+  } catch { return { ok: true, count: 0, limit }; }
+}
+
+/** Spend one. Safe to call after a response has begun streaming. */
+export async function chargeRate(sub, limit = DEFAULT_DAILY_LIMIT) {
+  return checkAndIncrementRate(sub, limit);
+}
+
 export async function checkAndIncrementRate(sub, limit = DEFAULT_DAILY_LIMIT) {
   if (!KV_URL || !KV_TOKEN) return { ok: true, count: 0, limit };
   const key = rateKey(sub);

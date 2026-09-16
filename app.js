@@ -1096,64 +1096,6 @@ function renderLibraryStrip(a) {
   strip.hidden = false;
 }
 
-/**
- * The class material this assignment is probably referring to.
- *
- * relatedCourseMaterials has been computed on every open since it was written,
- * and handed to the tutor — which is how the tutor could say "the handout is
- * probably the Tuesday material" while the student had no way to see the same
- * list. The data and the API both supported it; only the UI did not.
- *
- * Presented as a guess, because it is one: the scorer infers the link from a
- * shared course, title overlap and posting date, since Classroom's own data
- * does not record it. Each chip opens that post in this same panel rather than
- * bouncing out to Classroom, and is a real link so it can open in a new tab.
- */
-function renderRelatedMaterials(a) {
-  const strip = $("aiRelatedMaterials");
-  if (!strip) return;
-  strip.hidden = true;
-  strip.innerHTML = "";
-  const related = relatedCourseMaterials(a, allAssignments);
-  if (related.length === 0) return;
-
-  const label = document.createElement("div");
-  label.className = "archive-strip-label";
-  label.textContent = "Probably the material for this";
-  strip.appendChild(label);
-
-  const row = document.createElement("div");
-  row.className = "archive-strip-row";
-  for (const material of related) {
-    const target = allAssignments.find((item) => item.id === material.id);
-    const chip = document.createElement("a");
-    chip.className = "btn-link archive-strip-item";
-    if (target) {
-      linkTo(chip, assignmentHref(target.id), () => openAi(target));
-    } else if (material.link) {
-      // Not in the loaded window (out of scope, or an older post): Classroom
-      // can still show it.
-      chip.href = material.link;
-      chip.target = "_blank";
-      chip.rel = "noopener";
-    }
-
-    const title = document.createElement("div");
-    title.className = "archive-strip-title";
-    title.textContent = material.title;
-
-    const meta = document.createElement("div");
-    meta.className = "archive-strip-meta";
-    meta.textContent = [material.kind === "material" ? "Class material" : "Assignment", material.why]
-      .filter(Boolean).join(" · ");
-
-    chip.append(title, meta);
-    row.appendChild(chip);
-  }
-  strip.appendChild(row);
-  strip.hidden = false;
-}
-
 // ---------------------------------------------------------------------------
 // Where you were.
 //
@@ -2812,7 +2754,6 @@ async function openAi(a) {
     grounding.querySelector(".ai-grounding-sources").textContent = `Sources: ${tutorContext.sources.join(" · ")}`;
   }
   renderLibraryStrip(a);
-  renderRelatedMaterials(a);
   renderChatHistory();
   $("aiInput").placeholder = a.kind === "material" ? "Ask about this material…" : "Ask about this assignment…";
   renderQuickPrompts(DEFAULT_QUICK_PROMPTS);
@@ -3883,13 +3824,26 @@ async function testByok() {
       return;
     }
     // The tutor streams, and names the model that answered in a `route` event.
-    // Reading just that is enough to tell "your key worked" from "the shared
-    // chain rescued it", which is the distinction the reader actually wants.
-    const text = await r.text();
-    const match = /"type"\s*:\s*"route"[^}]*"provider"\s*:\s*"([^"]+)"[^}]*"model"\s*:\s*"([^"]+)"/.exec(text);
-    if (match && match[1].startsWith("yours:")) setByokStatus(`Working — answered with ${match[2]}.`);
-    else if (match) setByokStatus(`Your key did not answer; the shared models did (${match[2]}).`, true);
-    else setByokStatus("No answer came back. Check the key and the model name.", true);
+    // Reading just that tells "your key worked" from "the shared chain rescued
+    // it" — the distinction a reader actually wants, and one a plain
+    // OK/failed would hide. Parsed as SSE rather than matched with a regex:
+    // the event's field order is not this function's business.
+    const events = (await r.text())
+      .split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => { try { return JSON.parse(line.slice(5).trim()); } catch { return null; } })
+      .filter(Boolean);
+    const routed = events.find((e) => e?.type === "route");
+    const failed = events.find((e) => e?.type === "error");
+    if (routed && String(routed.provider || "").startsWith("yours:")) {
+      setByokStatus(`Working — answered with ${routed.model}.`);
+    } else if (routed) {
+      setByokStatus(`Your key did not answer; the shared models did (${routed.model}).`, true);
+    } else if (failed) {
+      setByokStatus(`Your provider refused: ${failed.details || failed.error}`, true);
+    } else {
+      setByokStatus("No answer came back. Check the key and the model name.", true);
+    }
   } catch {
     setByokStatus("Could not reach the tutor. Check your connection.", true);
   }

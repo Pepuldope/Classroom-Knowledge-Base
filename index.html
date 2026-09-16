@@ -408,7 +408,6 @@
       <span id="aiGroundingCopyStatus" class="sr-only" role="status" aria-live="assertive" aria-atomic="true"></span>
     </div>
     <div id="aiArchiveStrip" class="archive-strip" hidden></div>
-    <div id="aiRelatedMaterials" class="archive-strip" hidden></div>
     <div id="aiMessages" class="ai-messages"></div>
   </div>
   <form id="aiForm" class="ai-form">
@@ -451,7 +450,7 @@
         <div id="classesList"></div>
       </section>
       <section id="settingsPane-ai" class="settings-pane" role="tabpanel" aria-labelledby="settingsTab-ai" data-pane="ai" hidden>
-        <p class="modal-sub">Use your own AI provider. Your key is tried first, and the shared free models stay behind it as a backup, so a key that expires or runs out costs you one slow answer rather than the tutor.</p>
+        <p class="modal-sub">Use your own AI provider. Your key is tried first and does not count against the shared daily limit — that limit only protects the free models, which stay behind your key as a backup, so a key that expires or runs out costs you one slow answer rather than the tutor.</p>
         <label class="settings-row">
           <span>Provider</span>
           <select id="byokProvider" class="settings-select">

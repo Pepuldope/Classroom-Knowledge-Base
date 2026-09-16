@@ -81,6 +81,7 @@ GATES=(
 "models,api|-|Prompt-injection defences (untrusted content is never an instruction)|node --test tests/tutor-injection.test.js"
 "models,api|-|Follow-up suggestion bounds|node --test tests/suggest-model.test.js"
 "models,api|-|Bring-your-own-key model and provider table|node --test tests/byok.test.js"
+"models,api|-|Bring-your-own-key routing and who pays|node --test tests/byok-routing.test.js"
 "models,kb|-|Class category rules|node --test tests/class-families.test.js"
 "models,kb|-|Class category override model|node --test tests/class-overrides.test.js"
 "models,mobile|-|Session position + sheet drag model tests|node --test tests/session-position.test.js tests/sheet-drag.test.js"
