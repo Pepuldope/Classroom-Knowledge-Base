@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>drive.file probe — does a picked folder cascade?</title>
+<style>
+  :root { color-scheme: light dark; --fg: #16181d; --muted: #5d6470; --bg: #fbfbfd; --card: #fff; --border: #dfe3ea; --ok: #14804a; --bad: #b42318; --accent: #2f6df6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e8eaf0; --muted: #9aa3b2; --bg: #14161b; --card: #1b1e25; --border: #2c313b; --ok: #4ade80; --bad: #f87171; --accent: #7aa2ff; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 64px; background: var(--bg); color: var(--fg); font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif; }
+  main { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 1.3rem; margin: 0 0 0.3rem; }
+  h2 { font-size: 1rem; margin: 1.6rem 0 0.5rem; }
+  p.sub { color: var(--muted); margin: 0 0 1.2rem; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; margin-bottom: 14px; }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.25rem; }
+  input[type="text"] { width: 100%; padding: 0.5rem 0.6rem; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--fg); font: inherit; }
+  button { font: inherit; padding: 0.5rem 0.9rem; border-radius: 7px; border: 1px solid var(--border); background: var(--card); color: var(--fg); cursor: pointer; min-height: 40px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .row { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.7rem; }
+  ol { padding-left: 1.2rem; }
+  li { margin-bottom: 0.3rem; }
+  code { background: color-mix(in srgb, var(--accent) 10%, transparent); padding: 0.1rem 0.3rem; border-radius: 4px; font-size: 0.88em; }
+  #log { white-space: pre-wrap; word-break: break-word; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-height: 8rem; }
+  .verdict { font-weight: 600; padding: 10px 12px; border-radius: 8px; margin-top: 10px; }
+  .verdict.ok { color: var(--ok); border: 1px solid color-mix(in srgb, var(--ok) 40%, transparent); }
+  .verdict.bad { color: var(--bad); border: 1px solid color-mix(in srgb, var(--bad) 40%, transparent); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Does a folder picked with <code>drive.file</code> cascade to its contents?</h1>
+  <p class="sub">
+    Throwaway probe. It requests <strong>only</strong> <code>drive.file</code> — a non-sensitive scope, so no
+    verification and no unverified-app warning — opens the Google Picker, and then asks Drive three questions about
+    what that pick actually bought. Nothing is written, nothing is stored, and no file leaves this page.
+  </p>
+
+  <div class="card">
+    <h2 style="margin-top:0">Before you run it</h2>
+    <ol>
+      <li>In the Cloud project, enable <strong>Google Drive API</strong> and <strong>Google Picker API</strong>.</li>
+      <li>Create an <strong>API key</strong> (APIs &amp; Services → Credentials). Restrict it to this site's referrer if you like. This is the Picker's "developer key" — it is not a secret in the password sense, but don't commit it.</li>
+      <li>Paste it below and run the two tests in order.</li>
+    </ol>
+    <label for="key">Picker API key</label>
+    <input id="key" type="text" placeholder="AIza…" autocomplete="off" spellcheck="false" />
+    <div class="row">
+      <button id="auth" class="primary" type="button">1 · Grant drive.file</button>
+      <span id="authState" style="color:var(--muted)">not granted</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Test A — control: pick a single file</h2>
+    <p class="sub" style="margin:0 0 0.5rem">
+      Proves the plumbing works at all. If this fails, nothing about folders is meaningful yet.
+    </p>
+    <button id="pickFile" type="button" disabled>Pick one file</button>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Test B — the real question: pick a folder</h2>
+    <p class="sub" style="margin:0 0 0.5rem">
+      Pick a <em>Classroom</em> folder (your Drive → <code>Classroom/&lt;class&gt;</code>), or any folder with a few files in it.
+      The probe then tries to read the folder, list its children, and download one child's bytes.
+    </p>
+    <button id="pickFolder" type="button" disabled>Pick a folder</button>
+  </div>
+
+  <h2>Result</h2>
+  <div id="verdict"></div>
+  <div id="log">Waiting…</div>
+</main>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
+<script>
+// The published app's client. drive.file is non-sensitive, so asking for it here
+// needs no verification and does not disturb the Classroom grant already on file.
+const CLIENT_ID = "786778645862-cejadrqj2edabpdlk0emsvb1gc2hdijs.apps.googleusercontent.com";
+// The project number — the client id's own prefix. The Picker needs it as the
+// "app id" so Drive can record WHICH app the user granted per-file access to.
+// Without it the pick happens but the grant is not attributed, and every
+// follow-up request 404s, which looks exactly like "folders do not cascade".
+const APP_ID = CLIENT_ID.split("-")[0];
+const SCOPE = "https://www.googleapis.com/auth/drive.file";
+const DRIVE = "https://www.googleapis.com/drive/v3/files";
+
+const $ = (id) => document.getElementById(id);
+let token = null;
+let tokenClient = null;
+
+function log(line) {
+  const el = $("log");
+  if (el.textContent === "Waiting…") el.textContent = "";
+  el.textContent += line + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+function verdict(text, ok) {
+  const el = $("verdict");
+  el.className = `verdict ${ok ? "ok" : "bad"}`;
+  el.textContent = text;
+}
+
+/** One request, reported as a status line rather than an exception. */
+async function probe(label, url) {
+  try {
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const text = await response.text();
+    let body = text;
+    try { body = JSON.stringify(JSON.parse(text)); } catch {}
+    log(`  ${response.ok ? "OK  " : "FAIL"} ${label} → ${response.status} ${body.slice(0, 300)}`);
+    return { ok: response.ok, status: response.status, text };
+  } catch (error) {
+    log(`  FAIL ${label} → threw: ${error.message}`);
+    return { ok: false, status: 0, text: "" };
+  }
+}
+
+$("auth").addEventListener("click", () => {
+  if (!window.google?.accounts?.oauth2) { log("Google Identity Services has not loaded yet — wait a second and retry."); return; }
+  tokenClient = tokenClient || google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPE,
+    callback: (resp) => {
+      if (resp.error) { log(`Consent failed: ${resp.error}`); return; }
+      token = resp.access_token;
+      $("authState").textContent = "granted (drive.file only)";
+      $("pickFile").disabled = false;
+      $("pickFolder").disabled = false;
+      log(`Granted scopes: ${resp.scope || "(not reported)"}`);
+      // If this lists anything beyond drive.file, the test is contaminated by an
+      // earlier grant and the result would be meaningless.
+      if (resp.scope && /drive\.readonly|drive\b(?!\.file)/.test(resp.scope)) {
+        log("WARNING: this token carries broader Drive access than drive.file — revoke the app at myaccount.google.com/permissions and retry, or the result proves nothing.");
+      }
+    },
+    error_callback: (err) => log(`Consent popup: ${err?.type || "failed"}`),
+  });
+  tokenClient.requestAccessToken();
+});
+
+function openPicker({ folders }) {
+  const key = $("key").value.trim();
+  if (!key) { log("Paste the Picker API key first."); return; }
+  if (!window.gapi) { log("apis.google.com has not loaded yet — wait a second and retry."); return; }
+  gapi.load("picker", () => {
+    const mine = new google.picker.DocsView(folders ? google.picker.ViewId.FOLDERS : google.picker.ViewId.DOCS)
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(folders);
+    // Teacher-owned "students can view" attachments are not in your Drive at
+    // all — they are under Shared with me, so the probe has to offer that too.
+    const shared = new google.picker.DocsView()
+      .setIncludeFolders(true)
+      .setSelectFolderEnabled(folders)
+      .setOwnedByMe(false)
+      .setLabel("Shared with me");
+    new google.picker.PickerBuilder()
+      .setDeveloperKey(key)
+      .setOAuthToken(token)
+      .setAppId(APP_ID)
+      .addView(mine)
+      .addView(shared)
+      .setCallback(async (data) => {
+        if (data.action !== google.picker.Action.PICKED) return;
+        const picked = data.docs[0];
+        log(`\nPicked: ${picked.name} (${picked.mimeType})\n  id=${picked.id}`);
+        if (folders) await folderTests(picked);
+        else await fileTests(picked);
+      })
+      .build()
+      .setVisible(true);
+  });
+}
+
+async function fileTests(doc) {
+  log("\nTest A — control:");
+  const meta = await probe("files.get (metadata)", `${DRIVE}/${doc.id}?fields=id,name,mimeType,size&supportsAllDrives=true`);
+  const workspace = doc.mimeType.startsWith("application/vnd.google-apps.");
+  const bytes = workspace
+    ? await probe("files.export (Workspace doc → pdf)", `${DRIVE}/${doc.id}/export?mimeType=application%2Fpdf`)
+    : await probe("files.get?alt=media (bytes)", `${DRIVE}/${doc.id}?alt=media&supportsAllDrives=true`);
+  if (meta.ok && bytes.ok) verdict("Test A passed — drive.file + Picker can read a picked file's bytes. The plumbing works.", true);
+  else verdict("Test A FAILED — fix this before reading anything into the folder result. Check the API key, the enabled APIs, and that the app id is the project number.", false);
+}
+
+async function folderTests(folder) {
+  log("\nTest B — folder cascade:");
+  const self = await probe("files.get on the folder itself", `${DRIVE}/${folder.id}?fields=id,name,mimeType&supportsAllDrives=true`);
+  const q = encodeURIComponent(`'${folder.id}' in parents and trashed = false`);
+  const listed = await probe("files.list children", `${DRIVE}?q=${q}&fields=files(id,name,mimeType,size)&pageSize=20&supportsAllDrives=true&includeItemsFromAllDrives=true`);
+
+  let children = [];
+  try { children = JSON.parse(listed.text).files || []; } catch {}
+  log(`  children visible: ${children.length}`);
+  for (const child of children.slice(0, 5)) log(`    · ${child.name} (${child.mimeType})`);
+
+  if (!children.length) {
+    verdict(
+      self.ok
+        ? "Folders do NOT cascade. The folder itself is readable, but its children are invisible — so a whole-class Picker export is off the table; only per-file picking works."
+        : "The folder is not readable at all. Either the pick was not attributed to this app (check the app id / API key) or drive.file gives nothing for containers.",
+      false,
+    );
+    return;
+  }
+
+  const child = children.find((c) => !c.mimeType.endsWith(".folder")) || children[0];
+  log(`  trying to download: ${child.name}`);
+  const workspace = child.mimeType.startsWith("application/vnd.google-apps.");
+  const bytes = workspace
+    ? await probe("child files.export (→ pdf)", `${DRIVE}/${child.id}/export?mimeType=application%2Fpdf`)
+    : await probe("child files.get?alt=media", `${DRIVE}/${child.id}?alt=media&supportsAllDrives=true`);
+
+  if (bytes.ok) {
+    verdict(`Folders DO cascade — ${children.length} children listed and one downloaded with drive.file alone. A whole-class Picker export is viable.`, true);
+  } else {
+    verdict(`Half a cascade: ${children.length} children are LISTABLE but the bytes came back ${bytes.status}. Metadata cascades, content does not — so bulk download still needs per-file picking.`, false);
+  }
+}
+
+$("pickFile").addEventListener("click", () => openPicker({ folders: false }));
+$("pickFolder").addEventListener("click", () => openPicker({ folders: true }));
+</script>
+</body>
+</html>
