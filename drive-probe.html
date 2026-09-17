@@ -57,6 +57,27 @@
   </div>
 
   <div class="card">
+    <h2 style="margin-top:0">Test D — the real corpus, and how many IDs the picker swallows</h2>
+    <p class="sub" style="margin:0 0 0.5rem">
+      This page is on the same origin as the app, so it can read your actual knowledge base out of IndexedDB and
+      harvest every Drive attachment it references. <strong>Scan</strong> first — it touches nothing and tells you how
+      big the job is. Then open the picker pre-navigated to a batch of exactly those files
+      (<code>DocsView.setFileIds</code>) and see whether it renders at that size.
+    </p>
+    <div class="row">
+      <button id="scan" type="button">Scan my knowledge base</button>
+      <button class="batch" data-n="25" type="button" disabled>Picker · 25 ids</button>
+      <button class="batch" data-n="100" type="button" disabled>Picker · 100 ids</button>
+      <button class="batch" data-n="400" type="button" disabled>Picker · 400 ids</button>
+      <button class="batch" data-n="0" type="button" disabled>Picker · all</button>
+    </div>
+    <p class="sub" style="margin:0.6rem 0 0">
+      For each batch: does the dialog open, does it list files, and what does it return when you select some and hit
+      Select? A batch that opens to an empty or broken dialog is the limit.
+    </p>
+  </div>
+
+  <div class="card">
     <h2 style="margin-top:0">Test A — control: pick a single file</h2>
     <p class="sub" style="margin:0 0 0.5rem">
       Proves the plumbing works at all. If this fails, nothing about folders is meaningful yet.
@@ -121,6 +142,100 @@ function verdict(text, ok) {
   el.textContent = text;
 }
 
+// ---------------------------------------------------------------------------
+// Test D — measure the real job before designing a UI around a guess.
+// ---------------------------------------------------------------------------
+let harvested = [];   // [{ id, title, course }]
+
+async function scanCorpus() {
+  log("\nTest D — scanning the local knowledge base:");
+  let bundle = null;
+  try {
+    const local = await import("/kb-local.js");
+    bundle = await local.loadKbBundle();
+  } catch (error) {
+    log(`  FAIL could not read the local KB: ${error.message}`);
+    verdict("Could not open the knowledge base from this page. Open the app once in this browser first.", false);
+    return;
+  }
+  const notes = Array.isArray(bundle?.notes) ? bundle.notes : [];
+  if (!notes.length) {
+    verdict("The local knowledge base is empty in this browser — build it on the Study page first.", false);
+    return;
+  }
+  const { noteAttachments } = await import("/kb-export.js");
+
+  const byCourse = new Map();
+  const seen = new Set();
+  let linkOnly = 0;
+  for (const note of notes) {
+    for (const attachment of noteAttachments(note)) {
+      if (!attachment.driveId) { linkOnly++; continue; }
+      if (seen.has(attachment.driveId)) continue;
+      seen.add(attachment.driveId);
+      const course = note.course || "Uncategorized";
+      byCourse.set(course, (byCourse.get(course) || 0) + 1);
+      harvested.push({ id: attachment.driveId, title: attachment.title, course });
+    }
+  }
+
+  log(`  notes: ${notes.length}`);
+  log(`  distinct Drive attachments: ${harvested.length}`);
+  log(`  non-Drive links (YouTube, web, forms — never downloadable): ${linkOnly}`);
+  const ranked = [...byCourse.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [course, count] of ranked.slice(0, 12)) log(`    ${String(count).padStart(4)}  ${course}`);
+  if (ranked.length > 12) log(`    …and ${ranked.length - 12} more classes`);
+  const biggest = ranked[0];
+  log(`  id-string length for ALL of them: ${harvested.map((h) => h.id).join(",").length} chars`);
+  if (biggest) log(`  id-string length for the biggest class (${biggest[0]}): ${harvested.filter((h) => h.course === biggest[0]).map((h) => h.id).join(",").length} chars`);
+
+  document.querySelectorAll("button.batch").forEach((b) => { b.disabled = !token; });
+  verdict(
+    `Scanned: ${harvested.length} distinct Drive attachments across ${byCourse.size} classes` +
+    (biggest ? `, biggest class ${biggest[0]} with ${biggest[1]}` : "") +
+    ". Now try the picker batches.",
+    harvested.length > 0,
+  );
+}
+
+/** Open the picker pre-navigated to N harvested ids. */
+function openIdPicker(n) {
+  const key = $("key").value.trim();
+  if (!key) { log("Paste the Picker API key first."); return; }
+  if (!harvested.length) { log("Scan the knowledge base first."); return; }
+  const batch = n > 0 ? harvested.slice(0, n) : harvested;
+  const ids = batch.map((b) => b.id).join(",");
+  log(`\nPicker with setFileIds: ${batch.length} ids, ${ids.length} chars`);
+  gapi.load("picker", () => {
+    try {
+      // setFileIds must not be combined with setParent / setEnableDrives —
+      // it overrides them, and the docs call that out explicitly.
+      const view = new google.picker.DocsView().setFileIds(ids);
+      new google.picker.PickerBuilder()
+        .setDeveloperKey(key)
+        .setOAuthToken(token)
+        .setAppId(APP_ID)
+        .addView(view)
+        .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
+        .setCallback(async (data) => {
+          if (data.action === google.picker.Action.CANCEL) {
+            log("  picker cancelled — say whether it listed the files or came up empty.");
+            return;
+          }
+          if (data.action !== google.picker.Action.PICKED) return;
+          const docs = data.docs || [];
+          log(`  returned ${docs.length} of ${batch.length} offered`);
+          await batchTests(docs);
+        })
+        .build()
+        .setVisible(true);
+    } catch (error) {
+      log(`  FAIL picker refused ${batch.length} ids: ${error.message}`);
+      verdict(`The picker threw at ${batch.length} ids (${ids.length} chars) — that is the ceiling. Chunk below it.`, false);
+    }
+  });
+}
+
 /** One request, reported as a status line rather than an exception. */
 async function probe(label, url) {
   try {
@@ -148,6 +263,7 @@ $("auth").addEventListener("click", () => {
       $("pickFile").disabled = false;
       $("pickFolder").disabled = false;
       $("pickMany").disabled = false;
+      if (harvested.length) document.querySelectorAll("button.batch").forEach((b) => { b.disabled = false; });
       log(`Granted scopes: ${resp.scope || "(not reported)"}`);
       // If this lists anything beyond drive.file, the test is contaminated by an
       // earlier grant and the result would be meaningless.
@@ -319,6 +435,10 @@ $("pickFile").addEventListener("click", () => openPicker("file"));
 $("pickFolder").addEventListener("click", () => openPicker("folder"));
 $("pickMany").addEventListener("click", () => openPicker("many"));
 $("recheck").addEventListener("click", () => recheckTests());
+$("scan").addEventListener("click", () => scanCorpus());
+document.querySelectorAll("button.batch").forEach((b) => {
+  b.addEventListener("click", () => openIdPicker(Number(b.dataset.n)));
+});
 // A batch from a previous visit is the whole point of the persistence check,
 // so the button lights up before anything is picked in THIS session.
 try { if (JSON.parse(localStorage.getItem("probe_last_batch") || "[]").length) $("recheck").disabled = false; } catch {}
