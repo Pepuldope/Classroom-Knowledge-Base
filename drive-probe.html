@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>drive.file probe — does a picked folder cascade?</title>
+<title>drive.file probe — what does one Picker session buy?</title>
 <style>
   :root { color-scheme: light dark; --fg: #16181d; --muted: #5d6470; --bg: #fbfbfd; --card: #fff; --border: #dfe3ea; --ok: #14804a; --bad: #b42318; --accent: #2f6df6; }
   @media (prefers-color-scheme: dark) {
@@ -33,11 +33,11 @@
 </head>
 <body>
 <main>
-  <h1>Does a folder picked with <code>drive.file</code> cascade to its contents?</h1>
+  <h1>What does one Picker session with <code>drive.file</code> actually buy?</h1>
   <p class="sub">
     Throwaway probe. It requests <strong>only</strong> <code>drive.file</code> — a non-sensitive scope, so no
-    verification and no unverified-app warning — opens the Google Picker, and then asks Drive three questions about
-    what that pick actually bought. Nothing is written, nothing is stored, and no file leaves this page.
+    verification and no unverified-app warning — opens the Google Picker, and then asks Drive what that pick actually bought —
+    including whether it survives a reload. Nothing is written, nothing is stored, and no file leaves this page.
   </p>
 
   <div class="card">
@@ -45,12 +45,13 @@
     <ol>
       <li>In the Cloud project, enable <strong>Google Drive API</strong> and <strong>Google Picker API</strong>.</li>
       <li>Create an <strong>API key</strong> (APIs &amp; Services → Credentials). Restrict it to this site's referrer if you like. This is the Picker's "developer key" — it is not a secret in the password sense, but don't commit it.</li>
-      <li>Paste it below and run the two tests in order.</li>
+      <li>Paste it below, grant access, then run test A, then C. B only if you have a folder with files in it.</li>
     </ol>
     <label for="key">Picker API key</label>
     <input id="key" type="text" placeholder="AIza…" autocomplete="off" spellcheck="false" />
     <div class="row">
       <button id="auth" class="primary" type="button">1 · Grant drive.file</button>
+      <button id="recheck" type="button" disabled>Re-check last batch</button>
       <span id="authState" style="color:var(--muted)">not granted</span>
     </div>
   </div>
@@ -64,9 +65,22 @@
   </div>
 
   <div class="card">
-    <h2 style="margin-top:0">Test B — the real question: pick a folder</h2>
+    <h2 style="margin-top:0">Test C — the one that matters: a batch from Shared with me</h2>
     <p class="sub" style="margin:0 0 0.5rem">
-      Pick a <em>Classroom</em> folder (your Drive → <code>Classroom/&lt;class&gt;</code>), or any folder with a few files in it.
+      Classroom attachments that a teacher posted as "students can view" are owned by the teacher and live under
+      <strong>Shared with me</strong> — not in your <code>Classroom/</code> folders, which is why those look empty.
+      So the real question is whether you can hand over a whole batch at once. Open the picker, switch to
+      <em>Shared with me</em>, and select as many files as you can (click one, then shift-click further down the list).
+      The probe then checks how many of them it can actually read back.
+    </p>
+    <button id="pickMany" type="button" disabled>Pick many files</button>
+  </div>
+
+  <div class="card">
+    <h2 style="margin-top:0">Test B — folder cascade (only if you have a folder with files in it)</h2>
+    <p class="sub" style="margin:0 0 0.5rem">
+      Your <code>Classroom/&lt;class&gt;</code> folders are usually empty, and an empty folder cannot answer this —
+      so make a throwaway folder in your Drive, drop two or three files into it, and pick that.
       The probe then tries to read the folder, list its children, and download one child's bytes.
     </p>
     <button id="pickFolder" type="button" disabled>Pick a folder</button>
@@ -133,6 +147,7 @@ $("auth").addEventListener("click", () => {
       $("authState").textContent = "granted (drive.file only)";
       $("pickFile").disabled = false;
       $("pickFolder").disabled = false;
+      $("pickMany").disabled = false;
       log(`Granted scopes: ${resp.scope || "(not reported)"}`);
       // If this lists anything beyond drive.file, the test is contaminated by an
       // earlier grant and the result would be meaningless.
@@ -145,7 +160,8 @@ $("auth").addEventListener("click", () => {
   tokenClient.requestAccessToken();
 });
 
-function openPicker({ folders }) {
+function openPicker(mode) {
+  const folders = mode === "folder";
   const key = $("key").value.trim();
   if (!key) { log("Paste the Picker API key first."); return; }
   if (!window.gapi) { log("apis.google.com has not loaded yet — wait a second and retry."); return; }
@@ -166,12 +182,16 @@ function openPicker({ folders }) {
       .setAppId(APP_ID)
       .addView(mine)
       .addView(shared)
+      // Without this the picker is single-select, which is the difference
+      // between "hand over your whole class in one go" and "click 400 times".
+      .enableFeature(google.picker.Feature.MULTISELECT_ENABLED)
       .setCallback(async (data) => {
         if (data.action !== google.picker.Action.PICKED) return;
-        const picked = data.docs[0];
-        log(`\nPicked: ${picked.name} (${picked.mimeType})\n  id=${picked.id}`);
-        if (folders) await folderTests(picked);
-        else await fileTests(picked);
+        const docs = data.docs || [];
+        log(`\nPicked ${docs.length} item(s).`);
+        if (mode === "many") await batchTests(docs);
+        else if (mode === "folder") await folderTests(docs[0]);
+        else await fileTests(docs[0]);
       })
       .build()
       .setVisible(true);
@@ -189,6 +209,74 @@ async function fileTests(doc) {
   else verdict("Test A FAILED — fix this before reading anything into the folder result. Check the API key, the enabled APIs, and that the app id is the project number.", false);
 }
 
+/**
+ * The question the whole feature turns on: does ONE picker session hand over a
+ * whole batch permanently? Reads every picked file back — metadata and bytes —
+ * and reports how many survived, because a partial answer is a real outcome.
+ */
+async function batchTests(docs) {
+  log("\nTest C — batch grant:");
+  if (!docs.length) { verdict("Nothing was picked.", false); return; }
+  let readable = 0;
+  let downloadable = 0;
+  const failures = [];
+  for (const doc of docs) {
+    const meta = await fetch(`${DRIVE}/${doc.id}?fields=id,name,mimeType&supportsAllDrives=true`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!meta.ok) { failures.push(`${doc.name} → metadata ${meta.status}`); continue; }
+    readable++;
+    const workspace = String(doc.mimeType || "").startsWith("application/vnd.google-apps.");
+    const url = workspace
+      ? `${DRIVE}/${doc.id}/export?mimeType=application%2Fpdf`
+      : `${DRIVE}/${doc.id}?alt=media&supportsAllDrives=true`;
+    const bytes = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (bytes.ok) downloadable++;
+    else failures.push(`${doc.name} → bytes ${bytes.status}`);
+  }
+  log(`  readable metadata: ${readable}/${docs.length}`);
+  log(`  downloadable bytes: ${downloadable}/${docs.length}`);
+  for (const line of failures.slice(0, 10)) log(`  FAIL ${line}`);
+  if (failures.length > 10) log(`  …and ${failures.length - 10} more failures`);
+
+  // Re-check one file with a FRESH token. The per-file grant is supposed to
+  // outlive the picker session; if it does not, this whole route is a
+  // session-long trick rather than a one-time setup.
+  log("  (reload this page and re-run 'Grant drive.file', then press 'Re-check' to test persistence)");
+  window.__probeLastBatch = docs.map((d) => ({ id: d.id, name: d.name, mimeType: d.mimeType }));
+  try { localStorage.setItem("probe_last_batch", JSON.stringify(window.__probeLastBatch)); } catch {}
+  $("recheck").disabled = false;
+
+  if (downloadable === docs.length) {
+    verdict(`All ${docs.length} files picked in ONE session are downloadable with drive.file alone. If they survive a reload, this route works.`, true);
+  } else if (downloadable) {
+    verdict(`${downloadable} of ${docs.length} downloadable — a partial grant. Check the failures above for what kind of file Drive refused.`, false);
+  } else {
+    verdict(`Nothing was downloadable (${readable}/${docs.length} readable metadata). Check the app id and the API key.`, false);
+  }
+}
+
+/** Does a grant from an EARLIER session still work? */
+async function recheckTests() {
+  let batch = [];
+  try { batch = JSON.parse(localStorage.getItem("probe_last_batch") || "[]"); } catch {}
+  log(`\nRe-check — ${batch.length} file(s) picked in an earlier session:`);
+  if (!batch.length) { verdict("No earlier batch stored — run Test C first.", false); return; }
+  let ok = 0;
+  for (const doc of batch) {
+    const workspace = String(doc.mimeType || "").startsWith("application/vnd.google-apps.");
+    const url = workspace
+      ? `${DRIVE}/${doc.id}/export?mimeType=application%2Fpdf`
+      : `${DRIVE}/${doc.id}?alt=media&supportsAllDrives=true`;
+    const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (response.ok) ok++; else log(`  FAIL ${doc.name} → ${response.status}`);
+  }
+  log(`  still downloadable: ${ok}/${batch.length}`);
+  if (ok === batch.length) verdict(`The grant PERSISTS — all ${ok} files from the earlier session still download. One-time setup is real.`, true);
+  else if (ok) verdict(`${ok} of ${batch.length} survived. Partial persistence — worth reading the failures.`, false);
+  else verdict("Nothing survived the reload. drive.file access here is session-only, which kills the one-time-setup idea.", false);
+}
+
 async function folderTests(folder) {
   log("\nTest B — folder cascade:");
   const self = await probe("files.get on the folder itself", `${DRIVE}/${folder.id}?fields=id,name,mimeType&supportsAllDrives=true`);
@@ -201,9 +289,12 @@ async function folderTests(folder) {
   for (const child of children.slice(0, 5)) log(`    · ${child.name} (${child.mimeType})`);
 
   if (!children.length) {
+    // An empty folder cannot answer this question, and reporting it as "no
+    // cascade" would be a false negative — which is exactly what the first
+    // version of this probe did with Classroom's empty per-class folders.
     verdict(
       self.ok
-        ? "Folders do NOT cascade. The folder itself is readable, but its children are invisible — so a whole-class Picker export is off the table; only per-file picking works."
+        ? "INCONCLUSIVE — the folder is readable but reports no children. If this folder actually has files in it, the cascade is blocked. If it is empty (Classroom's per-class folders usually are), this proves nothing: retry with a folder you know has files."
         : "The folder is not readable at all. Either the pick was not attributed to this app (check the app id / API key) or drive.file gives nothing for containers.",
       false,
     );
@@ -224,8 +315,13 @@ async function folderTests(folder) {
   }
 }
 
-$("pickFile").addEventListener("click", () => openPicker({ folders: false }));
-$("pickFolder").addEventListener("click", () => openPicker({ folders: true }));
+$("pickFile").addEventListener("click", () => openPicker("file"));
+$("pickFolder").addEventListener("click", () => openPicker("folder"));
+$("pickMany").addEventListener("click", () => openPicker("many"));
+$("recheck").addEventListener("click", () => recheckTests());
+// A batch from a previous visit is the whole point of the persistence check,
+// so the button lights up before anything is picked in THIS session.
+try { if (JSON.parse(localStorage.getItem("probe_last_batch") || "[]").length) $("recheck").disabled = false; } catch {}
 </script>
 </body>
 </html>
