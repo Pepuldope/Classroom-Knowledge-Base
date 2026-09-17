@@ -2898,6 +2898,14 @@ summary::-webkit-details-marker { color: var(--muted); }
   background: color-mix(in srgb, var(--danger) 5%, var(--surface));
   font-size: 0.83rem;
 }
+.export-grant {
+  margin-top: 0.6rem;
+  padding: 0.6rem 0.75rem 0.2rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}
+.export-grant .settings-hint { margin: 0; }
 .export-skipped ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 .export-skipped li { margin-bottom: 0.2rem; overflow-wrap: anywhere; }
 

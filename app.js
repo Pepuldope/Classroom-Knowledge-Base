@@ -49,15 +49,24 @@ const SCOPES = [
   "https://www.googleapis.com/auth/classroom.topics.readonly",
   "https://www.googleapis.com/auth/userinfo.profile",
 ].join(" ");
-// Drive read access is NOT in SCOPES, and must not be.
+// Drive access is NOT in SCOPES, and it is drive.file rather than
+// drive.readonly. Both halves of that are deliberate.
 //
-// Everything the app does normally — the Planner, the knowledge base, the tutor
-// — needs Classroom only. Downloading the actual attachment bytes is the single
-// feature that needs Drive, it is opt-in, and drive.readonly is broad (it can
-// read the whole of a user's Drive, not just what a teacher posted). So it is
-// requested incrementally, the first time someone ticks "also download the
-// attachments", and a student who never does is never asked for it.
-const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+// drive.readonly is a RESTRICTED scope: on a published app it needs Google
+// verification plus an annual third-party CASA security assessment, which is
+// the wrong order of magnitude for a study tool. drive.file is non-sensitive,
+// works on the published client today with no warning screen, and grants
+// per-file access to exactly what the student hands over through the Google
+// Picker — which is also a far more honest bargain than "read all my Drive".
+//
+// Measured on the real corpus (1,880 attachments over 44 classes): a picker
+// opened with DocsView.setFileIds returns every file the student can still
+// reach, the grant survives a reload, and ~8% of the oldest files are gone at
+// the source and simply drop out. See drive-probe.html.
+//
+// It stays out of SCOPES so a student who never exports attachments is never
+// asked for it; kb.js requests it the first time they do.
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 let driveTokenClient = null;
 let driveAccessToken = null;
 
@@ -939,11 +948,21 @@ function waitForGis() {
     // Expose the token client so the Knowledge-Base module can request a
     // Classroom-scoped token for building the user's local knowledge base.
     window.__cwaTokenClient = kbTokenClient;
-    // Resolves with a Drive-scoped access token, prompting for consent the
-    // first time. Rejects rather than throwing into the GIS callback, so the
-    // export UI can say "attachments need Drive access" and carry on without
-    // them. The token is kept in memory only — never stored — because it is far
-    // broader than the Classroom one.
+    // The picker needs the project number (this id's own prefix) as its app id,
+    // so Drive records WHICH app a per-file grant belongs to. Without it the
+    // pick appears to succeed and every later read 404s.
+    window.__cwaGoogleClientId = CLIENT_ID;
+    // The Google Picker's "developer key". Public by design — it ships to every
+    // browser — and referrer-restricted in Cloud Console rather than kept secret.
+    void getOauthConfig().then((cfg) => { window.__cwaPickerApiKey = cfg?.pickerApiKey || null; }).catch(() => {});
+    // Resolves with a drive.file access token, prompting for consent the first
+    // time. Rejects rather than throwing into the GIS callback, so the export UI
+    // can say "attachments need Drive access" and carry on without them.
+    //
+    // NEVER call revoke() on this token. Google revokes per CLIENT, not per
+    // scope, so revoking it would take the Classroom refresh token with it and
+    // silently sign the student out of the Planner. Dropping the reference (as
+    // sign-out does) is the correct way to forget it.
     window.__cwaRequestDriveToken = () => new Promise((resolve, reject) => {
       if (driveAccessToken) { resolve(driveAccessToken); return; }
       if (!driveTokenClient) { reject(new Error("Google sign-in is not ready yet.")); return; }

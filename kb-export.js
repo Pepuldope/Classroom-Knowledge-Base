@@ -151,6 +151,54 @@ export function driveDownloadPlan(meta = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Handing Drive file ids to the Google Picker.
+//
+// `DocsView.setFileIds` takes a COMMA-JOINED STRING of ids and opens the picker
+// pre-navigated to exactly those files, so a student grants a whole class in one
+// pass instead of hunting for files in their Drive. The catch is that the string
+// ends up in a URL: measured against the real corpus, 200 ids (7,349 chars)
+// opens fine and 400 (~14,800 chars) fails outright with "docs.google.com
+// refused to connect". So batches are capped on BOTH counts — the id count for
+// predictability, and the character budget because ids are not fixed width.
+//
+// An id the student can no longer reach is dropped from the picker silently
+// rather than erroring (Google documents this), which is why the caller compares
+// what came back against what it offered instead of assuming a full grant.
+// ---------------------------------------------------------------------------
+export const PICKER_MAX_IDS = 200;
+export const PICKER_MAX_CHARS = 7500;
+
+export function driveIdBatches(ids, { maxIds = PICKER_MAX_IDS, maxChars = PICKER_MAX_CHARS } = {}) {
+  const clean = [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "")).filter(Boolean))];
+  const batches = [];
+  let current = [];
+  let chars = 0;
+  for (const id of clean) {
+    const cost = id.length + (current.length ? 1 : 0); // the joining comma
+    if (current.length && (current.length >= maxIds || chars + cost > maxChars)) {
+      batches.push(current);
+      current = [];
+      chars = 0;
+    }
+    current.push(id);
+    chars += current.length === 1 ? id.length : cost;
+  }
+  if (current.length) batches.push(current);
+  return batches;
+}
+
+/** Every distinct Drive id the given notes reference, in note order. */
+export function driveIdsForNotes(notes) {
+  const seen = new Set();
+  for (const note of Array.isArray(notes) ? notes : []) {
+    for (const attachment of noteAttachments(note)) {
+      if (attachment.driveId) seen.add(attachment.driveId);
+    }
+  }
+  return [...seen];
+}
+
+// ---------------------------------------------------------------------------
 // Selection: which notes an export covers.
 // ---------------------------------------------------------------------------
 export function exportSelectionModel(raw = {}) {

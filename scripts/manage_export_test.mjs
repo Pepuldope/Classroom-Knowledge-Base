@@ -84,6 +84,44 @@ try {
     await kb.showKbView();
     // Stand in for the GIS Drive consent popup, which cannot run headless.
     window.__cwaRequestDriveToken = () => Promise.resolve("fake-drive-token");
+    window.__cwaPickerApiKey = "fake-picker-key";
+    window.__cwaGoogleClientId = "786778645862-fake.apps.googleusercontent.com";
+    // A fake Google Picker. The real one is a cross-origin iframe that cannot
+    // run headless, so what is under test here is OUR half: that the ids handed
+    // to setFileIds are exactly this selection's attachments, batched, and that
+    // the result is reported honestly when Google returns fewer than offered.
+    window.__pickerCalls = [];
+    const picked = [];
+    window.gapi = { load: (_name, opts) => opts.callback() };
+    window.google = {
+      ...(window.google || {}),
+      picker: {
+        Action: { PICKED: "picked", CANCEL: "cancel" },
+        Feature: { MULTISELECT_ENABLED: "multi" },
+        DocsView: class {
+          setFileIds(ids) { this.ids = String(ids).split(","); return this; }
+        },
+        PickerBuilder: class {
+          setDeveloperKey(k) { this.key = k; return this; }
+          setOAuthToken(t) { this.token = t; return this; }
+          setAppId(a) { this.appId = a; return this; }
+          setTitle(t) { this.title = t; return this; }
+          addView(v) { this.view = v; return this; }
+          enableFeature(f) { this.feature = f; return this; }
+          setCallback(cb) { this.cb = cb; return this; }
+          build() { return this; }
+          setVisible() {
+            window.__pickerCalls.push({ ids: this.view.ids, key: this.key, appId: this.appId, feature: this.feature });
+            // Return every offered id but the last — standing in for the ~8% of
+            // old attachments Drive drops because they no longer exist.
+            const offered = this.view.ids;
+            const granted = offered.slice(0, Math.max(0, offered.length - 1));
+            picked.push(...granted);
+            setTimeout(() => this.cb({ action: "picked", docs: granted.map((id) => ({ id })) }), 0);
+          }
+        },
+      },
+    };
   });
   await page.waitForTimeout(700);
 
@@ -168,6 +206,26 @@ try {
   await page.check("#kbExportAttachments");
   await page.waitForTimeout(150);
   assert.match(await summaryFor(), /plus up to 2 attachments/, `attachment count: ${await summaryFor()}`);
+
+  // --- 4a. the grant flow ---------------------------------------------------
+  const grantVisible = await page.evaluate(() => !document.getElementById("kbExportGrant").hidden);
+  assert.equal(grantVisible, true, "ticking attachments must reveal the grant step");
+  await page.click("#kbExportGrantBtn");
+  await page.waitForFunction(
+    () => /Allowed/.test(document.getElementById("kbExportGrantStatus")?.textContent || ""),
+    null,
+    { timeout: 15000 },
+  );
+  const grant = await page.evaluate(() => ({
+    status: document.getElementById("kbExportGrantStatus").textContent,
+    calls: window.__pickerCalls,
+  }));
+  assert.equal(grant.calls.length, 1, "two attachments fit in one picker round");
+  assert.deepEqual(grant.calls[0].ids.sort(), ["DOC_TWO_ID_X", "FILE_ONE_ID_X"], "the picker is handed exactly this selection's attachments");
+  assert.equal(grant.calls[0].appId, "786778645862", "the picker gets the project number as its app id");
+  assert.equal(grant.calls[0].feature, "multi", "multi-select must be on, or a class is one click per file");
+  assert.match(grant.status, /Allowed 1 of 2 files\. 1 was not offered/, `the grant must be honest about what Google dropped: ${grant.status}`);
+  console.log(`\u2713 grant flow hands the picker exactly this class's ids: ${grant.status}`);
 
   const download = page.waitForEvent("download", { timeout: 30000 });
   await page.click("#kbExportRun");

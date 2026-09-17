@@ -40,7 +40,7 @@ import {
   EXPORT_KINDS, EXPORT_KIND_LABELS, noteItemKind, noteAttachments, driveMetadataUrl,
   driveDownloadPlan, exportSelectionModel, selectExportNotes, exportCourseOptions,
   exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZip,
-  buildResultMessage,
+  buildResultMessage, driveIdBatches, driveIdsForNotes,
 } from "./kb-export.js";
 
 const $ = (id) => document.getElementById(id);
@@ -2150,13 +2150,13 @@ function updateExportSummary() {
     : 0;
   if (summary) summary.textContent = exportSummaryText(notes.length, form.courses.length, attachments);
   const field = $("kbExportAttachmentsField");
-  const hint = $("kbExportAttachmentsHint");
+  const grant = $("kbExportGrant");
   // Attachments only make sense inside a container that can hold them.
   const zipping = form.format === "zip";
   if (field) field.classList.toggle("is-disabled", !zipping);
   const box = $("kbExportAttachments");
   if (box) box.disabled = !zipping;
-  if (hint) hint.hidden = !(zipping && form.attachments);
+  if (grant) grant.hidden = !(zipping && form.attachments);
 }
 
 function downloadBytes(filename, bytes, mime) {
@@ -2251,6 +2251,130 @@ function renderExportSkipped(skipped) {
   box.hidden = false;
 }
 
+// ---------------------------------------------------------------------------
+// Handing files over: the Google Picker.
+//
+// The app reads attachments under `drive.file`, which grants access ONLY to
+// files the student explicitly hands over. That sounds like a lot of clicking
+// and is not: DocsView.setFileIds opens the picker pre-navigated to exactly the
+// ids this class references, so it is one pass over a list that contains
+// nothing else in their Drive. The grant is permanent, so it is once per class,
+// ever — verified against the real corpus, including across a reload.
+// ---------------------------------------------------------------------------
+let pickerApiPromise = null;
+
+function loadPickerApi() {
+  if (pickerApiPromise) return pickerApiPromise;
+  pickerApiPromise = new Promise((resolve, reject) => {
+    const done = () => {
+      if (!window.gapi?.load) { reject(new Error("Google's picker script did not load.")); return; }
+      window.gapi.load("picker", { callback: resolve, onerror: () => reject(new Error("Google's picker failed to start.")) });
+    };
+    if (window.gapi?.load) { done(); return; }
+    const script = document.createElement("script");
+    script.src = "https://apis.google.com/js/api.js";
+    script.async = true;
+    script.onload = done;
+    script.onerror = () => reject(new Error("Could not reach Google's picker script."));
+    document.head.appendChild(script);
+  });
+  return pickerApiPromise;
+}
+
+/** One picker round over one batch of ids. Resolves with the ids granted. */
+function pickerRound({ ids, token, apiKey, appId, title }) {
+  return new Promise((resolve, reject) => {
+    try {
+      // setFileIds must not be combined with setParent/setEnableDrives — it
+      // overrides them, and the view is meant to show these files and nothing else.
+      const view = new window.google.picker.DocsView().setFileIds(ids.join(","));
+      new window.google.picker.PickerBuilder()
+        .setDeveloperKey(apiKey)
+        .setOAuthToken(token)
+        .setAppId(appId)
+        .setTitle(title)
+        .addView(view)
+        .enableFeature(window.google.picker.Feature.MULTISELECT_ENABLED)
+        .setCallback((data) => {
+          const action = data?.action;
+          if (action === window.google.picker.Action.CANCEL) { resolve({ granted: [], cancelled: true }); return; }
+          if (action !== window.google.picker.Action.PICKED) return;
+          resolve({ granted: (data.docs || []).map((doc) => doc.id), cancelled: false });
+        })
+        .build()
+        .setVisible(true);
+    } catch (error) { reject(error); }
+  });
+}
+
+/**
+ * Walk the student through granting every Drive id the selected notes need.
+ *
+ * Returns what was actually granted rather than assuming success: an id the
+ * student can no longer reach is dropped from the picker silently, and roughly
+ * 8% of the oldest attachments in a four-year corpus are gone at the source.
+ */
+async function grantDriveFiles(notes, { onProgress } = {}) {
+  const ids = driveIdsForNotes(notes);
+  if (!ids.length) return { ids: [], granted: [], cancelled: false, reason: "none" };
+  const apiKey = window.__cwaPickerApiKey;
+  if (!apiKey) throw new Error("The file picker is not configured on this site yet (no Picker API key).");
+  const token = await window.__cwaRequestDriveToken?.();
+  if (!token) throw new Error("Drive access was not granted.");
+  await loadPickerApi();
+  // The picker needs the project number as its app id so Drive records WHICH
+  // app the per-file grant belongs to. Without it the pick succeeds and every
+  // later read 404s.
+  const appId = String(window.__cwaGoogleClientId || "").split("-")[0] || undefined;
+
+  const batches = driveIdBatches(ids);
+  const granted = new Set();
+  for (let i = 0; i < batches.length; i++) {
+    onProgress?.({ round: i + 1, rounds: batches.length, granted: granted.size, total: ids.length });
+    const title = batches.length > 1
+      ? `Select these files — round ${i + 1} of ${batches.length}`
+      : "Select these files to allow the export to download them";
+    const result = await pickerRound({ ids: batches[i], token, apiKey, appId, title });
+    for (const id of result.granted) granted.add(id);
+    if (result.cancelled) return { ids, granted: [...granted], cancelled: true };
+  }
+  return { ids, granted: [...granted], cancelled: false };
+}
+
+async function runGrantFlow() {
+  const status = $("kbExportGrantStatus");
+  const button = $("kbExportGrantBtn");
+  const say = (msg, isError) => {
+    if (!status) return;
+    status.textContent = msg;
+    status.classList.toggle("error", !!isError);
+  };
+  const notes = selectExportNotes(exportBundle(), readExportForm());
+  if (!notes.length) { say("Pick at least one class first.", true); return; }
+  if (button) button.disabled = true;
+  try {
+    const result = await grantDriveFiles(notes, {
+      onProgress: ({ round, rounds }) => say(rounds > 1 ? `Opening round ${round} of ${rounds}…` : "Opening Google's file picker…"),
+    });
+    if (result.reason === "none") { say("This selection has no Drive attachments — only links."); return; }
+    const missed = result.ids.length - result.granted.length;
+    if (result.cancelled && !result.granted.length) { say("Cancelled — nothing was allowed."); return; }
+    // Say what was NOT granted too. Some of it is files that no longer exist,
+    // and a student who thinks they allowed everything should not be surprised
+    // by a smaller zip.
+    say(
+      missed > 0
+        ? `Allowed ${result.granted.length} of ${result.ids.length} files. ${missed} ${missed === 1 ? "was" : "were"} not offered or not selected — usually files the teacher has since deleted. Those stay as links in the notes.`
+        : `Allowed all ${result.granted.length} files. Export away.`,
+      false,
+    );
+  } catch (error) {
+    say(error?.message || String(error), true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function runExport() {
   const summary = $("kbExportSummary");
   const progress = $("kbExportProgress");
@@ -2287,7 +2411,7 @@ async function runExport() {
   try {
     let attachments = { entries: [], byNote: new Map(), skipped: [], attempted: 0 };
     if (selection.attachments) {
-      renderManageRun(progress, { message: "Asking Google for read access to your Drive…", percent: 2 });
+      renderManageRun(progress, { message: "Checking which files you have allowed…", percent: 2 });
       let token = null;
       try {
         token = await window.__cwaRequestDriveToken?.();
@@ -2354,6 +2478,7 @@ function wireExportPanel() {
     box.addEventListener("change", updateExportSummary);
   });
   $("kbExportRun")?.addEventListener("click", () => runExport());
+  $("kbExportGrantBtn")?.addEventListener("click", () => runGrantFlow());
 }
 
 // ---------------------------------------------------------------------------

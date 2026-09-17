@@ -18,6 +18,9 @@ import {
   crc32,
   buildZip,
   buildResultMessage,
+  driveIdBatches,
+  driveIdsForNotes,
+  PICKER_MAX_IDS,
 } from "../kb-export.js";
 
 const assignment = {
@@ -260,4 +263,43 @@ test("buildResultMessage counts what a rebuild actually added or removed", () =>
 
 test("buildResultMessage does not claim success over an empty corpus", () => {
   assert.equal(buildResultMessage({ before: 0, after: 0 }), "Nothing found in Classroom yet.");
+});
+
+// --- handing ids to the picker -------------------------------------------
+
+test("driveIdsForNotes collects every distinct Drive id and ignores plain links", () => {
+  assert.deepEqual(driveIdsForNotes([assignment, material]), ["1AbcDEFghij_KLM", "2DocIdValue99"]);
+  assert.deepEqual(driveIdsForNotes([assignment, assignment]), ["1AbcDEFghij_KLM"]);
+  assert.deepEqual(driveIdsForNotes(null), []);
+});
+
+test("driveIdBatches caps on the id count", () => {
+  const ids = Array.from({ length: 450 }, (_, i) => `id${String(i).padStart(3, "0")}`);
+  const batches = driveIdBatches(ids);
+  assert.deepEqual(batches.map((b) => b.length), [PICKER_MAX_IDS, PICKER_MAX_IDS, 50]);
+  assert.equal(batches.flat().length, 450);
+});
+
+test("driveIdBatches also caps on the character budget, because ids vary in length", () => {
+  // 40 ids of 100 chars = 4,139 joined chars: the count cap (200) would never
+  // fire, but the URL would. Measured ceiling is ~7,500.
+  const ids = Array.from({ length: 40 }, (_, i) => String(i).padStart(100, "x"));
+  const batches = driveIdBatches(ids, { maxChars: 1000 });
+  assert.ok(batches.length > 1, "a long-id run must split on characters");
+  for (const batch of batches) {
+    assert.ok(batch.join(",").length <= 1000, `batch of ${batch.join(",").length} chars exceeds the budget`);
+  }
+  assert.equal(batches.flat().length, 40);
+});
+
+test("driveIdBatches de-duplicates and drops empties without losing order", () => {
+  assert.deepEqual(driveIdBatches(["a", "b", "a", "", null, "c"]), [["a", "b", "c"]]);
+  assert.deepEqual(driveIdBatches([]), []);
+});
+
+test("driveIdBatches keeps a single oversized id rather than dropping it", () => {
+  // Better a picker round that may fail loudly than an attachment that silently
+  // never appears in the export.
+  const huge = "z".repeat(9000);
+  assert.deepEqual(driveIdBatches([huge], { maxChars: 100 }), [[huge]]);
 });
