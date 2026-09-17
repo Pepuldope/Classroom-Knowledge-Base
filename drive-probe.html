@@ -66,10 +66,11 @@
     </p>
     <div class="row">
       <button id="scan" type="button">Scan my knowledge base</button>
-      <button class="batch" data-n="25" type="button" disabled>Picker · 25 ids</button>
-      <button class="batch" data-n="100" type="button" disabled>Picker · 100 ids</button>
-      <button class="batch" data-n="400" type="button" disabled>Picker · 400 ids</button>
-      <button class="batch" data-n="0" type="button" disabled>Picker · all</button>
+      <button class="batch" data-n="100" type="button" disabled>Picker · 100</button>
+      <button class="batch" data-n="150" type="button" disabled>Picker · 150</button>
+      <button class="batch" data-n="200" type="button" disabled>Picker · 200</button>
+      <button class="batch" data-n="100" data-from="end" type="button" disabled>Picker · 100 oldest</button>
+      <button class="batch" data-n="100" data-from="spread" type="button" disabled>Picker · 100 spread</button>
     </div>
     <p class="sub" style="margin:0.6rem 0 0">
       For each batch: does the dialog open, does it list files, and what does it return when you select some and hit
@@ -199,13 +200,25 @@ async function scanCorpus() {
 }
 
 /** Open the picker pre-navigated to N harvested ids. */
-function openIdPicker(n) {
+function openIdPicker(n, from = "start") {
   const key = $("key").value.trim();
   if (!key) { log("Paste the Picker API key first."); return; }
   if (!harvested.length) { log("Scan the knowledge base first."); return; }
-  const batch = n > 0 ? harvested.slice(0, n) : harvested;
+  // WHERE in the corpus the batch comes from is the whole point of the "oldest"
+  // and "spread" variants: the head of the list skews to whatever was scraped
+  // first, so 100/100 there says nothing about a 2022 class whose teacher has
+  // since unshared the file. setFileIds drops an inaccessible id silently, so
+  // the returned/offered ratio IS the access measurement.
+  let pool = harvested;
+  if (from === "end") pool = harvested.slice(-Math.max(n, 1));
+  else if (from === "spread") {
+    const step = Math.max(1, Math.floor(harvested.length / Math.max(n, 1)));
+    pool = harvested.filter((_, i) => i % step === 0);
+  }
+  const batch = n > 0 ? pool.slice(0, n) : pool;
   const ids = batch.map((b) => b.id).join(",");
-  log(`\nPicker with setFileIds: ${batch.length} ids, ${ids.length} chars`);
+  log(`\nPicker with setFileIds: ${batch.length} ids (${from}), ${ids.length} chars`);
+  log(`  classes in this batch: ${[...new Set(batch.map((b) => b.course))].length}`);
   gapi.load("picker", () => {
     try {
       // setFileIds must not be combined with setParent / setEnableDrives —
@@ -224,7 +237,15 @@ function openIdPicker(n) {
           }
           if (data.action !== google.picker.Action.PICKED) return;
           const docs = data.docs || [];
-          log(`  returned ${docs.length} of ${batch.length} offered`);
+          const missing = batch.length - docs.length;
+          log(`  returned ${docs.length} of ${batch.length} offered${missing > 0 ? ` — ${missing} were not selectable` : ""}`);
+          if (missing > 0) {
+            const returnedIds = new Set(docs.map((d) => d.id));
+            const lost = batch.filter((b) => !returnedIds.has(b.id));
+            log("  not selectable (no access, or you did not select them):");
+            for (const item of lost.slice(0, 10)) log(`    · ${item.title} — ${item.course}`);
+            if (lost.length > 10) log(`    …and ${lost.length - 10} more`);
+          }
           await batchTests(docs);
         })
         .build()
@@ -437,7 +458,7 @@ $("pickMany").addEventListener("click", () => openPicker("many"));
 $("recheck").addEventListener("click", () => recheckTests());
 $("scan").addEventListener("click", () => scanCorpus());
 document.querySelectorAll("button.batch").forEach((b) => {
-  b.addEventListener("click", () => openIdPicker(Number(b.dataset.n)));
+  b.addEventListener("click", () => openIdPicker(Number(b.dataset.n), b.dataset.from || "start"));
 });
 // A batch from a previous visit is the whole point of the persistence check,
 // so the button lights up before anything is picked in THIS session.
