@@ -275,7 +275,11 @@ export function bundleFromRaw(raw) {
         cid: String(course.id),
         y: year,
         topic: topicName,
-        kind: "note",
+        // What the item IS, not just "a note". Export filters on it, and the
+        // distinction is free here — courseWork is homework, courseWorkMaterials
+        // is a handout. A corpus built before this says "note"; kb-export.js
+        // reads the body for those rather than forcing a rebuild.
+        kind: "assignment",
         s: deriveSummary(title, body, course.name, topicName),
         x: body,
       });
@@ -294,7 +298,7 @@ export function bundleFromRaw(raw) {
         cid: String(course.id),
         y: year,
         topic: topicName,
-        kind: "note",
+        kind: "material",
         s: deriveSummary(title, body, course.name, topicName),
         x: body,
       });

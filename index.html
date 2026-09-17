@@ -292,33 +292,103 @@
       </div>
 
       <div id="studyPanel-manage" class="study-panel" role="tabpanel" tabindex="-1" hidden>
-        <div class="study-manage-block">
-          <h3 class="study-manage-title">Your database</h3>
-          <p class="settings-hint">Rebuilding adds anything new from Classroom. Nothing you already have is lost — past years you imported stay put.</p>
-          <div class="study-manage-actions">
-            <button id="kbRebuildBtn" class="primary" type="button">⚡ Generate / update database</button>
-            <button id="kbManageLoadFileLink" class="ghost-btn" type="button">Import archive.json</button>
+        <div id="manageTabs" class="manage-tabs" role="tablist" aria-label="Manage views">
+          <button class="manage-tab-btn active" data-manage-tab="classes" type="button" role="tab" aria-selected="true" aria-controls="managePanel-classes">Classes</button>
+          <button class="manage-tab-btn" data-manage-tab="export" type="button" role="tab" aria-selected="false" aria-controls="managePanel-export">Export</button>
+        </div>
+
+        <div id="managePanel-classes" class="manage-panel" role="tabpanel" tabindex="-1">
+          <div class="study-manage-block">
+            <h3 class="study-manage-title">Your database</h3>
+            <p class="settings-hint">Rebuilding adds anything new from Classroom. Nothing you already have is lost — past years you imported stay put.</p>
+            <div class="study-manage-actions">
+              <button id="kbRebuildBtn" class="primary" type="button">⚡ Generate / update database</button>
+              <button id="kbManageLoadFileLink" class="ghost-btn" type="button">Import archive.json</button>
+            </div>
+            <div id="kbRebuildStatus" class="manage-run-status" role="status" aria-live="polite" aria-atomic="true" hidden>
+              <span class="manage-run-text"></span>
+              <button class="link-btn manage-run-cancel" type="button" hidden>Cancel</button>
+              <span class="manage-run-track"><span class="manage-run-bar"></span></span>
+            </div>
+          </div>
+          <div class="study-manage-block">
+            <h3 class="study-manage-title">Class categories</h3>
+            <p class="settings-hint">These are guessed from each class's name, so some land in the wrong place. Drag a class to fix it — or use its menu. Your changes follow you to your other devices, and stay put when the database is rebuilt.</p>
+            <div id="kbClassBoardStatus" class="kb-board-status" role="status" aria-live="polite"></div>
+            <div id="kbClassBoard" class="kb-board"></div>
+            <div class="study-manage-actions">
+              <button id="kbClassBoardReset" class="ghost-btn" type="button" hidden>Put every class back on automatic</button>
+            </div>
           </div>
         </div>
-        <div class="study-manage-block">
-          <h3 class="study-manage-title">Class categories</h3>
-          <p class="settings-hint">These are guessed from each class's name, so some land in the wrong place. Drag a class to fix it — or use its menu. Your changes follow you to your other devices, and stay put when the database is rebuilt.</p>
-          <div id="kbClassBoardStatus" class="kb-board-status" role="status" aria-live="polite"></div>
-          <div id="kbClassBoard" class="kb-board"></div>
-          <div class="study-manage-actions">
-            <button id="kbClassBoardReset" class="ghost-btn" type="button" hidden>Put every class back on automatic</button>
+
+        <div id="managePanel-export" class="manage-panel" role="tabpanel" tabindex="-1" hidden>
+          <div class="study-manage-block">
+            <h3 class="study-manage-title">Export classes</h3>
+            <p class="settings-hint">Pick the classes you want. A ZIP keeps every assignment and material as its own file, foldered by class — the single-file formats put everything in one document.</p>
+
+            <fieldset class="export-fieldset">
+              <legend>Classes</legend>
+              <div class="export-picker-head">
+                <input id="kbExportClassFilter" type="search" placeholder="Filter classes…" aria-label="Filter the class list" />
+                <button id="kbExportSelectAll" class="link-btn" type="button">Select all</button>
+                <button id="kbExportSelectNone" class="link-btn" type="button">Clear</button>
+              </div>
+              <div id="kbExportClassList" class="export-class-list"></div>
+            </fieldset>
+
+            <div class="export-filter-row">
+              <label class="export-field">
+                <span class="export-field-label">Year</span>
+                <select id="kbExportYear" class="kb-filter-select"><option value="">All years</option></select>
+              </label>
+              <fieldset class="export-kinds">
+                <legend>Include</legend>
+                <label><input type="checkbox" class="kb-export-kind" value="assignment" checked /> Assignments</label>
+                <label><input type="checkbox" class="kb-export-kind" value="material" checked /> Materials</label>
+                <label><input type="checkbox" class="kb-export-kind" value="announcement" checked /> Announcements</label>
+              </fieldset>
+            </div>
+
+            <div class="export-filter-row">
+              <label class="export-field">
+                <span class="export-field-label">Format</span>
+                <select id="kbExportFormat" class="kb-filter-select">
+                  <option value="zip">ZIP — one file per assignment/material</option>
+                  <option value="md">Markdown — one document</option>
+                  <option value="json">JSON</option>
+                  <option value="csv">CSV</option>
+                </select>
+              </label>
+              <label id="kbExportAttachmentsField" class="export-check">
+                <input id="kbExportAttachments" type="checkbox" /> Also download the attachments (PDFs, Docs, slides)
+              </label>
+            </div>
+            <p id="kbExportAttachmentsHint" class="settings-hint" hidden>Fetching attachments asks Google for read access to your Drive the first time, then downloads each file into the ZIP. Big classes take a while, and a file the teacher never shared with you will be skipped.</p>
+
+            <div class="study-manage-actions">
+              <button id="kbExportRun" class="primary" type="button">Download</button>
+              <button id="kbExportCancel" class="ghost-btn" type="button" hidden>Cancel</button>
+              <span id="kbExportSummary" class="kb-export-status" role="status" aria-live="polite"></span>
+            </div>
+            <div id="kbExportProgress" class="manage-run-status" role="status" aria-live="polite" aria-atomic="true" hidden>
+              <span class="manage-run-text"></span>
+              <span class="manage-run-track"><span class="manage-run-bar"></span></span>
+            </div>
+            <div id="kbExportSkipped" class="export-skipped" hidden></div>
           </div>
-        </div>
-        <div class="study-manage-block">
-          <h3 class="study-manage-title">Export</h3>
-          <p class="settings-hint">Download your whole knowledge base to keep or move elsewhere.</p>
-          <div class="study-manage-actions">
-            <button id="kbExportJson" class="ghost-btn" type="button" title="Download the whole knowledge base as JSON">JSON</button>
-            <button id="kbExportMd" class="ghost-btn" type="button" title="Download as a Markdown notebook grouped by course">Markdown</button>
-            <button id="kbExportCsv" class="ghost-btn" type="button" title="Download notes as a CSV spreadsheet">CSV</button>
-            <span id="kbExportStatus" class="kb-export-status" hidden></span>
+
+          <div class="study-manage-block">
+            <h3 class="study-manage-title">Everything, in one file</h3>
+            <p class="settings-hint">The whole knowledge base — every class, every year — to keep or move elsewhere.</p>
+            <div class="study-manage-actions">
+              <button id="kbExportJson" class="ghost-btn" type="button" title="Download the whole knowledge base as JSON">JSON</button>
+              <button id="kbExportMd" class="ghost-btn" type="button" title="Download as a Markdown notebook grouped by course">Markdown</button>
+              <button id="kbExportCsv" class="ghost-btn" type="button" title="Download notes as a CSV spreadsheet">CSV</button>
+              <span id="kbExportStatus" class="kb-export-status" hidden></span>
+            </div>
+            <p class="settings-hint">Clearing the local database lives in Settings → Knowledge Base.</p>
           </div>
-          <p class="settings-hint">Clearing the local database lives in Settings → Knowledge Base.</p>
         </div>
       </div>
 
@@ -528,7 +598,6 @@
         <label class="settings-row"><span>Reading density</span><select class="settings-select" id="kbPrefDensity"><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
         <label class="settings-row"><span>Copied search context</span><select class="settings-select" id="kbPrefCopyFormat"><option value="lines">Titles and snippets on separate lines</option><option value="compact">One line per result</option></select></label>
         <label class="settings-row settings-row-toggle"><span>Build automatically after Classroom sign-in</span><input type="checkbox" id="kbPrefAutoBuild" /></label>
-        <label class="settings-row settings-row-toggle"><span>Show which AI model answered</span><input type="checkbox" id="kbPrefShowModel" /></label>
         <label class="settings-row settings-row-toggle"><span>Show which AI model answered</span><input type="checkbox" id="kbPrefShowModel" /></label>
         <div class="settings-row"><button id="kbPrefExport" type="button">Download my KB</button><button id="kbPrefExportBook" type="button">Download study book</button><button id="kbPrefClear" type="button">Clear local KB</button></div>
         <p class="settings-hint" id="kbPrefStatus" role="status" aria-live="polite" aria-atomic="true"></p>

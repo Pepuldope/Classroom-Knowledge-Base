@@ -49,6 +49,18 @@ const SCOPES = [
   "https://www.googleapis.com/auth/classroom.topics.readonly",
   "https://www.googleapis.com/auth/userinfo.profile",
 ].join(" ");
+// Drive read access is NOT in SCOPES, and must not be.
+//
+// Everything the app does normally — the Planner, the knowledge base, the tutor
+// — needs Classroom only. Downloading the actual attachment bytes is the single
+// feature that needs Drive, it is opt-in, and drive.readonly is broad (it can
+// read the whole of a user's Drive, not just what a teacher posted). So it is
+// requested incrementally, the first time someone ticks "also download the
+// attachments", and a student who never does is never asked for it.
+const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.readonly";
+let driveTokenClient = null;
+let driveAccessToken = null;
+
 const COURSES_HIDDEN_KEY = "cwa_hidden_courses";
 const USER_HINT_KEY = "cwa_user_hint";
 
@@ -669,6 +681,15 @@ async function initGis() {
     callback: () => {},
   });
 
+  // Fourth client: Drive-only, for attachment export. Separate for the same
+  // reason kbTokenClient is — its callback is reassigned per request.
+  driveTokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    include_granted_scopes: true,
+    callback: () => {},
+  });
+
   const cfg = await getOauthConfig();
   if (cfg.hasRefreshTokens) {
     codeClient = google.accounts.oauth2.initCodeClient({
@@ -918,6 +939,26 @@ function waitForGis() {
     // Expose the token client so the Knowledge-Base module can request a
     // Classroom-scoped token for building the user's local knowledge base.
     window.__cwaTokenClient = kbTokenClient;
+    // Resolves with a Drive-scoped access token, prompting for consent the
+    // first time. Rejects rather than throwing into the GIS callback, so the
+    // export UI can say "attachments need Drive access" and carry on without
+    // them. The token is kept in memory only — never stored — because it is far
+    // broader than the Classroom one.
+    window.__cwaRequestDriveToken = () => new Promise((resolve, reject) => {
+      if (driveAccessToken) { resolve(driveAccessToken); return; }
+      if (!driveTokenClient) { reject(new Error("Google sign-in is not ready yet.")); return; }
+      driveTokenClient.callback = (resp) => {
+        if (resp?.error || !resp?.access_token) {
+          reject(new Error(resp?.error || "Drive access was not granted."));
+          return;
+        }
+        driveAccessToken = resp.access_token;
+        resolve(driveAccessToken);
+      };
+      driveTokenClient.error_callback = (err) => reject(new Error(err?.type || "popup_closed"));
+      try { driveTokenClient.requestAccessToken(); }
+      catch (e) { reject(e); }
+    });
     // kb.js is NOT loaded here. It is 141KB and pulls the search index, the
     // Classroom builder, the curriculum matrix and the local store behind it —
     // none of which the Planner needs. showKbView() wires the KB's listeners
@@ -1500,6 +1541,9 @@ $("switchBtn").addEventListener("click", () => { closeMenu(); revokeServerToken(
 $("logoutBtn").addEventListener("click", () => {
   closeMenu();
   clearToken();
+  // The Drive token is in-memory only, but signing out has to drop it too —
+  // otherwise the next account inherits the previous one's Drive access.
+  driveAccessToken = null;
   revokeServerToken();
   setView("planner");
   try { localStorage.removeItem(USER_HINT_KEY); } catch {}

@@ -36,6 +36,12 @@ import { noteHref, linkTo } from "./deep-links.js";
 import { relatedPreviewAnnouncement } from "./kb-related-status.js";
 import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
+import {
+  EXPORT_KINDS, EXPORT_KIND_LABELS, noteItemKind, noteAttachments, driveMetadataUrl,
+  driveDownloadPlan, exportSelectionModel, selectExportNotes, exportCourseOptions,
+  exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZip,
+  buildResultMessage,
+} from "./kb-export.js";
 
 const $ = (id) => document.getElementById(id);
 export const INTERACTIVE_OAUTH_PROMPT = "select_account";
@@ -1332,7 +1338,7 @@ export function setStudyTab(requested) {
   else hideBrowsePanel();
   if (model.active === "curriculum") renderStudyCurriculum();
   if (model.active === "saved") renderStudyList();
-  if (model.active === "manage") renderClassBoard();
+  if (model.active === "manage") { renderClassBoard(); setManageTab(activeManageTab); }
   return model.active;
 }
 
@@ -1588,6 +1594,41 @@ function renderKbMeta(meta) {
 // The "new courses" banner doubles as the progress surface for the update it
 // offers, so accepting the offer does not move the page.
 let kbBuildInlineActive = false;
+// A build started from Manage reports THERE. The full-page card (#kbBuildPanel)
+// and the changes banner both live above the Study tab row, so from the Manage
+// tab — which is a long scroll down — a click on "Generate / update database"
+// updated a surface nobody could see, and read as a dead button.
+let kbBuildManageActive = false;
+
+/** Drive one of the `.manage-run-status` strips (rebuild, export). */
+function renderManageRun(el, { message = null, percent = null, isError = false, onCancel = null, done = false } = {}) {
+  if (!el) return null;
+  const text = el.querySelector(".manage-run-text");
+  const bar = el.querySelector(".manage-run-bar");
+  const cancel = el.querySelector(".manage-run-cancel");
+  if (message != null && text) text.textContent = message;
+  if (percent != null && bar) bar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+  el.classList.toggle("is-error", !!isError);
+  el.classList.toggle("is-done", !!done);
+  if (cancel) {
+    cancel.hidden = !onCancel;
+    cancel.onclick = onCancel || null;
+  }
+  el.hidden = false;
+  return el;
+}
+
+function hideManageRun(el) {
+  if (!el) return;
+  el.hidden = true;
+  const bar = el.querySelector(".manage-run-bar");
+  if (bar) bar.style.width = "0%";
+  el.classList.remove("is-error", "is-done");
+}
+
+// Test hooks — scripts/manage_export_test.mjs drives these without a Google build.
+export function __setManageBuildActiveForTest(value) { kbBuildManageActive = !!value; }
+export function __renderManageRunForTest(id, opts) { return renderManageRun($(id), opts); }
 
 /** Put the banner into progress mode, keeping its exact box. */
 function renderInlineBuildProgress(message, { percent = null, onCancel = null } = {}) {
@@ -1961,6 +2002,361 @@ async function exportKb(format) {
 
 
 // ---------------------------------------------------------------------------
+// Manage: two jobs, two sub-tabs.
+//
+// Managing what the database HOLDS (build it, import into it, file classes into
+// the right subject) and getting things OUT of it are different errands, and
+// stacking all four blocks made the tab a long scroll on a phone where the
+// thing you wanted was always the one below the fold.
+// ---------------------------------------------------------------------------
+const MANAGE_TABS = ["classes", "export"];
+const MANAGE_TAB_KEY = "cwa_kb_manage_tab";
+let activeManageTab = "classes";
+
+export function manageTabModel(requested) {
+  const active = MANAGE_TABS.includes(requested) ? requested : "classes";
+  return { active, panels: MANAGE_TABS.map((tab) => ({ tab, hidden: tab !== active })) };
+}
+
+export function setManageTab(requested) {
+  const model = manageTabModel(requested);
+  activeManageTab = model.active;
+  try { localStorage.setItem(MANAGE_TAB_KEY, model.active); } catch { /* private mode */ }
+  for (const { tab, hidden } of model.panels) {
+    const panel = $(`managePanel-${tab}`);
+    if (panel) panel.hidden = hidden;
+  }
+  document.querySelectorAll(".manage-tab-btn").forEach((btn) => {
+    const on = btn.dataset.manageTab === model.active;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
+  });
+  if (model.active === "export") renderExportPanel();
+  return model.active;
+}
+
+function wireManageTabs() {
+  document.querySelectorAll(".manage-tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => setManageTab(btn.dataset.manageTab));
+  });
+  let saved = "classes";
+  try { saved = localStorage.getItem(MANAGE_TAB_KEY) || "classes"; } catch { /* private mode */ }
+  activeManageTab = MANAGE_TABS.includes(saved) ? saved : "classes";
+}
+
+// ---------------------------------------------------------------------------
+// Export: pick classes, narrow, download.
+// ---------------------------------------------------------------------------
+let exportClassFilter = "";
+let exportChecked = null;   // null = "not chosen yet"; a Set once the user picks
+let exportAbort = null;
+
+function exportBundle() {
+  return localKbBundle && Array.isArray(localKbBundle.notes) ? localKbBundle : { notes: [], courses: [] };
+}
+
+function renderExportPanel() {
+  const list = $("kbExportClassList");
+  if (!list) return;
+  const options = exportCourseOptions(exportBundle());
+  if (exportChecked === null) exportChecked = new Set();
+  // Drop ticks for classes that no longer exist, so a rebuild cannot leave a
+  // selection that silently exports nothing.
+  const names = new Set(options.map((o) => o.name));
+  for (const name of [...exportChecked]) if (!names.has(name)) exportChecked.delete(name);
+
+  const needle = exportClassFilter.trim().toLowerCase();
+  const shown = needle ? options.filter((o) => o.name.toLowerCase().includes(needle)) : options;
+  list.replaceChildren();
+  if (!options.length) {
+    const empty = document.createElement("p");
+    empty.className = "settings-hint";
+    empty.textContent = "No classes yet — generate the database first.";
+    list.appendChild(empty);
+  } else if (!shown.length) {
+    const empty = document.createElement("p");
+    empty.className = "settings-hint";
+    empty.textContent = `No class matches “${exportClassFilter}”.`;
+    list.appendChild(empty);
+  }
+  for (const option of shown) {
+    const row = document.createElement("label");
+    row.className = "export-class-row";
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.value = option.name;
+    box.checked = exportChecked.has(option.name);
+    box.addEventListener("change", () => {
+      if (box.checked) exportChecked.add(option.name); else exportChecked.delete(option.name);
+      updateExportSummary();
+    });
+    const name = document.createElement("span");
+    name.className = "export-class-name";
+    name.textContent = option.name;
+    const meta = document.createElement("span");
+    meta.className = "export-class-meta";
+    const bits = EXPORT_KINDS
+      .filter((kind) => option.counts[kind] > 0)
+      .map((kind) => `${option.counts[kind]} ${EXPORT_KIND_LABELS[kind].toLowerCase()}`);
+    meta.textContent = bits.length ? bits.join(" · ") : "nothing yet";
+    row.append(box, name, meta);
+    list.appendChild(row);
+  }
+
+  const yearSelect = $("kbExportYear");
+  if (yearSelect) {
+    const previous = yearSelect.value;
+    yearSelect.replaceChildren();
+    const all = document.createElement("option");
+    all.value = "";
+    all.textContent = "All years";
+    yearSelect.appendChild(all);
+    for (const year of exportYearOptions(exportBundle())) {
+      const opt = document.createElement("option");
+      opt.value = year;
+      opt.textContent = year;
+      yearSelect.appendChild(opt);
+    }
+    yearSelect.value = [...yearSelect.options].some((o) => o.value === previous) ? previous : "";
+  }
+  updateExportSummary();
+}
+
+function readExportForm() {
+  return {
+    courses: [...(exportChecked || [])],
+    years: $("kbExportYear")?.value ? [$("kbExportYear").value] : [],
+    kinds: [...document.querySelectorAll(".kb-export-kind")].filter((b) => b.checked).map((b) => b.value),
+    format: $("kbExportFormat")?.value || "zip",
+    attachments: !!$("kbExportAttachments")?.checked,
+  };
+}
+
+/** The "this is what Download will give you" line, recomputed on every change. */
+export function exportSummaryText(noteCount, courseCount, attachmentCount) {
+  if (!noteCount) return "Nothing matches — widen the filters.";
+  const items = `${noteCount.toLocaleString()} ${noteCount === 1 ? "item" : "items"}`;
+  const from = courseCount ? ` from ${courseCount} ${courseCount === 1 ? "class" : "classes"}` : " from every class";
+  const files = attachmentCount ? `, plus up to ${attachmentCount} attachment${attachmentCount === 1 ? "" : "s"}` : "";
+  return `${items}${from}${files}.`;
+}
+
+function updateExportSummary() {
+  const summary = $("kbExportSummary");
+  const form = readExportForm();
+  const notes = selectExportNotes(exportBundle(), form);
+  const attachments = form.attachments && form.format === "zip"
+    ? notes.reduce((n, note) => n + noteAttachments(note).filter((a) => a.driveId).length, 0)
+    : 0;
+  if (summary) summary.textContent = exportSummaryText(notes.length, form.courses.length, attachments);
+  const field = $("kbExportAttachmentsField");
+  const hint = $("kbExportAttachmentsHint");
+  // Attachments only make sense inside a container that can hold them.
+  const zipping = form.format === "zip";
+  if (field) field.classList.toggle("is-disabled", !zipping);
+  const box = $("kbExportAttachments");
+  if (box) box.disabled = !zipping;
+  if (hint) hint.hidden = !(zipping && form.attachments);
+}
+
+function downloadBytes(filename, bytes, mime) {
+  const blob = new Blob([bytes], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Fetch every Drive attachment the selected notes point at.
+ *
+ * Failure is expected and is not an error: a teacher can post a file that was
+ * never shared with the class, and Drive answers 403. Those are collected and
+ * listed, with their link, rather than aborting an export of 200 good files.
+ */
+async function collectAttachments(notes, { token, signal, onProgress }) {
+  const byNote = new Map();
+  const entries = [];
+  const skipped = [];
+  const used = new Set();
+  const wanted = [];
+  for (const note of notes) {
+    for (const attachment of noteAttachments(note)) {
+      if (attachment.driveId) wanted.push({ note, attachment });
+      else if (attachment.source !== "link") skipped.push({ ...attachment, reason: "not a Drive file" });
+    }
+  }
+  let done = 0;
+  for (const { note, attachment } of wanted) {
+    if (signal?.aborted) break;
+    onProgress?.({ done, total: wanted.length, title: attachment.title });
+    try {
+      const metaResponse = await fetch(driveMetadataUrl(attachment.driveId), {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      });
+      if (!metaResponse.ok) throw new Error(`Drive ${metaResponse.status}`);
+      const plan = driveDownloadPlan(await metaResponse.json());
+      if (!plan) { skipped.push({ ...attachment, reason: "nothing to download" }); done++; continue; }
+      const fileResponse = await fetch(plan.url, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal,
+      });
+      if (!fileResponse.ok) throw new Error(`Drive ${fileResponse.status}`);
+      const bytes = new Uint8Array(await fileResponse.arrayBuffer());
+      const path = attachmentPath(note, plan.filename, used);
+      entries.push({ path, data: bytes });
+      if (!byNote.has(note.p)) byNote.set(note.p, []);
+      byNote.get(note.p).push({ title: attachment.title, path });
+    } catch (error) {
+      if (error?.name === "AbortError") break;
+      skipped.push({ ...attachment, reason: error?.message || "could not be downloaded" });
+    }
+    done++;
+  }
+  return { entries, byNote, skipped, attempted: wanted.length };
+}
+
+function renderExportSkipped(skipped) {
+  const box = $("kbExportSkipped");
+  if (!box) return;
+  box.replaceChildren();
+  if (!skipped.length) { box.hidden = true; return; }
+  const head = document.createElement("p");
+  head.className = "settings-hint";
+  head.textContent = `${skipped.length} attachment${skipped.length === 1 ? "" : "s"} could not be downloaded — usually a file the teacher never shared with you. They are still linked inside the notes:`;
+  box.appendChild(head);
+  const list = document.createElement("ul");
+  for (const item of skipped.slice(0, 20)) {
+    const li = document.createElement("li");
+    const link = document.createElement("a");
+    link.href = item.url;
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = item.title;
+    li.append(link, ` — ${item.reason}`);
+    list.appendChild(li);
+  }
+  box.appendChild(list);
+  if (skipped.length > 20) {
+    const more = document.createElement("p");
+    more.className = "settings-hint";
+    more.textContent = `…and ${skipped.length - 20} more.`;
+    box.appendChild(more);
+  }
+  box.hidden = false;
+}
+
+async function runExport() {
+  const summary = $("kbExportSummary");
+  const progress = $("kbExportProgress");
+  const runBtn = $("kbExportRun");
+  const cancelBtn = $("kbExportCancel");
+  const say = (msg, isError) => {
+    if (!summary) return;
+    summary.textContent = msg;
+    summary.classList.toggle("error", !!isError);
+  };
+  const form = readExportForm();
+  const bundle = exportBundle();
+  const notes = selectExportNotes(bundle, form);
+  renderExportSkipped([]);
+  if (!notes.length) { say("Nothing matches — widen the filters.", true); return; }
+
+  const selection = exportSelectionModel(form);
+  const filename = exportDownloadName(selection);
+
+  // The single-file formats are the existing whole-corpus writers over a
+  // narrowed note list — same output shape, fewer notes, no second code path.
+  if (selection.format !== "zip") {
+    const scoped = { ...bundle, notes, generatedAt: bundle.generatedAt || new Date().toISOString() };
+    const mime = selection.format === "json" ? "application/json" : selection.format === "csv" ? "text/csv" : "text/markdown";
+    downloadFile(filename, exportBundlePayload(scoped, selection.format), mime);
+    say(`Exported ${notes.length.toLocaleString()} items.`);
+    return;
+  }
+
+  exportAbort = new AbortController();
+  if (runBtn) runBtn.disabled = true;
+  if (cancelBtn) cancelBtn.hidden = false;
+  if (cancelBtn) cancelBtn.onclick = () => exportAbort?.abort();
+  try {
+    let attachments = { entries: [], byNote: new Map(), skipped: [], attempted: 0 };
+    if (selection.attachments) {
+      renderManageRun(progress, { message: "Asking Google for read access to your Drive…", percent: 2 });
+      let token = null;
+      try {
+        token = await window.__cwaRequestDriveToken?.();
+      } catch (error) {
+        token = null;
+        say(`Exporting without attachments — ${error?.message || "Drive access was not granted"}.`, true);
+      }
+      if (token) {
+        attachments = await collectAttachments(notes, {
+          token,
+          signal: exportAbort.signal,
+          onProgress: ({ done, total, title }) => renderManageRun(progress, {
+            message: `Downloading attachment ${done + 1} of ${total} — ${title}`,
+            percent: total ? 2 + Math.round((done / total) * 88) : 50,
+          }),
+        });
+      }
+    }
+    if (exportAbort.signal.aborted) { say("Cancelled."); return; }
+
+    renderManageRun(progress, { message: "Packing the zip…", percent: 94 });
+    const tree = exportFileTree(notes, {
+      attachmentsByNotePath: attachments.byNote,
+      generatedAt: new Date().toISOString(),
+    });
+    const zip = buildZip([
+      { path: "README.md", text: tree.index },
+      ...tree.files,
+      ...attachments.entries,
+    ]);
+    downloadBytes(filename, zip, "application/zip");
+    renderManageRun(progress, { message: "Done.", percent: 100, done: true });
+    const got = attachments.entries.length;
+    say(`Exported ${notes.length.toLocaleString()} items${attachments.attempted ? ` and ${got} of ${attachments.attempted} attachments` : ""}.`);
+    renderExportSkipped(attachments.skipped);
+  } catch (error) {
+    renderManageRun(progress, { message: `❌ ${error?.message || error}`, isError: true });
+    say("Export failed.", true);
+  } finally {
+    exportAbort = null;
+    if (runBtn) runBtn.disabled = false;
+    if (cancelBtn) { cancelBtn.hidden = true; cancelBtn.onclick = null; }
+    setTimeout(() => hideManageRun(progress), 2500);
+  }
+}
+
+function wireExportPanel() {
+  $("kbExportClassFilter")?.addEventListener("input", debounce((event) => {
+    exportClassFilter = event.target.value || "";
+    renderExportPanel();
+  }, 150));
+  $("kbExportSelectAll")?.addEventListener("click", () => {
+    exportChecked = new Set(exportCourseOptions(exportBundle()).map((o) => o.name));
+    renderExportPanel();
+  });
+  $("kbExportSelectNone")?.addEventListener("click", () => {
+    exportChecked = new Set();
+    renderExportPanel();
+  });
+  $("kbExportYear")?.addEventListener("change", updateExportSummary);
+  $("kbExportFormat")?.addEventListener("change", updateExportSummary);
+  $("kbExportAttachments")?.addEventListener("change", updateExportSummary);
+  document.querySelectorAll(".kb-export-kind").forEach((box) => {
+    box.addEventListener("change", updateExportSummary);
+  });
+  $("kbExportRun")?.addEventListener("click", () => runExport());
+}
+
+// ---------------------------------------------------------------------------
 // Tutor source attribution — turn the notes the RAG tutor actually used into
 // clickable chip descriptors the UI renders. Each chip keeps the note index so
 // a click can open the full note in the detail modal (openKbNote).
@@ -2031,7 +2427,9 @@ export function wireKbEvents() {
   // Manage reuses the onboarding controls rather than duplicating their logic:
   // the two are never on screen together (onboarding shows only in the empty
   // state), so this is one build path and one import path with two entry points.
-  $("kbRebuildBtn")?.addEventListener("click", () => startScrape());
+  $("kbRebuildBtn")?.addEventListener("click", () => startScrape({ manage: true }));
+  wireManageTabs();
+  wireExportPanel();
   $("kbManageLoadFileLink")?.addEventListener("click", () => fileInput?.click());
   installClassBoardDrag($("kbClassBoard"));
   $("kbClassBoardReset")?.addEventListener("click", () => {
@@ -2253,16 +2651,21 @@ export function cancelKbBuild() {
   kbBuildAbort?.abort();
 }
 
-export async function startScrape({ inline = false } = {}) {
+export async function startScrape({ inline = false, manage = false } = {}) {
   if (kbBuildInFlight) return;
   kbBuildInFlight = true;
-  kbBuildInlineActive = inline && !!$("kbChangesBanner");
+  kbBuildManageActive = manage && !!$("kbRebuildStatus");
+  kbBuildInlineActive = !kbBuildManageActive && inline && !!$("kbChangesBanner");
   kbBuildAbort = new AbortController();
   const cancelBtn = $("kbBuildCancelBtn");
-  if (cancelBtn) cancelBtn.hidden = !kbBuildInlineActive ? false : true;
+  if (cancelBtn) cancelBtn.hidden = kbBuildInlineActive || kbBuildManageActive;
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
   const showStatus = (msg, isError) => {
+    if (kbBuildManageActive) {
+      renderManageRun($("kbRebuildStatus"), { message: msg, isError, done: !isError });
+      return;
+    }
     if (kbBuildInlineActive) {
       if (isError) clearInlineBuildProgress({ message: msg, isError: true });
       else renderInlineBuildProgress(msg);
@@ -2277,8 +2680,9 @@ export async function startScrape({ inline = false } = {}) {
     // Need a fresh Classroom token with the read-only scopes.
     if (!window.__cwaTokenClient) {
       kbBuildInFlight = false;
-      kbBuildInlineActive = false;
       showStatus("Sign in with Google first (use the top-right button), then try again.", true);
+      kbBuildInlineActive = false;
+      kbBuildManageActive = false;
       console.warn("[KB] startScrape: no token and no Google token client available.");
       return;
     }
@@ -2298,6 +2702,9 @@ export async function startScrape({ inline = false } = {}) {
 
 async function doScrape(token) {
   const checkpoint = kbBuildCheckpointModel(await loadKbBuildCheckpoint().catch(() => null));
+  // What the corpus held before this run, so the done-line can say whether the
+  // rebuild actually changed anything instead of always reporting a total.
+  const notesBefore = localKbBundle?.notes?.length ?? 0;
   const panel = $("kbBuildPanel");
   const statusEl = $("kbBuildStatus");
   const logEl = $("kbBuildLog");
@@ -2310,6 +2717,14 @@ async function doScrape(token) {
   if (panel) panel.hidden = !buildSurface.panelVisible;
   if (buildSurface.inlineVisible) {
     renderInlineBuildProgress("Checking Google Classroom…", {
+      percent: 5,
+      onCancel: () => kbBuildAbort?.abort(),
+    });
+  }
+  if (kbBuildManageActive) {
+    if (panel) panel.hidden = true;
+    renderManageRun($("kbRebuildStatus"), {
+      message: "Checking Google Classroom…",
       percent: 5,
       onCancel: () => kbBuildAbort?.abort(),
     });
@@ -2347,9 +2762,17 @@ async function doScrape(token) {
           const status = kbBuildProgressStatusModel({ message, done, total });
           if (statusEl) statusEl.textContent = status.message;
           if (kbBuildInlineActive) renderInlineBuildProgress(status.message, { percent });
+          if (kbBuildManageActive) {
+            renderManageRun($("kbRebuildStatus"), {
+              message: status.message,
+              percent,
+              onCancel: () => kbBuildAbort?.abort(),
+            });
+          }
           log(message);
-        } else if (kbBuildInlineActive && percent != null) {
-          renderInlineBuildProgress(null, { percent });
+        } else if (percent != null) {
+          if (kbBuildInlineActive) renderInlineBuildProgress(null, { percent });
+          if (kbBuildManageActive) renderManageRun($("kbRebuildStatus"), { percent });
         }
         if (progress && percent != null) progress.style.width = `${percent}%`;
       },
@@ -2360,9 +2783,23 @@ async function doScrape(token) {
     setLocalKbBundle(bundle);
     await removeKbBuildCheckpoint();
     if (progress) progress.style.width = "100%";
-    const done = `✅ Saved ${bundle.notes.length.toLocaleString()} notes locally in this browser.`;
+    // "Saved N notes" read as "there is still more to fetch" when the honest
+    // answer was "you are already up to date" — Peter's actual complaint.
+    const done = buildResultMessage({
+      before: notesBefore,
+      after: bundle.notes.length,
+      removed: bundle.prunedCount || 0,
+    });
     if (statusEl) statusEl.textContent = done;
     if (kbBuildInlineActive) renderInlineBuildProgress(done, { percent: 100 });
+    if (kbBuildManageActive) {
+      renderManageRun($("kbRebuildStatus"), { message: done, percent: 100, done: true });
+      // The corpus just absorbed everything Classroom has, so the "N new
+      // courses" offer above the tabs is answered — leaving it up is the other
+      // half of "it stays there as if there was something more to update".
+      clearInlineBuildProgress();
+      renderExportPanel();
+    }
     // refreshKb re-runs the change check, which clears the banner outright once
     // the corpus has caught up.
     setTimeout(() => refreshKb(), 600);
@@ -2379,6 +2816,7 @@ async function doScrape(token) {
       const cancelled = "Cancelled — resume any time to pick up where it stopped.";
       if (statusEl) { statusEl.classList.remove("error"); statusEl.textContent = cancelled; }
       if (kbBuildInlineActive) clearInlineBuildProgress({ message: cancelled });
+      if (kbBuildManageActive) renderManageRun($("kbRebuildStatus"), { message: cancelled, done: true });
       await refreshKb();
       return;
     }
@@ -2387,6 +2825,10 @@ async function doScrape(token) {
     kbBuildInFlight = false;
     kbBuildAbort = null;
     kbBuildInlineActive = false;
+    kbBuildManageActive = false;
+    const run = $("kbRebuildStatus");
+    const runCancel = run?.querySelector(".manage-run-cancel");
+    if (runCancel) { runCancel.hidden = true; runCancel.onclick = null; }
     const cancelBtn = $("kbBuildCancelBtn");
     if (cancelBtn) cancelBtn.hidden = true;
   }
@@ -2397,6 +2839,7 @@ function setKbBuildError(msg) {
   if (statusEl) { statusEl.textContent = `❌ ${msg}`; statusEl.classList.add("error"); }
   // An inline build has no visible build card to put the error in.
   if (kbBuildInlineActive) clearInlineBuildProgress({ message: `❌ ${msg}`, isError: true });
+  if (kbBuildManageActive) renderManageRun($("kbRebuildStatus"), { message: `❌ ${msg}`, isError: true });
 }
 
 async function handleKbFile(e) {

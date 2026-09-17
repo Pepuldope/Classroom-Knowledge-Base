@@ -108,14 +108,24 @@ try {
   // --- manage --------------------------------------------------------------
   await page.click('.study-tab-btn[data-tab="manage"]');
   await page.waitForTimeout(200);
-  const manage = await page.evaluate(() =>
-    ["kbRebuildBtn", "kbManageLoadFileLink", "kbExportJson", "kbExportMd", "kbExportCsv"]
-      .filter((id) => {
-        const el = document.getElementById(id);
-        return !el || el.offsetParent === null;
-      }));
-  assert.deepEqual(manage, [], `Manage should expose build/import/export, missing or hidden: ${manage.join()}`);
-  console.log("✓ manage exposes build, import and the three exports");
+  const hiddenOf = (ids) => page.evaluate((list) => list.filter((id) => {
+    const el = document.getElementById(id);
+    return !el || el.offsetParent === null;
+  }), ids);
+  // Manage is two sub-tabs now: managing what the database holds, and getting
+  // things out of it. Classes is the default, so the export controls are one
+  // click away rather than on screen.
+  const classesTab = await hiddenOf(["kbRebuildBtn", "kbManageLoadFileLink", "kbClassBoard"]);
+  assert.deepEqual(classesTab, [], `Manage \u2192 Classes should expose build/import/board, missing or hidden: ${classesTab.join()}`);
+  await page.click('.manage-tab-btn[data-manage-tab="export"]');
+  await page.waitForTimeout(200);
+  const exportTab = await hiddenOf(["kbExportClassList", "kbExportFormat", "kbExportRun", "kbExportJson", "kbExportMd", "kbExportCsv"]);
+  assert.deepEqual(exportTab, [], `Manage \u2192 Export should expose the picker and the exports, missing or hidden: ${exportTab.join()}`);
+  const classesHidden = await page.evaluate(() => document.getElementById("managePanel-classes").hidden);
+  assert.equal(classesHidden, true, "only one Manage sub-panel is visible at a time");
+  await page.click('.manage-tab-btn[data-manage-tab="classes"]');
+  await page.waitForTimeout(150);
+  console.log("\u2713 manage splits into Classes and Export, one panel at a time");
 
   // --- arriving from the Planner lands on the results ---------------------
   // The search box lives inside the Search panel, so a user cannot type from
