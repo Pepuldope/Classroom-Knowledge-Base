@@ -76,6 +76,14 @@ try {
     });
   });
 
+  // Registered after the harness's stub, so it wins (Playwright matches routes
+  // in reverse registration order) — the server DOES have a picker key.
+  await page.route("**/api/oauth-config*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ hasRefreshTokens: false, refreshTokensHealthy: false, pickerApiKey: "served-picker-key" }),
+  }));
+
   await seedKb(page, BUNDLE);
   await page.evaluate(async () => {
     const kb = await import("/kb.js");
@@ -84,7 +92,12 @@ try {
     await kb.showKbView();
     // Stand in for the GIS Drive consent popup, which cannot run headless.
     window.__cwaRequestDriveToken = () => Promise.resolve("fake-drive-token");
-    window.__cwaPickerApiKey = "fake-picker-key";
+    // Deliberately NOT set. This reproduces the bug Peter hit: a tab whose
+    // sessionStorage cached /api/oauth-config from before GOOGLE_PICKER_API_KEY
+    // existed answers pickerApiKey:null forever, and the grant step reported
+    // "not configured" on a site that was serving the key. The grant flow has to
+    // re-ask the server rather than trust the stale global.
+    window.__cwaPickerApiKey = null;
     window.__cwaGoogleClientId = "786778645862-fake.apps.googleusercontent.com";
     // A fake Google Picker. The real one is a cross-origin iframe that cannot
     // run headless, so what is under test here is OUR half: that the ids handed
@@ -221,6 +234,7 @@ try {
     calls: window.__pickerCalls,
   }));
   assert.equal(grant.calls.length, 1, "two attachments fit in one picker round");
+  assert.equal(grant.calls[0].key, "served-picker-key", "the key must come from the server, not from a stale cached global");
   assert.deepEqual(grant.calls[0].ids.sort(), ["DOC_TWO_ID_X", "FILE_ONE_ID_X"], "the picker is handed exactly this selection's attachments");
   assert.equal(grant.calls[0].appId, "786778645862", "the picker gets the project number as its app id");
   assert.equal(grant.calls[0].feature, "multi", "multi-select must be on, or a class is one click per file");

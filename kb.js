@@ -2317,8 +2317,20 @@ function pickerRound({ ids, token, apiKey, appId, title }) {
 async function grantDriveFiles(notes, { onProgress } = {}) {
   const ids = driveIdsForNotes(notes);
   if (!ids.length) return { ids: [], granted: [], cancelled: false, reason: "none" };
-  const apiKey = window.__cwaPickerApiKey;
-  if (!apiKey) throw new Error("The file picker is not configured on this site yet (no Picker API key).");
+  // Ask the server rather than trusting the global. The global is populated at
+  // startup from a config that may have been cached before the key existed, and
+  // a stale null there is indistinguishable from a site that never had a key.
+  let apiKey = window.__cwaPickerApiKey;
+  if (!apiKey) {
+    try {
+      const response = await fetch("/api/oauth-config", { cache: "no-store" });
+      if (response.ok) {
+        apiKey = (await response.json())?.pickerApiKey || null;
+        window.__cwaPickerApiKey = apiKey;
+      }
+    } catch { /* offline — the message below is still the right one */ }
+  }
+  if (!apiKey) throw new Error("The file picker is not set up on this site yet (no Picker API key).");
   const token = await window.__cwaRequestDriveToken?.();
   if (!token) throw new Error("Drive access was not granted.");
   await loadPickerApi();

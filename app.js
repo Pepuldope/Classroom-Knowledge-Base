@@ -618,6 +618,24 @@ function enrichCacheKey(a) {
 
 const OAUTH_CONFIG_CACHE_KEY = "cwa_oauth_config";
 let oauthConfigPromise = null;
+/**
+ * Re-fetch the OAuth config behind a cached answer and replace it.
+ *
+ * Failure is deliberately silent: the cached value is already serving, and a
+ * blip must not downgrade it (the reason the cache exists at all).
+ */
+function revalidateOauthConfig() {
+  return fetchWithTimeout("/api/oauth-config")
+    .then((r) => (r.ok ? r.json() : null))
+    .then((cfg) => {
+      if (!cfg) return;
+      try { sessionStorage.setItem(OAUTH_CONFIG_CACHE_KEY, JSON.stringify(cfg)); } catch {}
+      oauthConfigPromise = Promise.resolve(cfg);
+      window.__cwaPickerApiKey = cfg.pickerApiKey || null;
+    })
+    .catch(() => {});
+}
+
 function getOauthConfig() {
   if (oauthConfigPromise) return oauthConfigPromise;
   try {
@@ -625,6 +643,13 @@ function getOauthConfig() {
     if (cached) {
       const parsed = JSON.parse(cached);
       oauthConfigPromise = Promise.resolve(parsed);
+      // The cache is per tab-session, and it outlives a server-side config
+      // change. A tab opened before GOOGLE_PICKER_API_KEY was set keeps
+      // answering pickerApiKey:null forever — which is exactly how the file
+      // picker reported itself "not configured" on a site that was serving the
+      // key perfectly well. Serve the cached answer immediately (that is what
+      // it is for), then quietly refresh it for everything that asks later.
+      void revalidateOauthConfig();
       return oauthConfigPromise;
     }
   } catch {}
