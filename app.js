@@ -62,7 +62,9 @@ const SCOPES = [
 // Measured on the real corpus (1,880 attachments over 44 classes): a picker
 // opened with DocsView.setFileIds returns every file the student can still
 // reach, the grant survives a reload, and ~8% of the oldest files are gone at
-// the source and simply drop out. See drive-probe.html.
+// the source and simply drop out. Measured with drive-probe.html, which was
+// deleted once it had answered — `git log -- drive-probe.html` still has it
+// if the numbers ever need re-checking.
 //
 // It stays out of SCOPES so a student who never exports attachments is never
 // asked for it; kb.js requests it the first time they do.
