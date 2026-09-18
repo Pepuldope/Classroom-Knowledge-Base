@@ -39,8 +39,8 @@ import { loadSessionPosition, saveSessionPosition } from "./session-position.js"
 import {
   EXPORT_KINDS, EXPORT_KIND_LABELS, noteItemKind, noteAttachments, driveMetadataUrl,
   driveDownloadPlan, exportSelectionModel, selectExportNotes, exportCourseOptions,
-  exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZip,
-  buildResultMessage, driveIdBatches, driveIdsForNotes,
+  exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZipBlob,
+  buildResultMessage, driveIdBatches, driveIdsForNotes, CRC32_INIT, crc32Update, crc32Final, crc32,
 } from "./kb-export.js";
 
 const $ = (id) => document.getElementById(id);
@@ -2159,8 +2159,10 @@ function updateExportSummary() {
   if (grant) grant.hidden = !(zipping && form.attachments);
 }
 
-function downloadBytes(filename, bytes, mime) {
-  const blob = new Blob([bytes], { type: mime });
+// Hand the browser a Blob directly. The zip is never copied into a JS array:
+// its bytes live in the blob store (on disk for anything big), so the size of
+// an export is bounded by free disk, not by the tab's heap.
+function downloadBlob(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -2169,6 +2171,38 @@ function downloadBytes(filename, bytes, mime) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+/**
+ * Drain a response into a Blob, checksumming as the bytes go past.
+ *
+ * `response.arrayBuffer()` would put the whole file on the JS heap, and the zip
+ * writer would need to read it a second time for its CRC. Reading the stream
+ * costs one chunk at a time: each chunk folds into the running CRC and is then
+ * handed to the Blob, which the browser backs outside the heap. A response with
+ * no readable body (a stubbed fetch in the gates, an old browser) still works —
+ * it just falls back to buffering that one file.
+ */
+async function streamToBlob(response, mime) {
+  const type = mime || "application/octet-stream";
+  let crc = CRC32_INIT;
+  let size = 0;
+  if (response.body?.getReader) {
+    const reader = response.body.getReader();
+    const chunks = [];
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+      crc = crc32Update(crc, bytes);
+      size += bytes.length;
+      chunks.push(bytes);
+    }
+    // The chunk array is dropped here; the bytes live on in the Blob alone.
+    return { blob: new Blob(chunks, { type }), size, crc: crc32Final(crc) };
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  return { blob: new Blob([bytes], { type }), size: bytes.length, crc: crc32(bytes) };
 }
 
 /**
@@ -2207,9 +2241,9 @@ async function collectAttachments(notes, { token, signal, onProgress }) {
         signal,
       });
       if (!fileResponse.ok) throw new Error(`Drive ${fileResponse.status}`);
-      const bytes = new Uint8Array(await fileResponse.arrayBuffer());
+      const file = await streamToBlob(fileResponse, plan.mime);
       const path = attachmentPath(note, plan.filename, used);
-      entries.push({ path, data: bytes });
+      entries.push({ path, blob: file.blob, size: file.size, crc: file.crc });
       if (!byNote.has(note.p)) byNote.set(note.p, []);
       byNote.get(note.p).push({ title: attachment.title, path });
     } catch (error) {
@@ -2449,12 +2483,12 @@ async function runExport() {
       attachmentsByNotePath: attachments.byNote,
       generatedAt: new Date().toISOString(),
     });
-    const zip = buildZip([
+    const zip = buildZipBlob([
       { path: "README.md", text: tree.index },
       ...tree.files,
       ...attachments.entries,
     ]);
-    downloadBytes(filename, zip, "application/zip");
+    downloadBlob(filename, zip);
     renderManageRun(progress, { message: "Done.", percent: 100, done: true });
     const got = attachments.entries.length;
     say(`Exported ${notes.length.toLocaleString()} items${attachments.attempted ? ` and ${got} of ${attachments.attempted} attachments` : ""}.`);

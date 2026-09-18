@@ -13,7 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { buildZip, crc32 } from "../kb-export.js";
+import { buildZip, buildZipBlob, buildZipParts, crc32 } from "../kb-export.js";
 
 const FILES = [
   { path: "Math/Assignments/Algebra/Quadratics.md", text: "# Quadratics\n\nSolve for x.\n" },
@@ -70,6 +70,32 @@ try {
 
   // CRC is the field an unzip -t would catch, so assert it independently too.
   check(crc32(new TextEncoder().encode("123456789")) === 0xcbf43926, "CRC-32 check value");
+
+  // The path the browser actually takes: attachment bodies arrive as Blobs with
+  // a CRC computed while they streamed, and are never copied into a JS array.
+  // This is the fix for the 1.6 GB out-of-memory crash, so it needs a gate that
+  // fails if anyone flattens the archive again.
+  const blobFiles = FILES.map((file) => {
+    const bytes = file.data ? file.data : new TextEncoder().encode(file.text);
+    return { path: file.path, blob: new Blob([bytes]), size: bytes.length, crc: crc32(bytes) };
+  });
+  const parts = buildZipParts(blobFiles, { date: new Date("2026-09-17T12:34:56Z") });
+  check(
+    parts.filter((part) => part instanceof Blob).length === FILES.length,
+    "every file body stays a Blob part — the archive is never materialised in memory",
+  );
+
+  const blobZip = join(dir, "blob-export.zip");
+  writeFileSync(blobZip, Buffer.from(await buildZipBlob(blobFiles, { date: new Date("2026-09-17T12:34:56Z") }).arrayBuffer()));
+  check(
+    Buffer.compare(readFileSync(blobZip), Buffer.from(buildZip(FILES, { date: new Date("2026-09-17T12:34:56Z") }))) === 0,
+    "the Blob archive is byte-identical to the in-memory one",
+  );
+  const blobEnv = { ...process.env, LC_ALL: "en_US.UTF-8", LANG: "en_US.UTF-8" };
+  const blobUnzip = spawnSync("unzip", ["-t", blobZip], { encoding: "utf8", env: blobEnv });
+  if (!(blobUnzip.error && blobUnzip.error.code === "ENOENT")) {
+    check(blobUnzip.status === 0, `unzip -t accepts the Blob-built archive (status ${blobUnzip.status})`);
+  }
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

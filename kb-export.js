@@ -387,6 +387,20 @@ export function exportDownloadName(selection, date = new Date().toISOString().sl
 // compressed PDFs/images, the browser has no zip primitive, and "stored"
 // entries need nothing but CRC-32 and two fixed-layout headers — far less
 // surface than pulling a compression library into a no-bundler static site.
+//
+// WHY IT EMITS PARTS RATHER THAN ONE ARRAY
+//   The first draft allocated the finished archive as a single Uint8Array and
+//   then copied it again into a Blob, on top of holding every downloaded
+//   attachment on the JS heap. Peak memory was roughly three times the payload:
+//   one real class of attachments reached 1.6 GB and the tab was killed
+//   ("Oops, something went wrong") after every file had downloaded fine.
+//
+//   So the writer produces a LIST of parts — small header arrays interleaved
+//   with each entry's body, which may be a Blob. A Blob lives in the browser's
+//   blob store, not the JS heap, and spills to disk, so `new Blob(parts)`
+//   assembles an arbitrarily large archive without ever materialising it in
+//   memory. That is why an entry may carry `crc`/`size` precomputed: the body's
+//   bytes are checksummed once as they stream in, and never read again.
 // ---------------------------------------------------------------------------
 let crcTable = null;
 function crc32Table() {
@@ -400,11 +414,23 @@ function crc32Table() {
   return crcTable;
 }
 
-export function crc32(bytes) {
+// Incremental CRC-32, so a download can be checksummed chunk by chunk while it
+// streams instead of being buffered whole just to hash it.
+export const CRC32_INIT = 0xffffffff;
+
+export function crc32Update(crc, bytes) {
   const table = crc32Table();
-  let crc = 0xffffffff;
-  for (let i = 0; i < bytes.length; i++) crc = table[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
-  return (crc ^ 0xffffffff) >>> 0;
+  let c = crc >>> 0;
+  for (let i = 0; i < bytes.length; i++) c = table[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return c >>> 0;
+}
+
+export function crc32Final(crc) {
+  return ((crc >>> 0) ^ 0xffffffff) >>> 0;
+}
+
+export function crc32(bytes) {
+  return crc32Final(crc32Update(CRC32_INIT, bytes));
 }
 
 const utf8 = new TextEncoder();
@@ -417,45 +443,78 @@ function dosDateTime(date) {
   };
 }
 
+// The classic zip format keeps sizes and offsets in 32 bits. ZIP64 lifts that,
+// and is not worth writing for a school export — but a silently truncated
+// offset produces an archive that unzips to garbage, so refuse instead.
+const ZIP32_MAX = 0xffffffff;
+const ZIP32_MAX_ENTRIES = 0xffff;
+
+function prepareEntry(entry) {
+  const name = utf8.encode(String(entry?.path ?? ""));
+  if (entry?.blob) {
+    const size = Number(entry.size ?? entry.blob.size ?? 0);
+    if (!Number.isFinite(size) || size < 0) throw new Error(`"${entry.path}" has no readable size`);
+    if (!Number.isFinite(entry.crc)) throw new Error(`"${entry.path}" was handed over without a checksum`);
+    return { name, body: entry.blob, size, crc: entry.crc >>> 0 };
+  }
+  const data = entry?.data instanceof Uint8Array ? entry.data : utf8.encode(String(entry?.text ?? ""));
+  return {
+    name,
+    body: data,
+    size: data.length,
+    crc: Number.isFinite(entry?.crc) ? entry.crc >>> 0 : crc32(data),
+  };
+}
+
 /**
- * @param {Array<{path:string, data?:Uint8Array, text?:string}>} entries
- * @returns {Uint8Array} a complete, stored (uncompressed) zip archive
+ * The archive as a list of parts: `Uint8Array` headers interleaved with each
+ * entry's body (a `Uint8Array` or a `Blob`). Hand it to `new Blob(parts)`.
+ *
+ * @param {Array<{path:string, data?:Uint8Array, text?:string, blob?:Blob, crc?:number, size?:number}>} entries
+ * @returns {Array<Uint8Array|Blob>}
  */
-export function buildZip(entries, { date = new Date() } = {}) {
+export function buildZipParts(entries, { date = new Date() } = {}) {
   const stamp = dosDateTime(date);
-  const prepared = entries.map((entry) => {
-    const name = utf8.encode(entry.path);
-    const data = entry.data instanceof Uint8Array ? entry.data : utf8.encode(String(entry.text ?? ""));
-    return { name, data, crc: crc32(data) };
-  });
+  const prepared = (Array.isArray(entries) ? entries : []).map(prepareEntry);
+  if (prepared.length > ZIP32_MAX_ENTRIES) {
+    throw new Error(`That is ${prepared.length.toLocaleString()} files — a zip holds 65,535. Export fewer classes at a time.`);
+  }
 
-  const localSize = prepared.reduce((n, e) => n + 30 + e.name.length + e.data.length, 0);
-  const centralSize = prepared.reduce((n, e) => n + 46 + e.name.length, 0);
-  const out = new Uint8Array(localSize + centralSize + 22);
-  const view = new DataView(out.buffer);
-  let offset = 0;
-  const u16 = (v) => { view.setUint16(offset, v, true); offset += 2; };
-  const u32 = (v) => { view.setUint32(offset, v >>> 0, true); offset += 4; };
-  const raw = (bytes) => { out.set(bytes, offset); offset += bytes.length; };
-
+  const parts = [];
   const offsets = [];
+  let offset = 0;
   for (const entry of prepared) {
+    if (entry.size > ZIP32_MAX) {
+      throw new Error(`"${utf8.decode(entry.name)}" is over 4 GB, which this zip format cannot hold.`);
+    }
     offsets.push(offset);
-    u32(0x04034b50);
-    u16(20);            // version needed
-    u16(0x0800);        // UTF-8 filenames
-    u16(0);             // stored
-    u16(stamp.time); u16(stamp.date);
-    u32(entry.crc);
-    u32(entry.data.length);
-    u32(entry.data.length);
-    u16(entry.name.length);
-    u16(0);
-    raw(entry.name);
-    raw(entry.data);
+    const header = new Uint8Array(30 + entry.name.length);
+    const view = new DataView(header.buffer);
+    view.setUint32(0, 0x04034b50, true);
+    view.setUint16(4, 20, true);       // version needed
+    view.setUint16(6, 0x0800, true);   // UTF-8 filenames
+    view.setUint16(8, 0, true);        // stored
+    view.setUint16(10, stamp.time, true);
+    view.setUint16(12, stamp.date, true);
+    view.setUint32(14, entry.crc, true);
+    view.setUint32(18, entry.size, true);
+    view.setUint32(22, entry.size, true);
+    view.setUint16(26, entry.name.length, true);
+    view.setUint16(28, 0, true);
+    header.set(entry.name, 30);
+    parts.push(header, entry.body);
+    offset += header.length + entry.size;
+    if (offset > ZIP32_MAX) {
+      throw new Error("This export is over 4 GB. Export one class at a time, or untick attachments.");
+    }
   }
 
   const centralStart = offset;
+  const directory = new Uint8Array(prepared.reduce((n, e) => n + 46 + e.name.length, 0) + 22);
+  const view = new DataView(directory.buffer);
+  let pos = 0;
+  const u16 = (v) => { view.setUint16(pos, v, true); pos += 2; };
+  const u32 = (v) => { view.setUint32(pos, v >>> 0, true); pos += 4; };
   prepared.forEach((entry, i) => {
     u32(0x02014b50);
     u16(20); u16(20);
@@ -463,25 +522,56 @@ export function buildZip(entries, { date = new Date() } = {}) {
     u16(0);
     u16(stamp.time); u16(stamp.date);
     u32(entry.crc);
-    u32(entry.data.length);
-    u32(entry.data.length);
+    u32(entry.size);
+    u32(entry.size);
     u16(entry.name.length);
     u16(0); u16(0); u16(0); u16(0);
     u32(0);             // external attributes
     u32(offsets[i]);
-    raw(entry.name);
+    directory.set(entry.name, pos); pos += entry.name.length;
   });
 
   // Capture the directory's end BEFORE the end-of-central-directory record
-  // starts consuming `offset` — otherwise its own 12 bytes are counted as part
+  // starts consuming `pos` — otherwise its own 12 bytes are counted as part
   // of the directory it is describing, and unzip reports a truncated archive.
-  const centralEnd = offset;
+  const centralEnd = pos;
   u32(0x06054b50);
   u16(0); u16(0);
   u16(prepared.length); u16(prepared.length);
-  u32(centralEnd - centralStart);
+  u32(centralEnd);
   u32(centralStart);
   u16(0);
+  parts.push(directory);
+  return parts;
+}
+
+/**
+ * The whole archive as one Blob. This is what the browser downloads: the bytes
+ * of every attachment stay in the blob store, so a 1 GB export costs the JS
+ * heap nothing beyond the headers.
+ */
+export function buildZipBlob(entries, options = {}) {
+  return new Blob(buildZipParts(entries, options), { type: "application/zip" });
+}
+
+/**
+ * The same archive as a single Uint8Array — for Node, tests, and any caller
+ * with nothing but in-memory entries. Blob-bodied entries have no synchronous
+ * bytes, so they are rejected rather than silently dropped.
+ *
+ * @param {Array<{path:string, data?:Uint8Array, text?:string}>} entries
+ * @returns {Uint8Array} a complete, stored (uncompressed) zip archive
+ */
+export function buildZip(entries, options = {}) {
+  const parts = buildZipParts(entries, options);
+  let total = 0;
+  for (const part of parts) {
+    if (!(part instanceof Uint8Array)) throw new Error("buildZip cannot flatten a Blob entry — use buildZipBlob");
+    total += part.length;
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const part of parts) { out.set(part, at); at += part.length; }
   return out;
 }
 
