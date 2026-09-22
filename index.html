@@ -327,17 +327,8 @@
             <h3 class="study-manage-title">Export classes</h3>
             <p class="settings-hint">Pick the classes you want. A ZIP keeps every assignment and material as its own file, foldered by class — the single-file formats put everything in one document.</p>
 
-            <fieldset class="export-fieldset">
-              <legend>Classes</legend>
-              <div class="export-picker-head">
-                <input id="kbExportClassFilter" type="search" placeholder="Filter classes…" aria-label="Filter the class list" />
-                <button id="kbExportSelectAll" class="link-btn" type="button">Select all</button>
-                <button id="kbExportSelectNone" class="link-btn" type="button">Clear</button>
-              </div>
-              <div id="kbExportClassList" class="export-class-list"></div>
-            </fieldset>
-
-            <div class="export-filter-row">
+            <div class="export-filter-row export-narrow-row">
+              <span class="export-narrow-label">Narrow down</span>
               <label class="export-field">
                 <span class="export-field-label">Year</span>
                 <select id="kbExportYear" class="kb-filter-select"><option value="">All years</option></select>
@@ -349,6 +340,16 @@
                 <label><input type="checkbox" class="kb-export-kind" value="announcement" checked /> Announcements</label>
               </fieldset>
             </div>
+
+            <fieldset class="export-fieldset">
+              <legend id="kbExportClassesLegend">Classes</legend>
+              <div class="export-picker-head">
+                <input id="kbExportClassFilter" type="search" placeholder="Filter classes…" aria-label="Filter the class list" />
+                <button id="kbExportSelectAll" class="link-btn" type="button">Select all</button>
+                <button id="kbExportSelectNone" class="link-btn" type="button">Clear</button>
+              </div>
+              <div id="kbExportClassList" class="export-class-list"></div>
+            </fieldset>
 
             <div class="export-filter-row">
               <label class="export-field">
@@ -364,16 +365,11 @@
                 <input id="kbExportAttachments" type="checkbox" /> Also download the attachments (PDFs, Docs, slides)
               </label>
             </div>
-            <div id="kbExportGrant" class="export-grant" hidden>
-              <p class="settings-hint">Google only lets an app read files you hand to it. Press <strong>Choose files to allow</strong> and Google shows you exactly this selection's attachments — nothing else in your Drive. Select them all and press Select. You only do this once per class; every export of it afterwards just works.</p>
-              <div class="study-manage-actions">
-                <button id="kbExportGrantBtn" class="ghost-btn" type="button">Choose files to allow</button>
-                <span id="kbExportGrantStatus" class="kb-export-status" role="status" aria-live="polite"></span>
-              </div>
-            </div>
+            <p id="kbExportGrantHint" class="settings-hint" hidden>The first time a class's files are needed, Google asks you to confirm them — press <strong>Select all</strong> in that window. After that it's automatic.</p>
 
             <div class="study-manage-actions">
               <button id="kbExportRun" class="primary" type="button">Download</button>
+              <button id="kbExportRunAlt" class="ghost-btn" type="button" hidden>Download everything instead</button>
               <button id="kbExportCancel" class="ghost-btn" type="button" hidden>Cancel</button>
               <span id="kbExportSummary" class="kb-export-status" role="status" aria-live="polite"></span>
             </div>
@@ -382,6 +378,7 @@
               <span class="manage-run-track"><span class="manage-run-bar"></span></span>
             </div>
             <div id="kbExportSkipped" class="export-skipped" hidden></div>
+            <button id="kbExportForgetHistory" class="link-btn export-forget-history" type="button">Forget export history</button>
           </div>
 
           <div class="study-manage-block">

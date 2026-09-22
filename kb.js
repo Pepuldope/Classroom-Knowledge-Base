@@ -41,6 +41,8 @@ import {
   driveDownloadPlan, exportSelectionModel, selectExportNotes, exportCourseOptions,
   exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZipBlob,
   buildResultMessage, driveIdBatches, driveIdsForNotes, CRC32_INIT, crc32Update, crc32Final, crc32,
+  emptyExportHistory, parseExportHistory, recordExport, newSinceExport, classExportStatus,
+  idsStillToGrant,
 } from "./kb-export.js";
 
 const $ = (id) => document.getElementById(id);
@@ -1620,10 +1622,16 @@ function renderManageRun(el, { message = null, percent = null, isError = false, 
 
 function hideManageRun(el) {
   if (!el) return;
-  el.hidden = true;
-  const bar = el.querySelector(".manage-run-bar");
-  if (bar) bar.style.width = "0%";
-  el.classList.remove("is-error", "is-done");
+  // Fade rather than snap — a Done state that vanishes instantly reads as a
+  // glitch, not as "finished".
+  el.classList.add("is-fading");
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  setTimeout(() => {
+    el.hidden = true;
+    el.classList.remove("is-error", "is-done", "is-fading");
+    const bar = el.querySelector(".manage-run-bar");
+    if (bar) bar.style.width = "0%";
+  }, reduceMotion ? 0 : 350);
 }
 
 // Test hooks — scripts/manage_export_test.mjs drives these without a Google build.
@@ -2050,15 +2058,75 @@ function wireManageTabs() {
 let exportClassFilter = "";
 let exportChecked = null;   // null = "not chosen yet"; a Set once the user picks
 let exportAbort = null;
+// Signature of the last selection updateExportSummary saw. A change clears the
+// stale skipped/result messages from a previous run — otherwise a "1 of 2
+// attachments" line from the last class sits there while you narrow to a
+// different one.
+let exportLastSignature = null;
+
+// "Only what's new" memory — this browser only, per Peter's choice: automatic,
+// no toggle. Loaded lazily so a page that never opens Export never touches
+// localStorage, and wrapped in try/catch throughout because the panel has to
+// keep working even when storage throws (private mode, quota, a locked-down
+// profile).
+const EXPORT_HISTORY_KEY = "cwa.export.history.v1";
+const EXPORT_GRANTED_KEY = "cwa.export.granted.v1";
+const EXPORT_UNAVAILABLE_KEY = "cwa.export.unavailable.v1";
+let exportHistory = null;
+let exportGrantedIds = null;      // Set — Drive ids the picker has already granted
+let exportUnavailableIds = null;  // Set — ids offered but not returned (gone at the source)
+
+function loadExportHistory() {
+  try { return parseExportHistory(localStorage.getItem(EXPORT_HISTORY_KEY)); }
+  catch { return emptyExportHistory(); }
+}
+function saveExportHistory(history) {
+  try { localStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(history)); } catch { /* private mode */ }
+}
+function loadIdSet(key) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(key) || "[]");
+    return new Set(Array.isArray(raw) ? raw : []);
+  } catch { return new Set(); }
+}
+function saveIdSet(key, set) {
+  try { localStorage.setItem(key, JSON.stringify([...set])); } catch { /* private mode */ }
+}
+function ensureExportMemoryLoaded() {
+  if (exportHistory === null) exportHistory = loadExportHistory();
+  if (exportGrantedIds === null) exportGrantedIds = loadIdSet(EXPORT_GRANTED_KEY);
+  if (exportUnavailableIds === null) exportUnavailableIds = loadIdSet(EXPORT_UNAVAILABLE_KEY);
+}
 
 function exportBundle() {
   return localKbBundle && Array.isArray(localKbBundle.notes) ? localKbBundle : { notes: [], courses: [] };
 }
 
-function renderExportPanel() {
+/** The current Year / Include narrowing, independent of which classes are ticked. */
+function readNarrowFilters() {
+  return {
+    years: $("kbExportYear")?.value ? [$("kbExportYear").value] : [],
+    kinds: [...document.querySelectorAll(".kb-export-kind")].filter((b) => b.checked).map((b) => b.value),
+  };
+}
+
+function renderExportPanel({ highlightUpToDate = false } = {}) {
+  renderExportClassRows({ highlightUpToDate });
+  updateExportSummary();
+}
+
+/**
+ * Just the class list — legend count, rows, their status pills. Split out from
+ * renderExportPanel so a post-export refresh (flip rows to "up to date") does
+ * not also recompute updateExportSummary and clobber the result line runExport
+ * just set with a fresh read of the (unchanged) selection.
+ */
+function renderExportClassRows({ highlightUpToDate = false } = {}) {
   const list = $("kbExportClassList");
   if (!list) return;
-  const options = exportCourseOptions(exportBundle());
+  ensureExportMemoryLoaded();
+  const bundle = exportBundle();
+  const options = exportCourseOptions(bundle);
   if (exportChecked === null) exportChecked = new Set();
   // Drop ticks for classes that no longer exist, so a rebuild cannot leave a
   // selection that silently exports nothing.
@@ -2066,7 +2134,22 @@ function renderExportPanel() {
   for (const name of [...exportChecked]) if (!names.has(name)) exportChecked.delete(name);
 
   const needle = exportClassFilter.trim().toLowerCase();
-  const shown = needle ? options.filter((o) => o.name.toLowerCase().includes(needle)) : options;
+  const filtering = !!needle;
+  const shown = filtering ? options.filter((o) => o.name.toLowerCase().includes(needle)) : options;
+
+  const selectAllBtn = $("kbExportSelectAll");
+  if (selectAllBtn) selectAllBtn.textContent = filtering ? "Select shown" : "Select all";
+
+  const legend = $("kbExportClassesLegend");
+  if (legend) {
+    legend.textContent = exportChecked.size
+      ? `Classes — ${exportChecked.size} selected`
+      : "Classes";
+  }
+
+  const narrow = readNarrowFilters();
+  const yearLabel = narrow.years[0] || "";
+
   list.replaceChildren();
   if (!options.length) {
     const empty = document.createElement("p");
@@ -2080,26 +2163,55 @@ function renderExportPanel() {
     list.appendChild(empty);
   }
   for (const option of shown) {
+    // Counts reflect the Year/Include narrowing live — this is what fixed
+    // "the filters don't do anything": before, the row always showed the
+    // class's WHOLE count, so narrowing by year looked like a no-op.
+    const narrowedNotes = selectExportNotes(bundle, { courses: [option.name], ...narrow });
     const row = document.createElement("label");
     row.className = "export-class-row";
+    row.classList.toggle("is-empty", narrowedNotes.length === 0);
     const box = document.createElement("input");
     box.type = "checkbox";
     box.value = option.name;
     box.checked = exportChecked.has(option.name);
     box.addEventListener("change", () => {
       if (box.checked) exportChecked.add(option.name); else exportChecked.delete(option.name);
-      updateExportSummary();
+      renderExportPanel();
     });
     const name = document.createElement("span");
     name.className = "export-class-name";
     name.textContent = option.name;
     const meta = document.createElement("span");
     meta.className = "export-class-meta";
-    const bits = EXPORT_KINDS
-      .filter((kind) => option.counts[kind] > 0)
-      .map((kind) => `${option.counts[kind]} ${EXPORT_KIND_LABELS[kind].toLowerCase()}`);
-    meta.textContent = bits.length ? bits.join(" · ") : "nothing yet";
+    if (narrowedNotes.length) {
+      const counts = { assignment: 0, material: 0, announcement: 0 };
+      for (const note of narrowedNotes) counts[noteItemKind(note)]++;
+      const bits = EXPORT_KINDS
+        .filter((kind) => counts[kind] > 0)
+        .map((kind) => `${counts[kind]} ${EXPORT_KIND_LABELS[kind].toLowerCase()}`);
+      meta.textContent = bits.join(" · ");
+    } else {
+      meta.textContent = yearLabel ? `nothing in ${yearLabel}` : "nothing matches";
+    }
     row.append(box, name, meta);
+
+    // "Only what's new": a small muted pill saying when this class last went
+    // out, and how much of it is new since. Silent for a class that has never
+    // been exported — there is nothing to say yet.
+    const status = classExportStatus(narrowedNotes, exportHistory, { attachments: $("kbExportAttachments")?.checked, ignoreIds: exportUnavailableIds });
+    if (status.exportedBefore) {
+      const pill = document.createElement("span");
+      pill.className = "export-class-status";
+      if (status.newCount === 0) {
+        pill.classList.add("is-up-to-date");
+        pill.textContent = "✓ up to date";
+        if (highlightUpToDate) pill.classList.add("just-updated");
+      } else {
+        const when = new Date(status.lastExportedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+        pill.textContent = `exported ${when} · ${status.newCount} new`;
+      }
+      row.appendChild(pill);
+    }
     list.appendChild(row);
   }
 
@@ -2111,7 +2223,7 @@ function renderExportPanel() {
     all.value = "";
     all.textContent = "All years";
     yearSelect.appendChild(all);
-    for (const year of exportYearOptions(exportBundle())) {
+    for (const year of exportYearOptions(bundle)) {
       const opt = document.createElement("option");
       opt.value = year;
       opt.textContent = year;
@@ -2119,14 +2231,12 @@ function renderExportPanel() {
     }
     yearSelect.value = [...yearSelect.options].some((o) => o.value === previous) ? previous : "";
   }
-  updateExportSummary();
 }
 
 function readExportForm() {
   return {
     courses: [...(exportChecked || [])],
-    years: $("kbExportYear")?.value ? [$("kbExportYear").value] : [],
-    kinds: [...document.querySelectorAll(".kb-export-kind")].filter((b) => b.checked).map((b) => b.value),
+    ...readNarrowFilters(),
     format: $("kbExportFormat")?.value || "zip",
     attachments: !!$("kbExportAttachments")?.checked,
   };
@@ -2142,21 +2252,71 @@ export function exportSummaryText(noteCount, courseCount, attachmentCount) {
 }
 
 function updateExportSummary() {
+  ensureExportMemoryLoaded();
   const summary = $("kbExportSummary");
+  const runBtn = $("kbExportRun");
+  const altBtn = $("kbExportRunAlt");
   const form = readExportForm();
-  const notes = selectExportNotes(exportBundle(), form);
-  const attachments = form.attachments && form.format === "zip"
+  const bundle = exportBundle();
+  const notes = selectExportNotes(bundle, form);
+  const zipping = form.format === "zip";
+  const wantAttachments = form.attachments && zipping;
+  const attachmentCount = wantAttachments
     ? notes.reduce((n, note) => n + noteAttachments(note).filter((a) => a.driveId).length, 0)
     : 0;
-  if (summary) summary.textContent = exportSummaryText(notes.length, form.courses.length, attachments);
-  const field = $("kbExportAttachmentsField");
-  const grant = $("kbExportGrant");
+
+  // A change to the selection or the filters retires any stale skipped/result
+  // message from a previous run — a change that keeps the same selection
+  // (e.g. a re-render after export) must NOT wipe the message it just set.
+  const signature = JSON.stringify(form);
+  if (signature !== exportLastSignature) {
+    exportLastSignature = signature;
+    renderExportSkipped([]);
+    if (summary) summary.classList.remove("error");
+  }
+
+  const label = (count, kind) => `${count.toLocaleString()} ${kind}${count === 1 ? "" : "s"}`;
+  const withAttachments = (base) => wantAttachments && attachmentCount
+    ? `${base} and ${label(attachmentCount, "attachment")}`
+    : base;
+
+  if (!notes.length) {
+    if (summary) summary.textContent = exportSummaryText(0, form.courses.length, 0);
+    if (runBtn) { runBtn.disabled = true; runBtn.textContent = "Download"; }
+    if (altBtn) altBtn.hidden = true;
+  } else {
+    const hasHistory = zipping && notes.some((note) => note.p && exportHistory.notes[note.p]);
+    if (hasHistory) {
+      const fresh = newSinceExport(notes, exportHistory, { attachments: wantAttachments, ignoreIds: exportUnavailableIds });
+      if (fresh.notes.length) {
+        if (runBtn) {
+          runBtn.disabled = false;
+          runBtn.textContent = withAttachments(`Download ${label(fresh.notes.length, "new item")}`);
+        }
+        if (altBtn) { altBtn.hidden = false; altBtn.textContent = "Download everything instead"; }
+        if (summary) summary.textContent = exportSummaryText(notes.length, form.courses.length, attachmentCount);
+      } else {
+        if (runBtn) { runBtn.disabled = true; runBtn.textContent = "All caught up — nothing new"; }
+        if (altBtn) { altBtn.hidden = false; altBtn.textContent = "Download everything again"; }
+        if (summary) summary.textContent = "Nothing new since your last export of this selection.";
+      }
+    } else {
+      if (runBtn) {
+        runBtn.disabled = false;
+        runBtn.textContent = withAttachments(`Download ${label(notes.length, "item")}`);
+      }
+      if (altBtn) altBtn.hidden = true;
+      if (summary) summary.textContent = exportSummaryText(notes.length, form.courses.length, attachmentCount);
+    }
+  }
+
   // Attachments only make sense inside a container that can hold them.
-  const zipping = form.format === "zip";
+  const field = $("kbExportAttachmentsField");
   if (field) field.classList.toggle("is-disabled", !zipping);
   const box = $("kbExportAttachments");
   if (box) box.disabled = !zipping;
-  if (grant) grant.hidden = !(zipping && form.attachments);
+  const hint = $("kbExportGrantHint");
+  if (hint) hint.hidden = !(zipping && form.attachments);
 }
 
 // Hand the browser a Blob directly. The zip is never copied into a JS array:
@@ -2205,26 +2365,42 @@ async function streamToBlob(response, mime) {
   return { blob: new Blob([bytes], { type }), size: bytes.length, crc: crc32(bytes) };
 }
 
+// Thrown internally when Drive answers 401 mid-export: the token is stale
+// (~1h life), not merely wrong for this one file. Distinguished from an
+// ordinary per-file failure (403/404) so the caller stops the whole run
+// instead of quietly recording every remaining attachment as skipped.
+class DriveAuthExpiredError extends Error {}
+
 /**
  * Fetch every Drive attachment the selected notes point at.
  *
  * Failure is expected and is not an error: a teacher can post a file that was
  * never shared with the class, and Drive answers 403. Those are collected and
  * listed, with their link, rather than aborting an export of 200 good files.
+ * A 401, though, means the token itself expired — that stops the run (see
+ * `authExpired` on the result) rather than being treated as 300 individual
+ * failures.
  */
-async function collectAttachments(notes, { token, signal, onProgress }) {
+async function collectAttachments(notes, { token, signal, onProgress, onlyIds = null, unavailableIds = null }) {
   const byNote = new Map();
   const entries = [];
   const skipped = [];
+  const downloadedIds = [];
   const used = new Set();
   const wanted = [];
   for (const note of notes) {
     for (const attachment of noteAttachments(note)) {
-      if (attachment.driveId) wanted.push({ note, attachment });
+      if (attachment.driveId) {
+        // Known-dead files are listed, not re-requested; files a new-only run
+        // already has on disk are not fetched again.
+        if (unavailableIds?.has(attachment.driveId)) skipped.push({ ...attachment, reason: "no longer available" });
+        else if (!onlyIds || onlyIds.has(attachment.driveId)) wanted.push({ note, attachment });
+      }
       else if (attachment.source !== "link") skipped.push({ ...attachment, reason: "not a Drive file" });
     }
   }
   let done = 0;
+  let authExpired = false;
   for (const { note, attachment } of wanted) {
     if (signal?.aborted) break;
     onProgress?.({ done, total: wanted.length, title: attachment.title });
@@ -2233,6 +2409,7 @@ async function collectAttachments(notes, { token, signal, onProgress }) {
         headers: { Authorization: `Bearer ${token}` },
         signal,
       });
+      if (metaResponse.status === 401) throw new DriveAuthExpiredError();
       if (!metaResponse.ok) throw new Error(`Drive ${metaResponse.status}`);
       const plan = driveDownloadPlan(await metaResponse.json());
       if (!plan) { skipped.push({ ...attachment, reason: "nothing to download" }); done++; continue; }
@@ -2240,19 +2417,25 @@ async function collectAttachments(notes, { token, signal, onProgress }) {
         headers: { Authorization: `Bearer ${token}` },
         signal,
       });
+      if (fileResponse.status === 401) throw new DriveAuthExpiredError();
       if (!fileResponse.ok) throw new Error(`Drive ${fileResponse.status}`);
       const file = await streamToBlob(fileResponse, plan.mime);
       const path = attachmentPath(note, plan.filename, used);
       entries.push({ path, blob: file.blob, size: file.size, crc: file.crc });
+      downloadedIds.push(attachment.driveId);
       if (!byNote.has(note.p)) byNote.set(note.p, []);
       byNote.get(note.p).push({ title: attachment.title, path });
     } catch (error) {
       if (error?.name === "AbortError") break;
+      if (error instanceof DriveAuthExpiredError) { authExpired = true; break; }
       skipped.push({ ...attachment, reason: error?.message || "could not be downloaded" });
     }
     done++;
   }
-  return { entries, byNote, skipped, attempted: wanted.length };
+  // Known-dead files still count toward "N of M", so the summary stays honest
+  // about what the selection holds even though they were never requested.
+  const dead = skipped.filter((item) => item.reason === "no longer available").length;
+  return { entries, byNote, skipped, downloadedIds, attempted: wanted.length + dead, authExpired };
 }
 
 function renderExportSkipped(skipped) {
@@ -2342,15 +2525,15 @@ function pickerRound({ ids, token, apiKey, appId, title }) {
 }
 
 /**
- * Walk the student through granting every Drive id the selected notes need.
+ * One picker pass over exactly the given ids — not "every id this selection
+ * references", so a second export of the same class needs no picker at all.
  *
  * Returns what was actually granted rather than assuming success: an id the
  * student can no longer reach is dropped from the picker silently, and roughly
  * 8% of the oldest attachments in a four-year corpus are gone at the source.
  */
-async function grantDriveFiles(notes, { onProgress } = {}) {
-  const ids = driveIdsForNotes(notes);
-  if (!ids.length) return { ids: [], granted: [], cancelled: false, reason: "none" };
+async function grantDriveFiles(ids, { token, onProgress } = {}) {
+  if (!ids.length) return { ids: [], granted: [], cancelled: false };
   // Ask the server rather than trusting the global. The global is populated at
   // startup from a config that may have been cached before the key existed, and
   // a stale null there is indistinguishable from a site that never had a key.
@@ -2365,7 +2548,6 @@ async function grantDriveFiles(notes, { onProgress } = {}) {
     } catch { /* offline — the message below is still the right one */ }
   }
   if (!apiKey) throw new Error("The file picker is not set up on this site yet (no Picker API key).");
-  const token = await window.__cwaRequestDriveToken?.();
   if (!token) throw new Error("Drive access was not granted.");
   await loadPickerApi();
   // The picker needs the project number as its app id so Drive records WHICH
@@ -2387,50 +2569,26 @@ async function grantDriveFiles(notes, { onProgress } = {}) {
   return { ids, granted: [...granted], cancelled: false };
 }
 
-async function runGrantFlow() {
-  const status = $("kbExportGrantStatus");
-  const button = $("kbExportGrantBtn");
-  const say = (msg, isError) => {
-    if (!status) return;
-    status.textContent = msg;
-    status.classList.toggle("error", !!isError);
-  };
-  const notes = selectExportNotes(exportBundle(), readExportForm());
-  if (!notes.length) { say("Pick at least one class first.", true); return; }
-  if (button) button.disabled = true;
-  try {
-    const result = await grantDriveFiles(notes, {
-      onProgress: ({ round, rounds }) => say(rounds > 1 ? `Opening round ${round} of ${rounds}…` : "Opening Google's file picker…"),
-    });
-    if (result.reason === "none") { say("This selection has no Drive attachments — only links."); return; }
-    const missed = result.ids.length - result.granted.length;
-    if (result.cancelled && !result.granted.length) { say("Cancelled — nothing was allowed."); return; }
-    // Say what was NOT granted too. Some of it is files that no longer exist,
-    // and a student who thinks they allowed everything should not be surprised
-    // by a smaller zip.
-    say(
-      missed > 0
-        ? `Allowed ${result.granted.length} of ${result.ids.length} files. ${missed} ${missed === 1 ? "was" : "were"} not offered or not selected — usually files the teacher has since deleted. Those stay as links in the notes.`
-        : `Allowed all ${result.granted.length} files. Export away.`,
-      false,
-    );
-  } catch (error) {
-    say(error?.message || String(error), true);
-  } finally {
-    if (button) button.disabled = false;
-  }
-}
-
-async function runExport() {
+/**
+ * Download: grant (only what is not already remembered) folded straight into
+ * the click, then pack and save.
+ *
+ * The very first `await` below is the Drive token request — so the consent
+ * popup, if Google needs one, opens inside this click's user gesture rather
+ * than after several other awaits have already spent it.
+ */
+async function runExport({ everything = false } = {}) {
   const summary = $("kbExportSummary");
   const progress = $("kbExportProgress");
   const runBtn = $("kbExportRun");
+  const altBtn = $("kbExportRunAlt");
   const cancelBtn = $("kbExportCancel");
   const say = (msg, isError) => {
     if (!summary) return;
     summary.textContent = msg;
     summary.classList.toggle("error", !!isError);
   };
+  ensureExportMemoryLoaded();
   const form = readExportForm();
   const bundle = exportBundle();
   const notes = selectExportNotes(bundle, form);
@@ -2438,11 +2596,48 @@ async function runExport() {
   if (!notes.length) { say("Nothing matches — widen the filters.", true); return; }
 
   const selection = exportSelectionModel(form);
-  const filename = exportDownloadName(selection);
+  const zipping = selection.format === "zip";
+  const wantAttachments = zipping && selection.attachments;
+
+  // The token request has to be the first await, so a popup Google needs
+  // stays inside this click. Anything else attachments need — the picker,
+  // the actual downloads — happens after, once we know whether we even have
+  // access.
+  let driveToken = null;
+  if (wantAttachments) {
+    try {
+      driveToken = await window.__cwaRequestDriveToken?.();
+    } catch (error) {
+      driveToken = null;
+      say(`Exporting without attachments — ${error?.message || "Drive access was not granted"}.`, true);
+    }
+  }
+
+  // "Only what's new": unless the alt button asked for everything, a
+  // selection with export history behind it narrows to what changed.
+  let exportNotes = notes;
+  let newOnly = false;
+  let newSinceDate = null;
+  if (!everything && zipping) {
+    const hasHistory = notes.some((note) => note.p && exportHistory.notes[note.p]);
+    if (hasHistory) {
+      const fresh = newSinceExport(notes, exportHistory, { attachments: wantAttachments, ignoreIds: exportUnavailableIds });
+      if (!fresh.notes.length) { say("All caught up — nothing new.", false); return; }
+      exportNotes = fresh.notes;
+      newOnly = true;
+      for (const note of notes) {
+        const at = note.p && exportHistory.notes[note.p];
+        if (at && (!newSinceDate || at > newSinceDate)) newSinceDate = at;
+      }
+    }
+  }
+
+  const filename = exportDownloadName(selection, undefined, { newOnly });
 
   // The single-file formats are the existing whole-corpus writers over a
-  // narrowed note list — same output shape, fewer notes, no second code path.
-  if (selection.format !== "zip") {
+  // narrowed note list — same output shape, fewer notes, no second code path,
+  // and no export history: a single document is always the whole selection.
+  if (!zipping) {
     const scoped = { ...bundle, notes, generatedAt: bundle.generatedAt || new Date().toISOString() };
     const mime = selection.format === "json" ? "application/json" : selection.format === "csv" ? "text/csv" : "text/markdown";
     downloadFile(filename, exportBundlePayload(scoped, selection.format), mime);
@@ -2452,36 +2647,80 @@ async function runExport() {
 
   exportAbort = new AbortController();
   if (runBtn) runBtn.disabled = true;
+  if (altBtn) altBtn.disabled = true;
   if (cancelBtn) cancelBtn.hidden = false;
   if (cancelBtn) cancelBtn.onclick = () => exportAbort?.abort();
   try {
-    let attachments = { entries: [], byNote: new Map(), skipped: [], attempted: 0 };
-    if (selection.attachments) {
-      renderManageRun(progress, { message: "Checking which files you have allowed…", percent: 2 });
-      let token = null;
-      try {
-        token = await window.__cwaRequestDriveToken?.();
-      } catch (error) {
-        token = null;
-        say(`Exporting without attachments — ${error?.message || "Drive access was not granted"}.`, true);
-      }
-      if (token) {
-        attachments = await collectAttachments(notes, {
-          token,
-          signal: exportAbort.signal,
-          onProgress: ({ done, total, title }) => renderManageRun(progress, {
-            message: `Downloading attachment ${done + 1} of ${total} — ${title}`,
-            percent: total ? 2 + Math.round((done / total) * 88) : 50,
+    let attachments = { entries: [], byNote: new Map(), skipped: [], downloadedIds: [], attempted: 0, authExpired: false };
+    if (wantAttachments && driveToken) {
+      const needed = driveIdsForNotes(exportNotes);
+      const toGrant = idsStillToGrant(needed, [...exportGrantedIds], [...exportUnavailableIds]);
+      if (toGrant.length) {
+        renderManageRun(progress, {
+          message: `Google needs you to confirm ${toGrant.length} new file${toGrant.length === 1 ? "" : "s"} — press Select all, then Select.`,
+          percent: 2,
+        });
+        const grant = await grantDriveFiles(toGrant, {
+          token: driveToken,
+          onProgress: ({ round, rounds }) => rounds > 1 && renderManageRun(progress, {
+            message: `Confirming files — round ${round} of ${rounds}…`,
+            percent: 2,
           }),
         });
+        for (const id of grant.granted) exportGrantedIds.add(id);
+        // Offered but not returned means gone at the source — but only when the
+        // student finished the pass. A cancel says nothing about the files.
+        if (!grant.cancelled) {
+          for (const id of toGrant) if (!grant.granted.includes(id)) exportUnavailableIds.add(id);
+        }
+        saveIdSet(EXPORT_GRANTED_KEY, exportGrantedIds);
+        saveIdSet(EXPORT_UNAVAILABLE_KEY, exportUnavailableIds);
+        if (grant.cancelled) {
+          say("Continuing without the attachments you didn't confirm.", false);
+        }
       }
+      attachments = await collectAttachments(exportNotes, {
+        token: driveToken,
+        onlyIds: newOnly ? new Set(newSinceExport(notes, exportHistory, { attachments: true, ignoreIds: exportUnavailableIds }).driveIds) : null,
+        unavailableIds: exportUnavailableIds,
+        signal: exportAbort.signal,
+        onProgress: ({ done, total, title }) => renderManageRun(progress, {
+          message: `Downloading attachment ${done + 1} of ${total} — ${title}`,
+          percent: total ? 4 + Math.round((done / total) * 86) : 50,
+        }),
+      });
+      if (attachments.authExpired) {
+        window.__cwaForgetDriveToken?.();
+        renderManageRun(progress, { message: "Google access expired.", isError: true });
+        say("Google access expired — press Download again.", true);
+        return;
+      }
+      // A remembered-granted id that now 403/404s is dropped from the grant
+      // memory (it will be re-offered next time) rather than left to fail
+      // silently forever.
+      let grantedChanged = false;
+      let unavailableChanged = false;
+      for (const item of attachments.skipped) {
+        if (item.driveId && /^Drive 40[34]$/.test(item.reason || "") && exportGrantedIds.has(item.driveId)) {
+          exportGrantedIds.delete(item.driveId);
+          grantedChanged = true;
+        }
+        // A form or a shortcut has no bytes to export and never will.
+        if (item.driveId && item.reason === "nothing to download" && !exportUnavailableIds.has(item.driveId)) {
+          exportUnavailableIds.add(item.driveId);
+          unavailableChanged = true;
+        }
+      }
+      if (grantedChanged) saveIdSet(EXPORT_GRANTED_KEY, exportGrantedIds);
+      if (unavailableChanged) saveIdSet(EXPORT_UNAVAILABLE_KEY, exportUnavailableIds);
     }
     if (exportAbort.signal.aborted) { say("Cancelled."); return; }
 
     renderManageRun(progress, { message: "Packing the zip…", percent: 94 });
-    const tree = exportFileTree(notes, {
+    const tree = exportFileTree(exportNotes, {
       attachmentsByNotePath: attachments.byNote,
       generatedAt: new Date().toISOString(),
+      newSinceDate,
     });
     const zip = buildZipBlob([
       { path: "README.md", text: tree.index },
@@ -2490,8 +2729,17 @@ async function runExport() {
     ]);
     downloadBlob(filename, zip);
     renderManageRun(progress, { message: "Done.", percent: 100, done: true });
+
+    // History is recorded only for a completed zip export — skipped
+    // attachments stay off the "files" map so they retry next time.
+    exportHistory = recordExport(exportHistory, exportNotes, attachments.downloadedIds, new Date().toISOString());
+    saveExportHistory(exportHistory);
+    // Full re-render (rows AND the Download button's label) BEFORE the result
+    // message — updateExportSummary would otherwise overwrite the honest
+    // "N of M attachments" line below with its own generic summary text.
+    renderExportPanel({ highlightUpToDate: true });
     const got = attachments.entries.length;
-    say(`Exported ${notes.length.toLocaleString()} items${attachments.attempted ? ` and ${got} of ${attachments.attempted} attachments` : ""}.`);
+    say(`Exported ${exportNotes.length.toLocaleString()} items${attachments.attempted ? ` and ${got} of ${attachments.attempted} attachments` : ""}.`);
     renderExportSkipped(attachments.skipped);
   } catch (error) {
     renderManageRun(progress, { message: `❌ ${error?.message || error}`, isError: true });
@@ -2499,6 +2747,7 @@ async function runExport() {
   } finally {
     exportAbort = null;
     if (runBtn) runBtn.disabled = false;
+    if (altBtn) altBtn.disabled = false;
     if (cancelBtn) { cancelBtn.hidden = true; cancelBtn.onclick = null; }
     setTimeout(() => hideManageRun(progress), 2500);
   }
@@ -2510,21 +2759,38 @@ function wireExportPanel() {
     renderExportPanel();
   }, 150));
   $("kbExportSelectAll")?.addEventListener("click", () => {
-    exportChecked = new Set(exportCourseOptions(exportBundle()).map((o) => o.name));
+    // Only the classes the search box is currently showing — ticking classes
+    // a filter has hidden was the "Select all ticks everything" bug.
+    const needle = exportClassFilter.trim().toLowerCase();
+    const options = exportCourseOptions(exportBundle());
+    const shown = needle ? options.filter((o) => o.name.toLowerCase().includes(needle)) : options;
+    exportChecked = new Set(shown.map((o) => o.name));
     renderExportPanel();
   });
   $("kbExportSelectNone")?.addEventListener("click", () => {
     exportChecked = new Set();
     renderExportPanel();
   });
-  $("kbExportYear")?.addEventListener("change", updateExportSummary);
+  $("kbExportYear")?.addEventListener("change", () => renderExportPanel());
   $("kbExportFormat")?.addEventListener("change", updateExportSummary);
-  $("kbExportAttachments")?.addEventListener("change", updateExportSummary);
+  $("kbExportAttachments")?.addEventListener("change", () => renderExportPanel());
   document.querySelectorAll(".kb-export-kind").forEach((box) => {
-    box.addEventListener("change", updateExportSummary);
+    box.addEventListener("change", () => renderExportPanel());
   });
   $("kbExportRun")?.addEventListener("click", () => runExport());
-  $("kbExportGrantBtn")?.addEventListener("click", () => runGrantFlow());
+  $("kbExportRunAlt")?.addEventListener("click", () => runExport({ everything: true }));
+  $("kbExportForgetHistory")?.addEventListener("click", () => {
+    if (!window.confirm("Forget what has already been exported? The next download of any class will include everything again.")) return;
+    try {
+      localStorage.removeItem(EXPORT_HISTORY_KEY);
+      localStorage.removeItem(EXPORT_GRANTED_KEY);
+      localStorage.removeItem(EXPORT_UNAVAILABLE_KEY);
+    } catch { /* private mode */ }
+    exportHistory = emptyExportHistory();
+    exportGrantedIds = new Set();
+    exportUnavailableIds = new Set();
+    renderExportPanel();
+  });
 }
 
 // ---------------------------------------------------------------------------

@@ -21,6 +21,12 @@ import {
   driveIdBatches,
   driveIdsForNotes,
   PICKER_MAX_IDS,
+  emptyExportHistory,
+  parseExportHistory,
+  recordExport,
+  newSinceExport,
+  classExportStatus,
+  idsStillToGrant,
 } from "../kb-export.js";
 
 const assignment = {
@@ -219,6 +225,87 @@ test("exportDownloadName names the file after what was picked", () => {
   assert.equal(exportDownloadName({ courses: ["Math"], format: "zip" }, "2026-09-17"), "Math-2026-09-17.zip");
   assert.equal(exportDownloadName({ courses: ["Math", "Biology"], format: "zip" }, "2026-09-17"), "2-classes-2026-09-17.zip");
   assert.equal(exportDownloadName({ format: "csv" }, "2026-09-17"), "classroom-kb-2026-09-17.csv");
+});
+
+test("exportDownloadName gets a -new suffix before the date for a new-only export", () => {
+  assert.equal(
+    exportDownloadName({ courses: ["Math"], format: "zip" }, "2026-09-17", { newOnly: true }),
+    "Math-new-2026-09-17.zip",
+  );
+});
+
+// --- export history: "only what's new" -------------------------------------
+
+test("emptyExportHistory and parseExportHistory tolerate garbage", () => {
+  assert.deepEqual(emptyExportHistory(), { v: 1, notes: {}, files: {} });
+  assert.deepEqual(parseExportHistory(null), emptyExportHistory());
+  assert.deepEqual(parseExportHistory("not json"), emptyExportHistory());
+  assert.deepEqual(parseExportHistory("[]"), emptyExportHistory());
+  assert.deepEqual(parseExportHistory('{"notes":{"a":"2026-01-01"}}'), { v: 1, notes: { a: "2026-01-01" }, files: {} });
+});
+
+test("recordExport stamps every given note and Drive id with the date, without touching the rest", () => {
+  const history = recordExport(emptyExportHistory(), [assignment], ["1AbcDEFghij_KLM"], "2026-09-01");
+  assert.deepEqual(history.notes, { [assignment.p]: "2026-09-01" });
+  assert.deepEqual(history.files, { "1AbcDEFghij_KLM": "2026-09-01" });
+  const again = recordExport(history, [material], [], "2026-09-05");
+  assert.deepEqual(again.notes, { [assignment.p]: "2026-09-01", [material.p]: "2026-09-05" });
+});
+
+test("newSinceExport treats an unexported note, and a note with an unexported attachment, as new", () => {
+  const history = recordExport(emptyExportHistory(), [assignment], ["1AbcDEFghij_KLM"], "2026-09-01");
+  const result = newSinceExport([assignment, material], history, { attachments: true });
+  assert.deepEqual(result.notes.map((n) => n.p), [material.p]);
+  assert.deepEqual(result.driveIds, ["2DocIdValue99"]);
+});
+
+test("newSinceExport ignores attachments when they are not part of this export", () => {
+  const history = recordExport(emptyExportHistory(), [assignment], [], "2026-09-01");
+  const result = newSinceExport([assignment], history, { attachments: false });
+  assert.deepEqual(result.notes, []);
+});
+
+test("newSinceExport does not count a file it can never get as new", () => {
+  // A class whose only missing file was deleted at the source must still reach
+  // "up to date" — otherwise every old class reads "1 new" forever.
+  const history = recordExport(emptyExportHistory(), [assignment], [], "2026-09-01");
+  const result = newSinceExport([assignment], history, { attachments: true, ignoreIds: new Set(["1AbcDEFghij_KLM"]) });
+  assert.deepEqual(result.notes, []);
+  assert.deepEqual(result.driveIds, []);
+  const status = classExportStatus([assignment], history, { attachments: true, ignoreIds: ["1AbcDEFghij_KLM"] });
+  assert.equal(status.newCount, 0);
+});
+
+test("classExportStatus reports the last export date and how much is new", () => {
+  const history = recordExport(emptyExportHistory(), [assignment], [], "2026-09-01");
+  const status = classExportStatus([assignment, material], history, { attachments: false });
+  assert.equal(status.exportedBefore, true);
+  assert.equal(status.lastExportedAt, "2026-09-01");
+  assert.equal(status.newCount, 1);
+});
+
+test("classExportStatus says never-exported for a class with no history", () => {
+  assert.deepEqual(classExportStatus([material], emptyExportHistory(), {}), {
+    lastExportedAt: null,
+    newCount: 1,
+    exportedBefore: false,
+  });
+});
+
+test("classExportStatus handles an empty class", () => {
+  assert.deepEqual(classExportStatus([], emptyExportHistory(), {}), {
+    lastExportedAt: null,
+    newCount: 0,
+    exportedBefore: false,
+  });
+});
+
+// --- granted/unavailable Drive id memory ------------------------------------
+
+test("idsStillToGrant drops ids already granted or already offered-and-unavailable", () => {
+  assert.deepEqual(idsStillToGrant(["a", "b", "c"], ["b"], ["c"]), ["a"]);
+  assert.deepEqual(idsStillToGrant(["a", "a", "", null], [], []), ["a"]);
+  assert.deepEqual(idsStillToGrant([], ["a"], []), []);
 });
 
 // --- the zip writer -------------------------------------------------------

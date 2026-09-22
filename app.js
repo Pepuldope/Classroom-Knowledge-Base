@@ -71,6 +71,9 @@ const SCOPES = [
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file";
 let driveTokenClient = null;
 let driveAccessToken = null;
+// When driveAccessToken expires — expires_in minus 60s safety, so a request
+// started right at the edge still has time to complete before Google 401s it.
+let driveAccessTokenExpiry = 0;
 
 const COURSES_HIDDEN_KEY = "cwa_hidden_courses";
 const USER_HINT_KEY = "cwa_user_hint";
@@ -991,7 +994,7 @@ function waitForGis() {
     // silently sign the student out of the Planner. Dropping the reference (as
     // sign-out does) is the correct way to forget it.
     window.__cwaRequestDriveToken = () => new Promise((resolve, reject) => {
-      if (driveAccessToken) { resolve(driveAccessToken); return; }
+      if (driveAccessToken && Date.now() < driveAccessTokenExpiry) { resolve(driveAccessToken); return; }
       if (!driveTokenClient) { reject(new Error("Google sign-in is not ready yet.")); return; }
       driveTokenClient.callback = (resp) => {
         if (resp?.error || !resp?.access_token) {
@@ -999,12 +1002,19 @@ function waitForGis() {
           return;
         }
         driveAccessToken = resp.access_token;
+        // Google's drive.file tokens last ~1h; cache with a 60s safety margin
+        // rather than forever, or a long-running export starts 401ing partway
+        // through.
+        driveAccessTokenExpiry = Date.now() + Math.max(0, (Number(resp.expires_in) || 3600) - 60) * 1000;
         resolve(driveAccessToken);
       };
       driveTokenClient.error_callback = (err) => reject(new Error(err?.type || "popup_closed"));
       try { driveTokenClient.requestAccessToken(); }
       catch (e) { reject(e); }
     });
+    // For a 401 mid-export: drop the cached token so the next request asks
+    // Google for a fresh one instead of retrying the same expired string.
+    window.__cwaForgetDriveToken = () => { driveAccessToken = null; driveAccessTokenExpiry = 0; };
     // kb.js is NOT loaded here. It is 141KB and pulls the search index, the
     // Classroom builder, the curriculum matrix and the local store behind it —
     // none of which the Planner needs. showKbView() wires the KB's listeners
@@ -1590,6 +1600,7 @@ $("logoutBtn").addEventListener("click", () => {
   // The Drive token is in-memory only, but signing out has to drop it too —
   // otherwise the next account inherits the previous one's Drive access.
   driveAccessToken = null;
+  driveAccessTokenExpiry = 0;
   revokeServerToken();
   setView("planner");
   try { localStorage.removeItem(USER_HINT_KEY); } catch {}
@@ -3556,7 +3567,7 @@ function aiComposerControls() {
   return {
     input: $("aiInput"),
     submit: $("aiForm")?.querySelector('button[type="submit"]'),
-    quick: [...document.querySelectorAll(".ai-quick button")],
+    quick: [...document.querySelectorAll("#ai .ai-quick button")],
   };
 }
 
@@ -3741,7 +3752,10 @@ const DEFAULT_QUICK_PROMPTS = [
 ];
 
 function renderQuickPrompts(items, label = "Quick prompts") {
-  const container = document.querySelector(".ai-quick .ai-quick-list");
+  // Scoped to the Planner panel: the KB tutor modal has its own .ai-quick list
+  // and sits EARLIER in the markup, so an unscoped query overwrote the tutor's
+  // prompts with Planner ones that call sendAi() — dead buttons in the tutor.
+  const container = document.querySelector("#ai .ai-quick .ai-quick-list");
   if (!container) return;
   const toggle = container.closest(".ai-quick-menu")?.querySelector(".ai-quick-toggle");
   if (toggle) toggle.textContent = label;

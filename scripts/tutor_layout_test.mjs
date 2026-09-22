@@ -60,6 +60,19 @@ try {
 
   await page.click("#kbTutorOpen");
   await page.waitForSelector("#kbTutorModal:not([hidden])");
+
+  // Guards the app.js quick-prompt fix: renderQuickPrompts is scoped to
+  // `#ai .ai-quick .ai-quick-list` so it cannot touch the tutor modal's own,
+  // separate quick-prompt list — which stays exactly the 5 static buttons
+  // the markup ships.
+  const tutorQuickPrompts = await page.$$eval(
+    "#kbTutorModal .ai-quick-list button",
+    (els) => els.map((el) => el.textContent.trim()),
+  );
+  assert.equal(tutorQuickPrompts.length, 5, `tutor quick prompts should stay at 5, saw: ${tutorQuickPrompts.join(", ")}`);
+  assert.equal(tutorQuickPrompts[0], "Explain from scratch", `first tutor quick prompt: ${tutorQuickPrompts[0]}`);
+  console.log("✓ tutor quick-prompt list untouched by the #ai quick-prompt selector fix");
+
   const frame = () => page.evaluate(() => Math.round(document.querySelector("#kbTutorModal .modal-card").getBoundingClientRect().height));
   const emptyH = await frame();
   const empty = await page.evaluate(() => ({

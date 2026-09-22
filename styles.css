@@ -2821,8 +2821,13 @@ summary::-webkit-details-marker { color: var(--muted); }
   transition: width 0.25s ease-out;
 }
 .manage-run-status.is-done .manage-run-bar { background: var(--ok, var(--accent)); }
+/* Fades out rather than snapping to hidden — hideManageRun adds this class,
+   waits out the transition, then actually hides the element. */
+.manage-run-status { transition: opacity 0.35s ease; opacity: 1; }
+.manage-run-status.is-fading { opacity: 0; }
 @media (prefers-reduced-motion: reduce) {
   .manage-run-bar { transition: none; }
+  .manage-run-status { transition: none; }
 }
 
 /* Export controls. */
@@ -2864,6 +2869,25 @@ summary::-webkit-details-marker { color: var(--muted); }
 .export-class-row:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
 .export-class-name { min-width: 0; overflow-wrap: anywhere; }
 .export-class-meta { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
+/* A class with nothing under the current Year/Include narrowing — still
+   tickable (an export can outlive the filter that hid it today), just quieter. */
+.export-class-row.is-empty { opacity: 0.55; }
+.export-class-row.is-empty .export-class-meta { font-style: italic; }
+.export-class-status {
+  grid-column: 1 / -1;
+  font-size: 0.74rem;
+  color: var(--muted);
+  justify-self: start;
+}
+.export-class-status.is-up-to-date { color: var(--ok, var(--accent)); }
+@keyframes export-just-updated {
+  from { background: color-mix(in srgb, var(--ok, var(--accent)) 25%, transparent); }
+  to { background: transparent; }
+}
+.export-class-status.just-updated { animation: export-just-updated 1.4s ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .export-class-status.just-updated { animation: none; }
+}
 @media (max-width: 640px) {
   .export-class-row { min-height: 44px; align-items: center; }
   .export-class-meta { white-space: normal; text-align: right; }
@@ -2875,6 +2899,8 @@ summary::-webkit-details-marker { color: var(--muted); }
   gap: 0.75rem 1.1rem;
   margin: 0.7rem 0;
 }
+.export-narrow-row { align-items: center; }
+.export-narrow-label { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
 .export-field { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
 .export-field-label { font-size: 0.78rem; color: var(--muted); }
 .export-kinds {
@@ -2898,14 +2924,7 @@ summary::-webkit-details-marker { color: var(--muted); }
   background: color-mix(in srgb, var(--danger) 5%, var(--surface));
   font-size: 0.83rem;
 }
-.export-grant {
-  margin-top: 0.6rem;
-  padding: 0.6rem 0.75rem 0.2rem;
-  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
-}
-.export-grant .settings-hint { margin: 0; }
+.export-forget-history { display: block; margin-top: 0.8rem; font-size: 0.8rem; }
 .export-skipped ul { margin: 0.4rem 0 0; padding-left: 1.1rem; }
 .export-skipped li { margin-bottom: 0.2rem; overflow-wrap: anywhere; }
 

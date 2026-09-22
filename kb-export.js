@@ -316,10 +316,13 @@ export function noteMarkdown(note = {}) {
  * `attachmentsByNotePath` (note path → [{title, path}]) is folded into the
  * index so the README says where each downloaded file landed.
  */
-export function exportFileTree(notes, { attachmentsByNotePath = new Map(), generatedAt = null } = {}) {
+export function exportFileTree(notes, { attachmentsByNotePath = new Map(), generatedAt = null, newSinceDate = null } = {}) {
   const used = new Set();
   const files = [];
   const index = ["# Classroom export", ""];
+  if (newSinceDate) {
+    index.push(`_This is an update — only items new since ${new Date(newSinceDate).toLocaleString()}._`, "");
+  }
   if (generatedAt) index.push(`_Exported ${new Date(generatedAt).toLocaleString()}_`, "");
   index.push(`_${notes.length} ${notes.length === 1 ? "item" : "items"}_`, "");
 
@@ -368,7 +371,7 @@ export function attachmentPath(note, filename, used = new Set()) {
   return uniquePath(segments.join("/"), used);
 }
 
-export function exportDownloadName(selection, date = new Date().toISOString().slice(0, 10)) {
+export function exportDownloadName(selection, date = new Date().toISOString().slice(0, 10), { newOnly = false } = {}) {
   const model = exportSelectionModel(selection);
   const safeDate = /^\d{4}-\d{2}-\d{2}$/.test(String(date)) ? String(date) : "export";
   const stem = model.courses.length === 1
@@ -377,7 +380,104 @@ export function exportDownloadName(selection, date = new Date().toISOString().sl
       ? `${model.courses.length} classes`
       : "classroom-kb";
   const ext = model.format === "zip" ? "zip" : model.format;
-  return `${stem} ${safeDate}.${ext}`.replace(/\s+/g, "-");
+  return `${stem}${newOnly ? "-new" : ""} ${safeDate}.${ext}`.replace(/\s+/g, "-");
+}
+
+// ---------------------------------------------------------------------------
+// Export history — "what have I already downloaded", THIS BROWSER ONLY.
+//
+// Kept as a plain, pure data shape so the panel's "only what's new" logic is
+// unit-testable without a DOM or localStorage: kb.js owns the storage key and
+// the try/catch, this module owns what the data means.
+// ---------------------------------------------------------------------------
+export function emptyExportHistory() {
+  return { v: 1, notes: {}, files: {} };
+}
+
+/** Tolerates garbage (corrupt JSON, wrong shape, `null`) by falling back empty. */
+export function parseExportHistory(raw) {
+  try {
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (!data || typeof data !== "object") return emptyExportHistory();
+    const notes = data.notes && typeof data.notes === "object" ? { ...data.notes } : {};
+    const files = data.files && typeof data.files === "object" ? { ...data.files } : {};
+    return { v: 1, notes, files };
+  } catch {
+    return emptyExportHistory();
+  }
+}
+
+/** A new history with every given note (and downloaded Drive id) stamped `date`. */
+export function recordExport(history, notes, downloadedDriveIds, date = new Date().toISOString()) {
+  const base = parseExportHistory(history);
+  const nextNotes = { ...base.notes };
+  for (const note of Array.isArray(notes) ? notes : []) {
+    if (note?.p) nextNotes[note.p] = date;
+  }
+  const nextFiles = { ...base.files };
+  for (const id of Array.isArray(downloadedDriveIds) ? downloadedDriveIds : []) {
+    if (id) nextFiles[id] = date;
+  }
+  return { v: 1, notes: nextNotes, files: nextFiles };
+}
+
+/**
+ * Of the given notes, which are new since the last export: never exported
+ * before, OR (when attachments are on) carrying a Drive attachment that was
+ * never downloaded. `driveIds` lists only the not-yet-exported ids, so a
+ * caller can grant/download exactly those rather than the whole selection.
+ */
+export function newSinceExport(notes, history, { attachments = false, ignoreIds = null } = {}) {
+  const base = parseExportHistory(history);
+  // Ids we already know can never be downloaded (deleted at the source, never
+  // shared, nothing exportable). They must not count as "new", or a class
+  // holding one never reaches "up to date".
+  const ignored = new Set(ignoreIds || []);
+  const outNotes = [];
+  const driveIds = new Set();
+  for (const note of Array.isArray(notes) ? notes : []) {
+    const seenNote = note?.p ? Object.prototype.hasOwnProperty.call(base.notes, note.p) : false;
+    let hasNewFile = false;
+    if (attachments) {
+      for (const id of driveIdsForNotes([note])) {
+        if (!ignored.has(id) && !Object.prototype.hasOwnProperty.call(base.files, id)) {
+          hasNewFile = true;
+          driveIds.add(id);
+        }
+      }
+    }
+    if (!seenNote || hasNewFile) outNotes.push(note);
+  }
+  return { notes: outNotes, driveIds: [...driveIds] };
+}
+
+/** What a class row shows: when it was last exported, and how much is new. */
+export function classExportStatus(notesOfClass, history, opts = {}) {
+  const base = parseExportHistory(history);
+  const list = Array.isArray(notesOfClass) ? notesOfClass : [];
+  if (!list.length) return { lastExportedAt: null, newCount: 0, exportedBefore: false };
+  let lastExportedAt = null;
+  let exportedBefore = false;
+  for (const note of list) {
+    const at = note?.p ? base.notes[note.p] : undefined;
+    if (at) {
+      exportedBefore = true;
+      if (!lastExportedAt || at > lastExportedAt) lastExportedAt = at;
+    }
+  }
+  const { notes: newNotes } = newSinceExport(list, base, opts);
+  return { lastExportedAt, newCount: newNotes.length, exportedBefore };
+}
+
+/**
+ * Of the ids a selection needs, which still need a picker pass: not already
+ * granted, and not already offered-and-dropped (deleted at the source).
+ */
+export function idsStillToGrant(ids, granted = [], unavailable = []) {
+  const grantedSet = new Set(Array.isArray(granted) ? granted : []);
+  const unavailableSet = new Set(Array.isArray(unavailable) ? unavailable : []);
+  const clean = [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "")).filter(Boolean))];
+  return clean.filter((id) => !grantedSet.has(id) && !unavailableSet.has(id));
 }
 
 // ---------------------------------------------------------------------------

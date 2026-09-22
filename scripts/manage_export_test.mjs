@@ -6,11 +6,16 @@
 //      that is off-screen, so the button read as dead even while it worked.
 //   2. A build that finds nothing new says "already up to date" rather than a
 //      note total, which read as "there is still more to fetch".
-//   3. The class picker offers the classes that exist, and narrowing by class,
-//      year and type actually narrows what a download would contain.
-//   4. A ZIP export is a real archive with one file per assignment / material,
-//      and pulls the Drive attachments into it when asked — reporting, not
-//      failing, on a file the teacher never shared.
+//   3. The class picker offers the classes that exist, "Select shown" ticks
+//      only what the search box is showing, and narrowing by year/type
+//      actually narrows the row counts AND what a download would contain.
+//   4. A ZIP export is a real archive with one file per assignment / material.
+//      The Drive grant is folded into Download itself — no separate button —
+//      and pulls attachments in when asked, reporting rather than failing on
+//      a file the teacher never shared.
+//   5. "Only what's new": a second Download of an already-exported class needs
+//      no picker at all and says "All caught up"; adding a note offers only
+//      what changed.
 //
 // Usage: BASE_URL=http://localhost:4321 node scripts/manage_export_test.mjs
 import { chromium } from "playwright";
@@ -195,6 +200,22 @@ try {
   assert.deepEqual(classes, ["Dejepis", "Matematika"], `class picker should list both classes, saw ${classes.join()}`);
 
   const summaryFor = () => page.textContent("#kbExportSummary");
+
+  // "Select shown" — a filtered list must tick only what is visible, not
+  // every class that exists (the bug: Select all ticked everything).
+  await page.fill("#kbExportClassFilter", "mate");
+  await page.waitForTimeout(200);
+  assert.equal(await page.textContent("#kbExportSelectAll"), "Select shown", "the button relabels while filtering");
+  await page.click("#kbExportSelectAll");
+  await page.waitForTimeout(150);
+  const checkedWhileFiltered = await page.$$eval(
+    '.export-class-row input[type="checkbox"]:checked',
+    (els) => els.map((e) => e.value),
+  );
+  assert.deepEqual(checkedWhileFiltered, ["Matematika"], "Select shown must not tick the class the filter hid");
+  await page.fill("#kbExportClassFilter", "");
+  await page.waitForTimeout(200);
+
   await page.click("#kbExportSelectAll");
   await page.waitForTimeout(150);
   assert.match(await summaryFor(), /4 items from 2 classes/, `all classes: ${await summaryFor()}`);
@@ -204,8 +225,17 @@ try {
   await page.waitForTimeout(150);
   assert.match(await summaryFor(), /3 items from 1 class/, `one class: ${await summaryFor()}`);
 
+  // Year narrowing must move the per-class COUNT, not just the summary line —
+  // this is the "filters don't really work" bug: the row itself never changed.
+  const rowMetaFor = (name) => page.$eval(
+    `.export-class-row:has(input[value="${name}"]) .export-class-meta`,
+    (el) => el.textContent,
+  );
+  const beforeYear = await rowMetaFor("Matematika");
   await page.selectOption("#kbExportYear", "2024-25");
   await page.waitForTimeout(150);
+  const afterYear = await rowMetaFor("Matematika");
+  assert.notEqual(beforeYear, afterYear, `the class row's own count must react to the year filter: ${beforeYear} → ${afterYear}`);
   assert.match(await summaryFor(), /2 items/, `one class + one year: ${await summaryFor()}`);
 
   await page.uncheck('.kb-export-kind[value="assignment"]');
@@ -213,38 +243,32 @@ try {
   assert.match(await summaryFor(), /1 item/, `materials only: ${await summaryFor()}`);
   await page.check('.kb-export-kind[value="assignment"]');
   await page.waitForTimeout(150);
-  console.log("✓ class / year / type each narrow what the download would contain");
+  console.log("✓ Select shown respects the filter; year/type narrow the row counts and the summary");
 
-  // --- 4. the ZIP, with attachments ---------------------------------------
+  // --- 4. Download, with the grant folded in -------------------------------
   await page.check("#kbExportAttachments");
   await page.waitForTimeout(150);
   assert.match(await summaryFor(), /plus up to 2 attachments/, `attachment count: ${await summaryFor()}`);
-
-  // --- 4a. the grant flow ---------------------------------------------------
-  const grantVisible = await page.evaluate(() => !document.getElementById("kbExportGrant").hidden);
-  assert.equal(grantVisible, true, "ticking attachments must reveal the grant step");
-  await page.click("#kbExportGrantBtn");
-  await page.waitForFunction(
-    () => /Allowed/.test(document.getElementById("kbExportGrantStatus")?.textContent || ""),
-    null,
-    { timeout: 15000 },
-  );
-  const grant = await page.evaluate(() => ({
-    status: document.getElementById("kbExportGrantStatus").textContent,
-    calls: window.__pickerCalls,
-  }));
-  assert.equal(grant.calls.length, 1, "two attachments fit in one picker round");
-  assert.equal(grant.calls[0].key, "served-picker-key", "the key must come from the server, not from a stale cached global");
-  assert.deepEqual(grant.calls[0].ids.sort(), ["DOC_TWO_ID_X", "FILE_ONE_ID_X"], "the picker is handed exactly this selection's attachments");
-  assert.equal(grant.calls[0].appId, "786778645862", "the picker gets the project number as its app id");
-  assert.equal(grant.calls[0].feature, "multi", "multi-select must be on, or a class is one click per file");
-  assert.match(grant.status, /Allowed 1 of 2 files\. 1 was not offered/, `the grant must be honest about what Google dropped: ${grant.status}`);
-  console.log(`\u2713 grant flow hands the picker exactly this class's ids: ${grant.status}`);
+  assert.equal(await page.evaluate(() => document.getElementById("kbExportGrant")), null, "the separate grant block is gone");
+  assert.equal(await page.evaluate(() => document.getElementById("kbExportGrantHint").hidden), false, "the one-line hint takes its place");
 
   const download = page.waitForEvent("download", { timeout: 30000 });
   await page.click("#kbExportRun");
+  await page.waitForFunction(
+    () => /Google needs you to confirm/.test(document.getElementById("kbExportProgress")?.textContent || ""),
+    null,
+    { timeout: 10000 },
+  );
   const file = await download;
   assert.match(file.suggestedFilename(), /^Matematika-\d{4}-\d{2}-\d{2}\.zip$/, `zip name: ${file.suggestedFilename()}`);
+
+  const pickerCalls = await page.evaluate(() => window.__pickerCalls);
+  assert.equal(pickerCalls.length, 1, "two attachments fit in one picker round, opened straight from Download");
+  assert.equal(pickerCalls[0].key, "served-picker-key", "the key must come from the server, not from a stale cached global");
+  assert.deepEqual(pickerCalls[0].ids.sort(), ["DOC_TWO_ID_X", "FILE_ONE_ID_X"], "the picker is handed exactly this selection's attachments");
+  assert.equal(pickerCalls[0].appId, "786778645862", "the picker gets the project number as its app id");
+  assert.equal(pickerCalls[0].feature, "multi", "multi-select must be on, or a class is one click per file");
+  console.log("✓ Download opens the picker itself for exactly this class's ids — no separate grant button");
 
   const bytes = readFileSync(await file.path());
   assert.equal(bytes.readUInt32LE(0), 0x04034b50, "the download is a real zip");
@@ -268,6 +292,40 @@ try {
   assert.equal(after.skippedHidden, false, "the file that could not be downloaded is listed");
   assert.match(after.skippedText, /Formulas/);
   console.log("✓ zip holds one file per item plus the attachments it could fetch");
+
+  // --- 5. only what's new ---------------------------------------------------
+  // Attachments off, isolating the notes-history side of "only what's new":
+  // with them on, the material note would stay "new" forever because its
+  // attachment (DOC_TWO_ID_X) 403s every time and never successfully
+  // downloads — correctly so; a skipped file must keep retrying next time.
+  await page.uncheck("#kbExportAttachments");
+  await page.waitForTimeout(150);
+  assert.match(await page.textContent("#kbExportRun"), /All caught up/, `second run should offer nothing new: ${await page.textContent("#kbExportRun")}`);
+  const pickerCallsBefore = pickerCalls.length;
+  const secondDownload = page.waitForEvent("download", { timeout: 30000 });
+  await page.click("#kbExportRunAlt"); // "Download everything again" — the escape hatch, not the default path
+  await secondDownload;
+  assert.equal((await page.evaluate(() => window.__pickerCalls)).length, pickerCallsBefore, "a class already fully granted must not reopen the picker");
+  console.log("✓ a second export of the same class needs no picker");
+
+  // Now add one new note to the seeded class — Download should then offer
+  // only what changed, not the whole class again.
+  await page.evaluate(async () => {
+    const kb = await import("/kb-local.js");
+    const bundle = await kb.loadKbBundle();
+    bundle.notes.push({
+      p: "2024-25/Matematika/New-worksheet", t: "New worksheet", course: "Matematika", y: "2024-25",
+      topic: "Algebra", kind: "assignment", s: "New worksheet — summary", x: "Do it.\n\nDue: 2025-05-01",
+    });
+    await kb.saveMergedKbBundle(bundle);
+  });
+  // showKbView() reloads the corpus kb.js keeps cached (localKbBundle) —
+  // without this the panel would keep showing the pre-mutation notes.
+  await page.evaluate(async () => { const kb = await import("/kb.js"); await kb.showKbView(); });
+  await page.click('.manage-tab-btn[data-manage-tab="export"]');
+  await page.waitForTimeout(250);
+  assert.match(await page.textContent("#kbExportRun"), /1 new item/, `a fresh note should surface as "new": ${await page.textContent("#kbExportRun")}`);
+  console.log("✓ a new note in an already-exported class offers only what's new");
 
   assert.deepEqual(errors, [], `page errors: ${errors.join(" | ")}`);
 } finally {
