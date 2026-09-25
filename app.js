@@ -28,6 +28,7 @@ import { relatedCourseMaterials } from "./related-materials.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
 import { normalizeTaskKind } from "./task-kinds.js";
+import { driveTokenRequestOptions, driveTokenExpiry, readCachedDriveToken, writeCachedDriveToken, clearCachedDriveToken } from "./drive-token.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
 import { loadByok, saveByok, clearByok, byokRequestFields, maskKey, BYOK_PROVIDER_LABELS } from "./byok.js";
 import { sheetDragModel, sheetContentDragModel, sheetGestureIntent, sheetThrowDuration, viewportBottomInset, SHEET_GESTURE_SLOP, SHEET_SETTLE_MS } from "./sheet-drag.js";
@@ -388,6 +389,15 @@ function clearToken() {
   clearAuthSession().catch(() => {});
   accessToken = null;
   if (refreshTimer) { clearTimeout(refreshTimer); refreshTimer = null; }
+}
+
+function safeSessionStorage() {
+  try { return window.sessionStorage; } catch { return null; }
+}
+function forgetDriveToken() {
+  driveAccessToken = null;
+  driveAccessTokenExpiry = 0;
+  clearCachedDriveToken(safeSessionStorage());
 }
 
 function loadUserHint() {
@@ -995,6 +1005,9 @@ function waitForGis() {
     // sign-out does) is the correct way to forget it.
     window.__cwaRequestDriveToken = () => new Promise((resolve, reject) => {
       if (driveAccessToken && Date.now() < driveAccessTokenExpiry) { resolve(driveAccessToken); return; }
+      // A reload in the same tab reuses the grant instead of reopening Google's popup.
+      const cached = readCachedDriveToken(safeSessionStorage(), Date.now());
+      if (cached) { driveAccessToken = cached.token; driveAccessTokenExpiry = cached.expiry; resolve(driveAccessToken); return; }
       if (!driveTokenClient) { reject(new Error("Google sign-in is not ready yet.")); return; }
       driveTokenClient.callback = (resp) => {
         if (resp?.error || !resp?.access_token) {
@@ -1005,16 +1018,19 @@ function waitForGis() {
         // Google's drive.file tokens last ~1h; cache with a 60s safety margin
         // rather than forever, or a long-running export starts 401ing partway
         // through.
-        driveAccessTokenExpiry = Date.now() + Math.max(0, (Number(resp.expires_in) || 3600) - 60) * 1000;
+        driveAccessTokenExpiry = driveTokenExpiry(resp.expires_in, Date.now());
+        writeCachedDriveToken(safeSessionStorage(), driveAccessToken, driveAccessTokenExpiry);
         resolve(driveAccessToken);
       };
       driveTokenClient.error_callback = (err) => reject(new Error(err?.type || "popup_closed"));
-      try { driveTokenClient.requestAccessToken(); }
+      // Name the remembered account, or a browser signed into several Google
+      // accounts shows the chooser on every export (see drive-token.js).
+      try { driveTokenClient.requestAccessToken(driveTokenRequestOptions(loadUserHint())); }
       catch (e) { reject(e); }
     });
     // For a 401 mid-export: drop the cached token so the next request asks
     // Google for a fresh one instead of retrying the same expired string.
-    window.__cwaForgetDriveToken = () => { driveAccessToken = null; driveAccessTokenExpiry = 0; };
+    window.__cwaForgetDriveToken = forgetDriveToken;
     // kb.js is NOT loaded here. It is 141KB and pulls the search index, the
     // Classroom builder, the curriculum matrix and the local store behind it —
     // none of which the Planner needs. showKbView() wires the KB's listeners
@@ -1597,10 +1613,9 @@ $("switchBtn").addEventListener("click", () => { closeMenu(); revokeServerToken(
 $("logoutBtn").addEventListener("click", () => {
   closeMenu();
   clearToken();
-  // The Drive token is in-memory only, but signing out has to drop it too —
+  // Signing out has to drop the Drive token too (memory and the tab's cache),
   // otherwise the next account inherits the previous one's Drive access.
-  driveAccessToken = null;
-  driveAccessTokenExpiry = 0;
+  forgetDriveToken();
   revokeServerToken();
   setView("planner");
   try { localStorage.removeItem(USER_HINT_KEY); } catch {}
@@ -1730,6 +1745,8 @@ window.addEventListener("cwa-classroom-auth-error", (event) => {
 
 function switchAccount() {
   const mw = $("menuWrap"); if (mw) mw.hidden = true;
+  // The tab-cached Drive token belongs to the account being left.
+  forgetDriveToken();
   // Force the account chooser so the user can pick their school account.
   startRedirectSignIn("select_account");
 }

@@ -59,6 +59,7 @@ GATES=(
 "models|-|Theme model tests|node scripts/theme_test.mjs"
 "models|-|Private view auth model tests|node --test tests/auth-view.test.js"
 "models|-|Refresh-token cookie tests|node --test tests/token-cookie.test.js"
+"models|-|Drive token request + tab cache tests|node --test tests/drive-token.test.js"
 "models|-|Enrichment candidate scope tests|node --test tests/enrich-scope.test.js"
 "models|-|Enrichment JSON parsing tests|node --test tests/enrich-parse.test.js"
 "models|-|Corpus merge tests|node --test tests/kb-merge.test.js"
