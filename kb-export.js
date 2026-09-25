@@ -150,6 +150,23 @@ export function driveDownloadPlan(meta = {}) {
   };
 }
 
+// Why a download failed, as the reason shown to the student. Most failures are
+// worth retrying next time (a file not shared yet, a network blip), but one is
+// permanent: Google refuses to export a Workspace file over its export size
+// limit (403 exportSizeLimitExceeded — a Doc full of images gets there fast).
+// Retrying that forever kept its note flagged "new" on every visit.
+export const TOO_LARGE_REASON = "too large for Google to export";
+
+export function driveFailureReason(status, bodyText = "") {
+  if (status === 403 && /exportSizeLimitExceeded/.test(String(bodyText))) return TOO_LARGE_REASON;
+  return `Drive ${status}`;
+}
+
+/** Failures that will never succeed, so the id belongs in the unavailable set. */
+export function isPermanentDriveFailure(reason) {
+  return reason === "nothing to download" || reason === TOO_LARGE_REASON;
+}
+
 // ---------------------------------------------------------------------------
 // Handing Drive file ids to the Google Picker.
 //

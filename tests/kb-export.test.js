@@ -25,6 +25,9 @@ import {
   parseExportHistory,
   recordExport,
   newSinceExport,
+  driveFailureReason,
+  isPermanentDriveFailure,
+  TOO_LARGE_REASON,
   classExportStatus,
   idsStillToGrant,
 } from "../kb-export.js";
@@ -389,4 +392,26 @@ test("driveIdBatches keeps a single oversized id rather than dropping it", () =>
   // never appears in the export.
   const huge = "z".repeat(9000);
   assert.deepEqual(driveIdBatches([huge], { maxChars: 100 }), [[huge]]);
+});
+
+test("a Workspace file over Google's export limit is a permanent failure, other 403s are not", () => {
+  const body = JSON.stringify({ error: { code: 403, errors: [{ reason: "exportSizeLimitExceeded" }], message: "This file is too large to be exported." } });
+  assert.equal(driveFailureReason(403, body), TOO_LARGE_REASON);
+  assert.equal(isPermanentDriveFailure(driveFailureReason(403, body)), true);
+  // Not shared with the student yet: worth retrying next export.
+  const notShared = JSON.stringify({ error: { code: 403, errors: [{ reason: "insufficientFilePermissions" }] } });
+  assert.equal(driveFailureReason(403, notShared), "Drive 403");
+  assert.equal(isPermanentDriveFailure("Drive 403"), false);
+  assert.equal(driveFailureReason(404, ""), "Drive 404");
+  assert.equal(driveFailureReason(500), "Drive 500");
+  // The pre-existing permanent case keeps working.
+  assert.equal(isPermanentDriveFailure("nothing to download"), true);
+});
+
+test("once the too-large file is in the unavailable set, its note stops reading as new", () => {
+  // The DS Y4 case: a note whose only attachment is a Doc Google won't export.
+  const history = recordExport(emptyExportHistory(), [assignment], [], "2026-09-25");
+  assert.equal(newSinceExport([assignment], history, { attachments: true }).notes.length, 1);
+  const after = newSinceExport([assignment], history, { attachments: true, ignoreIds: new Set(["1AbcDEFghij_KLM"]) });
+  assert.deepEqual(after.notes, []);
 });

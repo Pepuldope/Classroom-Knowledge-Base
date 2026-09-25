@@ -38,7 +38,7 @@ import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
 import {
   EXPORT_KINDS, EXPORT_KIND_LABELS, noteItemKind, noteAttachments, driveMetadataUrl,
-  driveDownloadPlan, exportSelectionModel, selectExportNotes, exportCourseOptions,
+  driveDownloadPlan, driveFailureReason, isPermanentDriveFailure, exportSelectionModel, selectExportNotes, exportCourseOptions,
   exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZipBlob,
   buildResultMessage, driveIdBatches, driveIdsForNotes, CRC32_INIT, crc32Update, crc32Final, crc32,
   emptyExportHistory, parseExportHistory, recordExport, newSinceExport, classExportStatus,
@@ -2276,8 +2276,8 @@ function updateExportSummary() {
   }
 
   const label = (count, kind) => `${count.toLocaleString()} ${kind}${count === 1 ? "" : "s"}`;
-  const withAttachments = (base) => wantAttachments && attachmentCount
-    ? `${base} and ${label(attachmentCount, "attachment")}`
+  const withAttachments = (base, count = attachmentCount) => wantAttachments && count
+    ? `${base} and ${label(count, "attachment")}`
     : base;
 
   if (!notes.length) {
@@ -2291,7 +2291,10 @@ function updateExportSummary() {
       if (fresh.notes.length) {
         if (runBtn) {
           runBtn.disabled = false;
-          runBtn.textContent = withAttachments(`Download ${label(fresh.notes.length, "new item")}`);
+          // Only the files this run will fetch: a new-only export skips
+          // everything already downloaded, so the selection's total overstated
+          // it ("1 new item and 152 attachments" for a single new file).
+          runBtn.textContent = withAttachments(`Download ${label(fresh.notes.length, "new item")}`, fresh.driveIds.length);
         }
         if (altBtn) { altBtn.hidden = false; altBtn.textContent = "Download everything instead"; }
         if (summary) summary.textContent = exportSummaryText(notes.length, form.courses.length, attachmentCount);
@@ -2381,6 +2384,10 @@ class DriveAuthExpiredError extends Error {}
  * `authExpired` on the result) rather than being treated as 300 individual
  * failures.
  */
+// Ids already known to be undownloadable: deleted or unshared at the source,
+// no bytes (a form), or over Google's export limit.
+const KNOWN_UNAVAILABLE = "not downloadable (deleted, unshared or too large)";
+
 async function collectAttachments(notes, { token, signal, onProgress, onlyIds = null, unavailableIds = null }) {
   const byNote = new Map();
   const entries = [];
@@ -2393,7 +2400,7 @@ async function collectAttachments(notes, { token, signal, onProgress, onlyIds = 
       if (attachment.driveId) {
         // Known-dead files are listed, not re-requested; files a new-only run
         // already has on disk are not fetched again.
-        if (unavailableIds?.has(attachment.driveId)) skipped.push({ ...attachment, reason: "no longer available" });
+        if (unavailableIds?.has(attachment.driveId)) skipped.push({ ...attachment, reason: KNOWN_UNAVAILABLE });
         else if (!onlyIds || onlyIds.has(attachment.driveId)) wanted.push({ note, attachment });
       }
       else if (attachment.source !== "link") skipped.push({ ...attachment, reason: "not a Drive file" });
@@ -2418,7 +2425,10 @@ async function collectAttachments(notes, { token, signal, onProgress, onlyIds = 
         signal,
       });
       if (fileResponse.status === 401) throw new DriveAuthExpiredError();
-      if (!fileResponse.ok) throw new Error(`Drive ${fileResponse.status}`);
+      if (!fileResponse.ok) {
+        const body = await fileResponse.text().catch(() => "");
+        throw new Error(driveFailureReason(fileResponse.status, body));
+      }
       const file = await streamToBlob(fileResponse, plan.mime);
       const path = attachmentPath(note, plan.filename, used);
       entries.push({ path, blob: file.blob, size: file.size, crc: file.crc });
@@ -2434,7 +2444,7 @@ async function collectAttachments(notes, { token, signal, onProgress, onlyIds = 
   }
   // Known-dead files still count toward "N of M", so the summary stays honest
   // about what the selection holds even though they were never requested.
-  const dead = skipped.filter((item) => item.reason === "no longer available").length;
+  const dead = skipped.filter((item) => item.reason === KNOWN_UNAVAILABLE).length;
   return { entries, byNote, skipped, downloadedIds, attempted: wanted.length + dead, authExpired };
 }
 
@@ -2705,8 +2715,9 @@ async function runExport({ everything = false } = {}) {
           exportGrantedIds.delete(item.driveId);
           grantedChanged = true;
         }
-        // A form or a shortcut has no bytes to export and never will.
-        if (item.driveId && item.reason === "nothing to download" && !exportUnavailableIds.has(item.driveId)) {
+        // A form or a shortcut has no bytes to export and never will, and a
+        // Workspace file over Google's export limit never will either.
+        if (item.driveId && isPermanentDriveFailure(item.reason) && !exportUnavailableIds.has(item.driveId)) {
           exportUnavailableIds.add(item.driveId);
           unavailableChanged = true;
         }
