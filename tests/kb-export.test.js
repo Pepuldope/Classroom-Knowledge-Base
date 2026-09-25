@@ -29,6 +29,8 @@ import {
   isPermanentDriveFailure,
   TOO_LARGE_REASON,
   pickerTitle,
+  pickerHint,
+  countLabel,
   classExportStatus,
   idsStillToGrant,
 } from "../kb-export.js";
@@ -421,4 +423,16 @@ test("the picker title tells the student how to select every file at once", () =
   assert.equal(pickerTitle(1, 1, 12), "Select all 12 files — click the first file, Shift+click the last, then Select");
   assert.equal(pickerTitle(2, 3, 200), "Round 2 of 3: select all 200 files — click the first file, Shift+click the last, then Select");
   assert.match(pickerTitle(1, 1, 1), /^Select the file — /);
+});
+
+test("the hint under the picker names a real way to select everything", () => {
+  assert.equal(pickerHint(12), "Google needs you to confirm 12 new files — click the first, Shift+click the last, then Select.");
+  assert.equal(pickerHint(1), "Google needs you to confirm 1 new file — click it, then Select.");
+  assert.doesNotMatch(pickerHint(5), /Select all/, "the picker has no Select all button");
+});
+
+test("export counts read as English", () => {
+  assert.equal(countLabel(1, "item"), "1 item");
+  assert.equal(countLabel(3, "item"), "3 items");
+  assert.equal(countLabel(0, "attachment"), "0 attachments");
 });

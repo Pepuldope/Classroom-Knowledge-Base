@@ -163,10 +163,10 @@ export function driveFailureReason(status, bodyText = "") {
 }
 
 /**
- * The picker's title bar. The Picker API has no "select all", and students
- * were ticking dozens of files one by one; the click-first / Shift+click-last
- * range select works in it (confirmed by a student on a real export), so the
- * title says so. Kept short: the title bar truncates.
+ * The picker's title. Google's current picker shows its own "Grant access to
+ * files" header and ignores this (seen on the live site 2026-09-25), so the
+ * instruction that students actually see is pickerHint below; this stays as a
+ * harmless fallback for picker versions that do render setTitle.
  */
 export function pickerTitle(round = 1, rounds = 1, fileCount = 0) {
   const how = "click the first file, Shift+click the last, then Select";
@@ -174,6 +174,22 @@ export function pickerTitle(round = 1, rounds = 1, fileCount = 0) {
   return rounds > 1
     ? `Round ${round} of ${rounds}: select ${what} — ${how}`
     : `Select ${what} — ${how}`;
+}
+
+/**
+ * The status line under the picker — our own text, so it is always visible.
+ * The Picker has no "Select all" button (the old hint told students to press
+ * one); clicking the first file and Shift+clicking the last selects the range.
+ */
+export function pickerHint(fileCount = 0) {
+  if (fileCount <= 1) return "Google needs you to confirm 1 new file — click it, then Select.";
+  return `Google needs you to confirm ${fileCount} new files — click the first, Shift+click the last, then Select.`;
+}
+
+/** "1 item", "3 items" — the export messages said "Exported 1 items". */
+export function countLabel(count, noun) {
+  const n = Number(count) || 0;
+  return `${n.toLocaleString()} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 /** Failures that will never succeed, so the id belongs in the unavailable set. */

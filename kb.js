@@ -38,7 +38,7 @@ import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
 import {
   EXPORT_KINDS, EXPORT_KIND_LABELS, noteItemKind, noteAttachments, driveMetadataUrl,
-  driveDownloadPlan, driveFailureReason, isPermanentDriveFailure, pickerTitle, exportSelectionModel, selectExportNotes, exportCourseOptions,
+  driveDownloadPlan, driveFailureReason, isPermanentDriveFailure, pickerTitle, pickerHint, countLabel, exportSelectionModel, selectExportNotes, exportCourseOptions,
   exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZipBlob,
   buildResultMessage, driveIdBatches, driveIdsForNotes, CRC32_INIT, crc32Update, crc32Final, crc32,
   emptyExportHistory, parseExportHistory, recordExport, newSinceExport, classExportStatus,
@@ -2455,7 +2455,9 @@ function renderExportSkipped(skipped) {
   if (!skipped.length) { box.hidden = true; return; }
   const head = document.createElement("p");
   head.className = "settings-hint";
-  head.textContent = `${skipped.length} attachment${skipped.length === 1 ? "" : "s"} could not be downloaded — usually a file the teacher never shared with you. They are still linked inside the notes:`;
+  // The reason is listed per file: "never shared" is the common one, but not the
+  // only one (deleted at the source, a form, a Doc too large for Google to export).
+  head.textContent = `${countLabel(skipped.length, "attachment")} could not be downloaded — the reason is next to each. They are still linked inside the notes:`;
   box.appendChild(head);
   const list = document.createElement("ul");
   for (const item of skipped.slice(0, 20)) {
@@ -2649,7 +2651,7 @@ async function runExport({ everything = false } = {}) {
     const scoped = { ...bundle, notes, generatedAt: bundle.generatedAt || new Date().toISOString() };
     const mime = selection.format === "json" ? "application/json" : selection.format === "csv" ? "text/csv" : "text/markdown";
     downloadFile(filename, exportBundlePayload(scoped, selection.format), mime);
-    say(`Exported ${notes.length.toLocaleString()} items.`);
+    say(`Exported ${countLabel(notes.length, "item")}.`);
     return;
   }
 
@@ -2665,7 +2667,7 @@ async function runExport({ everything = false } = {}) {
       const toGrant = idsStillToGrant(needed, [...exportGrantedIds], [...exportUnavailableIds]);
       if (toGrant.length) {
         renderManageRun(progress, {
-          message: `Google needs you to confirm ${toGrant.length} new file${toGrant.length === 1 ? "" : "s"} — press Select all, then Select.`,
+          message: pickerHint(toGrant.length),
           percent: 2,
         });
         const grant = await grantDriveFiles(toGrant, {
@@ -2748,7 +2750,7 @@ async function runExport({ everything = false } = {}) {
     // "N of M attachments" line below with its own generic summary text.
     renderExportPanel({ highlightUpToDate: true });
     const got = attachments.entries.length;
-    say(`Exported ${exportNotes.length.toLocaleString()} items${attachments.attempted ? ` and ${got} of ${attachments.attempted} attachments` : ""}.`);
+    say(`Exported ${countLabel(exportNotes.length, "item")}${attachments.attempted ? ` and ${got} of ${countLabel(attachments.attempted, "attachment")}` : ""}.`);
     renderExportSkipped(attachments.skipped);
   } catch (error) {
     renderManageRun(progress, { message: `❌ ${error?.message || error}`, isError: true });
