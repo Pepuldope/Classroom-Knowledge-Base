@@ -38,7 +38,7 @@ import { classroomAuthRecoveryModel } from "./auth-view.js";
 import { loadSessionPosition, saveSessionPosition } from "./session-position.js";
 import {
   EXPORT_KINDS, EXPORT_KIND_LABELS, noteItemKind, noteAttachments, driveMetadataUrl,
-  driveDownloadPlan, driveFailureReason, isPermanentDriveFailure, exportSelectionModel, selectExportNotes, exportCourseOptions,
+  driveDownloadPlan, driveFailureReason, isPermanentDriveFailure, pickerTitle, exportSelectionModel, selectExportNotes, exportCourseOptions,
   exportYearOptions, exportFileTree, attachmentPath, exportDownloadName, buildZipBlob,
   buildResultMessage, driveIdBatches, driveIdsForNotes, CRC32_INIT, crc32Update, crc32Final, crc32,
   emptyExportHistory, parseExportHistory, recordExport, newSinceExport, classExportStatus,
@@ -2569,9 +2569,7 @@ async function grantDriveFiles(ids, { token, onProgress } = {}) {
   const granted = new Set();
   for (let i = 0; i < batches.length; i++) {
     onProgress?.({ round: i + 1, rounds: batches.length, granted: granted.size, total: ids.length });
-    const title = batches.length > 1
-      ? `Select these files — round ${i + 1} of ${batches.length}`
-      : "Select these files to allow the export to download them";
+    const title = pickerTitle(i + 1, batches.length, batches[i].length);
     const result = await pickerRound({ ids: batches[i], token, apiKey, appId, title });
     for (const id of result.granted) granted.add(id);
     if (result.cancelled) return { ids, granted: [...granted], cancelled: true };

@@ -28,6 +28,7 @@ import {
   driveFailureReason,
   isPermanentDriveFailure,
   TOO_LARGE_REASON,
+  pickerTitle,
   classExportStatus,
   idsStillToGrant,
 } from "../kb-export.js";
@@ -414,4 +415,10 @@ test("once the too-large file is in the unavailable set, its note stops reading 
   assert.equal(newSinceExport([assignment], history, { attachments: true }).notes.length, 1);
   const after = newSinceExport([assignment], history, { attachments: true, ignoreIds: new Set(["1AbcDEFghij_KLM"]) });
   assert.deepEqual(after.notes, []);
+});
+
+test("the picker title tells the student how to select every file at once", () => {
+  assert.equal(pickerTitle(1, 1, 12), "Select all 12 files — click the first file, Shift+click the last, then Select");
+  assert.equal(pickerTitle(2, 3, 200), "Round 2 of 3: select all 200 files — click the first file, Shift+click the last, then Select");
+  assert.match(pickerTitle(1, 1, 1), /^Select the file — /);
 });

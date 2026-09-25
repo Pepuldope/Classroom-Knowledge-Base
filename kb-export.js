@@ -162,6 +162,20 @@ export function driveFailureReason(status, bodyText = "") {
   return `Drive ${status}`;
 }
 
+/**
+ * The picker's title bar. The Picker API has no "select all", and students
+ * were ticking dozens of files one by one; the click-first / Shift+click-last
+ * range select works in it (confirmed by a student on a real export), so the
+ * title says so. Kept short: the title bar truncates.
+ */
+export function pickerTitle(round = 1, rounds = 1, fileCount = 0) {
+  const how = "click the first file, Shift+click the last, then Select";
+  const what = fileCount > 1 ? `all ${fileCount} files` : "the file";
+  return rounds > 1
+    ? `Round ${round} of ${rounds}: select ${what} — ${how}`
+    : `Select ${what} — ${how}`;
+}
+
 /** Failures that will never succeed, so the id belongs in the unavailable set. */
 export function isPermanentDriveFailure(reason) {
   return reason === "nothing to download" || reason === TOO_LARGE_REASON;
