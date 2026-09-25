@@ -1668,7 +1668,12 @@ async function fetchUserName(useCache = true) {
     });
     if (!r.ok) return null;
     const data = await r.json();
-    if (data.email) storeUserHint(data.email);
+    // Google accepts the account id (`sub`) as a hint as well as the email, and
+    // SCOPES asks for profile, not email, so on most sessions `sub` is all there
+    // is. Without it the hint was never stored, and every Drive or silent token
+    // request fell back to the account chooser in a multi-account browser.
+    const hint = data.email || data.sub;
+    if (hint) storeUserHint(hint);
     const info = { name: data.given_name || data.name || data.email || null, email: data.email || null };
     if (info.name) saveCachedProfile(info);
     return info;
