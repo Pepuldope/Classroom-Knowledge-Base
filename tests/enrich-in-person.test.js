@@ -9,7 +9,7 @@
 // the student did not have appeared on the Planner.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { inPersonDecision } from "../api/enrich.js";
+import { inPersonDecision, takeHomeDecision } from "../api/enrich.js";
 
 test("a place word says where, never what", () => {
   const worksheet = { title: "Worksheet 4 - fractions", desc: "Vypracujte na hodine.", taskKind: "Worksheet" };
@@ -57,4 +57,28 @@ test("a kind that already describes an assessment is left alone", () => {
 test("nothing at all is not a decision", () => {
   assert.deepEqual(inPersonDecision(), {});
   assert.deepEqual(inPersonDecision({ title: "Read chapter 4", desc: "", taskKind: "Reading" }), {});
+});
+
+test("an essay that is sent in is not in-person, even if the text mentions class", () => {
+  // Peter, 2026-10-02: a voluntary English essay "to be sent in" came back as
+  // an in-person task. Sending/emailing is how it is handed in.
+  for (const desc of [
+    "Send it to me by Friday. We will talk about it in class.",
+    "Email your essay to me, we will read the best ones in class.",
+    "Pošlite mi esej mailom, rozoberieme to na hodine.",
+    "Zašlite to do piatku, prečítame si ich v triede.",
+  ]) assert.deepEqual(inPersonDecision({ title: "Voluntary essay", desc, taskKind: "Essay" }), {}, desc);
+});
+
+test("take-home written work the model called in-person is handed in", () => {
+  assert.deepEqual(takeHomeDecision({ title: "voluntary essay", desc: "", actionType: "in_person", taskKind: "Essay" }),
+    { actionType: "submit_online" });
+  assert.deepEqual(takeHomeDecision({ title: "project: my town", desc: "", actionType: "in_person", taskKind: "Project" }),
+    { actionType: "submit_online" });
+  // An essay written in class as an assessment really is in person.
+  assert.deepEqual(takeHomeDecision({ title: "písomka - sloh", desc: "", actionType: "in_person", taskKind: "Essay" }), {});
+  assert.deepEqual(takeHomeDecision({ title: "essay", desc: "We will write it in class.", actionType: "in_person", taskKind: "Essay" }), {});
+  // Tests and worksheets are not touched.
+  assert.deepEqual(takeHomeDecision({ title: "Test", desc: "", actionType: "in_person", taskKind: "Test" }), {});
+  assert.deepEqual(takeHomeDecision({ title: "essay", desc: "", actionType: "submit_online", taskKind: "Essay" }), {});
 });

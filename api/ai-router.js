@@ -135,7 +135,6 @@ export const PROVIDERS = [
       { id: "nvidia/nemotron-3-super-120b-a12b:free", strength: 3 },  // 120B, 262K
       { id: "google/gemma-4-31b-it:free", strength: 2 },              // strong instruction-tuned
       { id: "dots-studio/dots-3-note-preview:free", strength: 2 },    // 512K ctx
-      { id: "nex-agi/nex-n2.5-pro:free", strength: 1 },
     ],
     effort: 3,
     capabilities: ["json", "long_context"],

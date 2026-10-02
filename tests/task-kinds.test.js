@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TASK_KINDS, normalizeTaskKind, isTaskKind } from "../task-kinds.js";
+import { TASK_KINDS, normalizeTaskKind, isTaskKind, isOptionalTask } from "../task-kinds.js";
 
 test("the vocabulary is exactly the agreed twelve", () => {
   assert.deepEqual(TASK_KINDS, [
@@ -65,4 +65,20 @@ test("falls back to the assignment text when the label is unusable", () => {
 
 test("falls back to Worksheet when there is nothing to go on", () => {
   assert.equal(normalizeTaskKind("", ""), "Worksheet");
+});
+
+test("voluntary work is recognised in English and Slovak", () => {
+  // Peter, 2026-10-02: a voluntary English essay came back as an ordinary
+  // task — "the fact it is voluntary is ignored".
+  for (const text of [
+    "Voluntary essay: my summer",
+    "This is optional.",
+    "Bonus task for extra credit",
+    "Dobrovoľná úloha",
+    "dobrovolne - esej",
+    "Nepovinná úloha",
+  ]) assert.equal(isOptionalTask(text), true, text);
+  for (const text of ["Essay: my summer", "Homework 3", "Povinná úloha", ""]) {
+    assert.equal(isOptionalTask(text), false, text);
+  }
 });

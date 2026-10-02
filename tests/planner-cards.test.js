@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday } from "../planner-cards.js";
+import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday, sortSoonestFirst } from "../planner-cards.js";
 
 test("submitted work is never overdue, however late", () => {
   // The reported bug: the card's styling checked isPending but the TEXT did
@@ -172,4 +172,29 @@ test("everything else pending is ordered by date, not grouped by class", () => {
   assert.deepEqual(groups[1].items.map((a) => a.id), ["zoology-tomorrow", "ela-tomorrow"]);
   assert.equal(groups[1].dayOffset, 1);
   assert.deepEqual(groupPendingByDay([], () => 0), []);
+});
+
+test("Do today: what is due sooner comes first, whatever its weight", () => {
+  // Peter, 2026-10-02: "things that are done sooner should have priority over
+  // whatever is later." This sorted by weight first, so a heavy essay due
+  // tomorrow sat above a small worksheet due in two hours.
+  const items = [
+    { id: "essay-tomorrow", due: 2000, weight: 5 },
+    { id: "sheet-today", due: 1000, weight: 1 },
+    { id: "undated", due: null, weight: 5 },
+  ];
+  const opts = { dueTime: (a) => a.due, weight: (a) => a.weight };
+  assert.deepEqual(sortSoonestFirst(items, opts).map((a) => a.id),
+    ["sheet-today", "essay-tomorrow", "undated"]);
+});
+
+test("Do today: on the same deadline, required work beats voluntary, then weight", () => {
+  const items = [
+    { id: "voluntary-heavy", due: 1000, weight: 5, optional: true },
+    { id: "light", due: 1000, weight: 1 },
+    { id: "heavy", due: 1000, weight: 4 },
+  ];
+  const opts = { dueTime: (a) => a.due, weight: (a) => a.weight, optional: (a) => a.optional };
+  assert.deepEqual(sortSoonestFirst(items, opts).map((a) => a.id),
+    ["heavy", "light", "voluntary-heavy"]);
 });

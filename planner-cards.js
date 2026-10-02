@@ -102,6 +102,29 @@ export function sortPendingFirst(items, pending, { dueTime = null } = {}) {
 }
 
 /**
+ * Order for "Do today / tomorrow" and each day of the week view.
+ *
+ * Deadline first. This used to rank by AI weight and only then by due time, so
+ * a heavy essay due tomorrow sat above a small worksheet due in two hours.
+ * Peter, 2026-10-02: "things that are done sooner should have priority over
+ * whatever is later." Weight still matters, but only between items due at the
+ * same moment, and there required work goes ahead of voluntary work.
+ */
+export function sortSoonestFirst(items, { dueTime = () => null, weight = () => 0, optional = () => false } = {}) {
+  const list = Array.isArray(items) ? items : [];
+  const due = (item) => {
+    const raw = dueTime(item);
+    if (raw == null) return Infinity;
+    const t = Number(raw);
+    return Number.isFinite(t) ? t : Infinity;
+  };
+  return list
+    .map((item, i) => ({ item, i, due: due(item), opt: optional(item) ? 1 : 0, w: Number(weight(item)) || 0 }))
+    .sort((a, b) => (a.due === b.due ? 0 : a.due - b.due) || a.opt - b.opt || b.w - a.w || a.i - b.i)
+    .map(({ item }) => item);
+}
+
+/**
  * Is this the kind of "new" that "New since yesterday" means?
  *
  * The window is calendar-based, not a rolling 24 hours: everything posted since

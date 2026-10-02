@@ -1,7 +1,7 @@
 import { verifyUser, checkAndIncrementRate, jsonResponse } from "./_helpers.js";
 // Shared with the client so the two cannot drift — the prompt, the server
 // validation and the client fallback previously each carried their own list.
-import { TASK_KINDS, normalizeTaskKind } from "../task-kinds.js";
+import { TASK_KINDS, normalizeTaskKind, isOptionalTask } from "../task-kinds.js";
 // The rest of the site's AI already rotates across NVIDIA / Gemini / Groq /
 // Mistral / Cerebras / GitHub / Qwen / FreeLLMAPI / OpenRouter with circuit
 // breakers and RPM caps. Enrichment was the one flow that never used it: it
@@ -53,7 +53,6 @@ export const config = { runtime: "edge" };
 // Free slugs are retired often; re-run that script when this chain misbehaves.
 const MODEL_CHAIN = [
   "google/gemma-4-31b-it:free",
-  "nex-agi/nex-n2.5-pro:free",
   "google/gemma-4-26b-a4b-it:free",
   "nvidia/nemotron-3-super-120b-a12b:free",
   "dots-studio/dots-3-note-preview:free",
@@ -144,22 +143,23 @@ function isAccountRateLimited(status, body) {
 const KV_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const KV_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
-const SYSTEM_PROMPT = `You analyze a Google Classroom assignment and return JSON. Judge these five fields:
+const SYSTEM_PROMPT = `You analyze a Google Classroom assignment and return JSON. Judge these six fields:
 
 - weight (1-5): importance + effort. 1=trivial, 3=normal homework, 5=major exam/project.
 - actionType: determined by what the student must DO, not by workType. One of:
-  * "submit_online" — student must UPLOAD/TURN IN a deliverable through Classroom (essay, document, photo of work, code, completed Google Doc/Form). Description usually says "upload", "submit", "turn in", "odovzdaj", "nahraj", or attaches a Doc/Slides for the student to fill in and submit.
-  * "in_person" — assessment happens IN CLASS with no upload (test, quiz, exam, presentation, oral exam, lab demo, písomka, skúška, kvíz, prezentácia, vstupný test, ústna skúška). Any task whose name or description suggests an in-class evaluation is in_person, even if Classroom shows it as a generic assignment.
+  * "submit_online" — student must UPLOAD/TURN IN a deliverable through Classroom (essay, document, photo of work, code, completed Google Doc/Form). Description usually says "upload", "submit", "turn in", "send", "email", "odovzdaj", "nahraj", "pošli", "zašli", or attaches a Doc/Slides for the student to fill in and submit.
+  * "in_person" — assessment happens IN CLASS with no upload (test, quiz, exam, presentation, oral exam, lab demo, písomka, skúška, kvíz, prezentácia, vstupný test, ústna skúška). Any task whose name or description suggests an in-class evaluation is in_person, even if Classroom shows it as a generic assignment. Written work the student produces on their own time (essay, project, translation) is NOT in_person just because it is discussed or read out in class afterwards — it is submit_online.
   * "study_only" — preparation work for a future lesson. Read in advance, prepare to discuss, study for an upcoming quiz, work in a paper notebook, bring something to next class. Description mentions "prepare for", "pripravte sa", "na ďalšiu hodinu", "do zošita", "bring to class", "we will discuss", or asks for prep with no upload mechanism.
   * "read_only" — passive reading material, announcement, FYI post. No real task expected.
 
   TIEBREAKER: if the description does NOT explicitly tell the student to UPLOAD or TURN IN something, prefer "study_only" or "in_person" over "submit_online". Don't assume submission just because Classroom shows it as an assignment.
 - taskKind: ONE specific noun describing what this assignment IS. Pick the MOST SPECIFIC from this list and use NOTHING else: ${TASK_KINDS.map((k) => `"${k}"`).join(", ")}. Always English, always exactly as spelled above. NEVER use generic words like "Assignment", "Task", "Homework", "Work" or "Question" — those name the format, not the work, and tell the student nothing. If genuinely unclear, pick the closest specific kind.
+- optional: true when the work is voluntary — the teacher says it is voluntary, optional, bonus, extra credit, "dobrovoľná", "nepovinná". Otherwise false.
 - estimatedMinutes: realistic minutes a student needs. ALWAYS REQUIRED — return a positive integer, never null, never 0, never omit. Be CONSERVATIVE: homework 10-30, worksheets 15-25, essays 45-90, big projects 120-240, in-person tests 30-60 (for study time), quick readings 10-20. If genuinely unsure, default to 20.
 - oneLineSummary: under 90 chars, plain description of what to do. IN THE SAME LANGUAGE AS THE ASSIGNMENT. Never translate. Use ONLY real existing words in that language — if you're unsure how to phrase something in Slovak (or whatever the language is), use simpler vocabulary you are 100% confident is correct. NEVER invent words, NEVER mix languages within a sentence, NEVER conjugate foreign verbs with native endings. When possible, reuse phrasing from the assignment description itself rather than paraphrasing.
 
 Respond with ONLY this JSON, no prose:
-{"weight":3,"actionType":"submit_online","taskKind":"Worksheet","estimatedMinutes":30,"oneLineSummary":"..."}`;
+{"weight":3,"actionType":"submit_online","taskKind":"Worksheet","optional":false,"estimatedMinutes":30,"oneLineSummary":"..."}`;
 
 async function kvGet(key) {
   if (!KV_URL || !KV_TOKEN) return null;
@@ -266,6 +266,12 @@ export const SUBMIT_WORDS = [
   "vlož", "vloz", "vložte", "vlozte",
   "pošli", "posli", "pošlite", "poslite", "pošlite mi", "poslite mi",
   "send the file", "submit your", "upload your",
+  // sending it to the teacher is handing it in. Peter, 2026-10-02: a voluntary
+  // essay "to be sent in" came back in-person because its text also mentioned
+  // reading the essays in class, and none of these counted as a submission.
+  "send", "send it", "send in", "email", "e-mail", "mail",
+  "zašli", "zasli", "zašlite", "zaslite", "zaslať", "zaslat",
+  "poslať", "poslat", "mailom", "e-mailom",
 ];
 
 // Word-boundary keyword matcher. Some keywords are multi-word; treat as
@@ -314,6 +320,23 @@ export function inPersonDecision({ title = "", desc = "", taskKind = "" } = {}) 
   return out;
 }
 
+/** Kinds a student writes on their own time and hands in. */
+const TAKE_HOME_KINDS = /^(Essay|Project|Translation)$/i;
+
+/**
+ * Backstop for the opposite mistake: the MODEL calling take-home written work
+ * in-person. An essay written in class as an assessment says so in its title
+ * ("písomka") or its text ("in class"); without either, it is handed in.
+ */
+export function takeHomeDecision({ title = "", desc = "", actionType = "", taskKind = "" } = {}) {
+  if (actionType !== "in_person" || !TAKE_HOME_KINDS.test(taskKind || "")) return {};
+  const t = String(title || "").toLowerCase();
+  const d = String(desc || "").toLowerCase();
+  const all = [ASSESSMENT_WORDS, QUIZ_WORDS, PRESENTATION_WORDS, IN_PERSON_PLACE_WORDS].flat();
+  if (hasWord(t, all) || (hasWord(d, all) && !hasWord(`${t} ${d}`, SUBMIT_WORDS))) return {};
+  return { actionType: "submit_online" };
+}
+
 export default async function handler(req) {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), { status: 405 });
@@ -341,7 +364,7 @@ export default async function handler(req) {
     let lastFailure = "";
     let quotaExhausted = false;
     const hash = a.contentHash || "";
-    const PROMPT_VERSION = "v5";
+    const PROMPT_VERSION = "v6";
     const cacheKey = `enrich:${PROMPT_VERSION}:${a.id}:${hash}`;
     const cached = await kvGet(cacheKey);
     if (cached) {
@@ -459,6 +482,9 @@ export default async function handler(req) {
 
     parsed.taskKind = normalizeTaskKind(parsed.taskKind, haystack);
     Object.assign(parsed, inPersonDecision({ title, desc, taskKind: parsed.taskKind }));
+    Object.assign(parsed, takeHomeDecision({ title, desc, actionType: parsed.actionType, taskKind: parsed.taskKind }));
+    // Always a boolean: the client re-asks for in-person entries without one.
+    parsed.optional = parsed.optional === true || isOptionalTask(haystack);
 
     if (hash) await kvSet(cacheKey, JSON.stringify(parsed));
     return { id: a.id, ...parsed };

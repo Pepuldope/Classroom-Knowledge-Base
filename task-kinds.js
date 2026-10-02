@@ -168,3 +168,16 @@ export function normalizeTaskKind(raw, haystack = "") {
 export function isTaskKind(value) {
   return TASK_KINDS.includes(value);
 }
+
+// Voluntary work. Not a kind: a voluntary essay is still an Essay. It is a
+// separate flag so the card can say so and the Planner can rank it below
+// required work on the same deadline. Matched on accent-folded text, so
+// "dobrovoľná", "dobrovolne" and "Nepovinná" all land; prefixes cover Slovak
+// endings. Shared because the server uses it as a backstop under the model
+// and the client uses it for enrichments cached before the flag existed.
+const OPTIONAL_PATTERN = /(^|[^a-z])(voluntary|voluntarily|optional|bonus|extra credit|not (mandatory|compulsory|required)|dobrovoln\w*|nepovinn\w*)([^a-z]|$)/;
+
+export function isOptionalTask(text) {
+  const folded = String(text || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  return OPTIONAL_PATTERN.test(folded);
+}

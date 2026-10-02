@@ -15,7 +15,7 @@ import { relatedNotes } from "./kb-client-search.js";
 import { tutorRequestNotesModel } from "./kb-tutor-context.js";
 import { installNewTabCards, assignmentHref, noteHref, parseDeepLink, linkTo } from "./deep-links.js";
 import { noteKey } from "./notebook.js";
-import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday, groupPendingByDay } from "./planner-cards.js";
+import { dueChipModel, groupPlannerItems, sortPendingFirst, postedSinceYesterday, groupPendingByDay, sortSoonestFirst } from "./planner-cards.js";
 import { applyTheme, loadTheme } from "./theme.js";
 import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "./planner-tutor-context.js";
 import { privateViewDecision, classroomAuthRecoveryModel } from "./auth-view.js";
@@ -27,7 +27,7 @@ import { composerStateModel, applyComposerState, thinkingBubble, streamEndModel,
 import { relatedCourseMaterials } from "./related-materials.js";
 import { buildAuthRedirectUrl, parseAuthRedirectResponse, randomState, AUTH_STATE_KEY } from "./auth-redirect.js";
 import { isEnrichCandidate, isSubmittedState } from "./enrich-scope.js";
-import { normalizeTaskKind } from "./task-kinds.js";
+import { normalizeTaskKind, isOptionalTask } from "./task-kinds.js";
 import { driveTokenRequestOptions, driveTokenExpiry, readCachedDriveToken, writeCachedDriveToken, clearCachedDriveToken } from "./drive-token.js";
 import { loadSessionPosition, saveSessionPosition, positionNeedsRestore, canRestoreScroll } from "./session-position.js";
 import { loadByok, saveByok, clearByok, byokRequestFields, maskKey, BYOK_PROVIDER_LABELS } from "./byok.js";
@@ -600,6 +600,10 @@ function loadEnrichCache() {
   let dropped = 0;
   for (const [k, v] of Object.entries(cache)) {
     if (!v || typeof v !== "object" || v.error) { delete cache[k]; dropped += 1; }
+    // In-person verdicts from before 2026-10-02 called a sent-in essay an
+    // in-person task. Re-ask for just those, not the whole cache: the server
+    // has a new prompt version, and in-person items are a small share.
+    else if (v.actionType === "in_person" && v.optional === undefined) { delete cache[k]; dropped += 1; }
   }
   // Entries written when the vocabulary was larger still carry retired kinds
   // ("Question", "Problem set", "Exam"). Map them on read instead of bumping
@@ -2402,6 +2406,13 @@ function assignmentCard(a) {
     meta.appendChild(eff);
   }
 
+  if (!isPassive && isVoluntary(a)) {
+    const vol = document.createElement("span");
+    vol.textContent = "Voluntary";
+    vol.className = "effort";
+    meta.appendChild(vol);
+  }
+
   if (isInPerson) {
     const ip = document.createElement("span");
     ip.textContent = "In-person";
@@ -2515,14 +2526,18 @@ function assignmentCard(a) {
 
 function sortByPriorityThenDue(items) {
   if (currentSort !== "default") return applySort(items);
-  return [...items].sort((a, b) => {
-    const aw = a.enrichment?.weight || 0;
-    const bw = b.enrichment?.weight || 0;
-    if (aw !== bw) return bw - aw;
-    const ad = dueDateObj(a)?.getTime() ?? Infinity;
-    const bd = dueDateObj(b)?.getTime() ?? Infinity;
-    return ad - bd;
+  return sortSoonestFirst(items, {
+    dueTime: (a) => dueDateObj(a)?.getTime() ?? null,
+    weight: (a) => a.enrichment?.weight || 0,
+    optional: isVoluntary,
   });
+}
+
+// The server sets `optional`; enrichments cached before it did fall back to
+// the same keyword check it uses.
+function isVoluntary(a) {
+  if (a.enrichment?.optional === true) return true;
+  return isOptionalTask(`${a.title || ""} ${(a.description || "").slice(0, 400)}`);
 }
 
 function renderUpcoming(inScope) {
