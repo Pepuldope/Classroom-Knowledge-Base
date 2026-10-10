@@ -240,8 +240,8 @@ export function renderFocusBlock(focus, today = "", fenceId = "") {
   if (focus.relatedMaterials.length) {
     lines.push(
       "",
-      `Other posts in this same class that MAY be the material referred to (${focus.relatedMaterials.length}).`,
-      "These were matched by title and posting date, NOT by the teacher. Offer them as",
+      `Other posts in this class (or a similar class, where noted) that MAY be the material referred to (${focus.relatedMaterials.length}).`,
+      "These were matched by class, title and posting date, NOT by the teacher. Offer them as",
       "\"this looks like it might be it\" and never state that they are the required material:",
     );
     focus.relatedMaterials.forEach((m, i) => {

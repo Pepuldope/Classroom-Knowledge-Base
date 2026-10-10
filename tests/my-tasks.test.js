@@ -100,19 +100,45 @@ test("planner items look like assignments the lists already understand", () => {
   assert.equal(item.creationTime, undefined);
 });
 
-test("class material: same class, recent or sharing a word — never another class", () => {
+test("class material: the class, not the title — newest first, no other subjects", () => {
   const [item] = myTaskPlannerItems([{ ...weeklyTest, title: "Vocab test unit 4" }], SAT);
   const all = [
-    { id: "m1", kind: "material", courseId: "c1", title: "Unit 4 word list", creationTime: "2026-08-01T08:00:00Z" },
-    { id: "m2", kind: "material", courseId: "c1", title: "Reading handout", creationTime: "2026-10-08T08:00:00Z" },
-    { id: "m3", kind: "material", courseId: "c1", title: "Old handout", creationTime: "2026-06-01T08:00:00Z" },
-    { id: "m4", kind: "material", courseId: "c2", title: "Unit 4 maths", creationTime: "2026-10-09T08:00:00Z" },
-    { id: "n1", kind: "announcement", courseId: "c1", title: "Unit 4 tomorrow", creationTime: "2026-10-09T08:00:00Z" },
+    { id: "m1", kind: "material", courseId: "c1", courseName: "English", title: "Unit 4 word list", creationTime: "2026-08-01T08:00:00Z" },
+    { id: "m2", kind: "material", courseId: "c1", courseName: "English", title: "Reading handout", creationTime: "2026-10-08T08:00:00Z" },
+    { id: "a2", kind: "assignment", courseId: "c1", courseName: "English", title: "Essay draft", creationTime: "2026-10-02T08:00:00Z" },
+    { id: "m4", kind: "material", courseId: "c2", courseName: "Matematika", title: "Unit 4 maths", creationTime: "2026-10-09T08:00:00Z" },
+    { id: "n1", kind: "announcement", courseId: "c1", courseName: "English", title: "Unit 4 tomorrow", creationTime: "2026-10-09T08:00:00Z" },
   ];
-  const titles = myTaskClassMaterials(item, all, SAT).map((m) => m.title);
-  assert.deepEqual(titles.sort(), ["Reading handout", "Unit 4 word list"]);
+  // The old title match picked the August "Unit 4" list; it is outside the window now.
+  assert.deepEqual(myTaskClassMaterials(item, all, SAT).map((m) => m.title), ["Reading handout", "Essay draft"]);
   const [noClass] = myTaskPlannerItems([{ id: "z", title: "Unit 4", repeat: "daily" }], SAT);
   assert.deepEqual(myTaskClassMaterials(noClass, all, SAT), []);
+});
+
+test("class material: this class, then the same subject, then the same kind of class", () => {
+  const [item] = myTaskPlannerItems([{ id: "e", title: "Write test", course: "Entre Y4", courseId: "c1", repeat: "weekly", days: "5" }], SAT);
+  const all = [
+    { id: "f1", kind: "material", courseId: "c3", courseName: "Ekonomika", title: "Family", creationTime: "2026-10-09T08:00:00Z" },
+    { id: "s1", kind: "material", courseId: "c2", courseName: "MATURITA ENTRE", title: "Subject", creationTime: "2026-10-09T08:00:00Z" },
+    { id: "o1", kind: "assignment", courseId: "c1", courseName: "Entre Y4", title: "Own older", creationTime: "2026-10-01T08:00:00Z" },
+    { id: "o2", kind: "material", courseId: "c1", courseName: "Entre Y4", title: "Own newer", creationTime: "2026-10-07T08:00:00Z" },
+    { id: "x1", kind: "material", courseId: "c4", courseName: "English", title: "Other", creationTime: "2026-10-09T08:00:00Z" },
+  ];
+  const business = (name) => (/entre|ekonom/i.test(name) ? "Business" : "");
+  const out = myTaskClassMaterials(item, all, SAT, { familyOf: business });
+  assert.deepEqual(out.map((m) => m.title), ["Own newer", "Own older", "Subject", "Family"]);
+  assert.equal(out[0].courseName, "");
+  assert.equal(out[2].courseName, "MATURITA ENTRE");
+  assert.match(out[2].why, /same subject/);
+  assert.match(out[3].why, /similar class/);
+});
+
+test("class material: nothing recent falls back to the latest few from this class", () => {
+  const [item] = myTaskPlannerItems([weeklyTest], SAT);
+  const old = (id, day) => ({ id, kind: "material", courseId: "c1", courseName: "English", title: id, creationTime: `2026-0${day}-01T08:00:00Z` });
+  const all = [old("may", 5), old("jun", 6), old("jul", 7), old("aug", 8),
+    { id: "elsewhere", kind: "material", courseId: "c9", courseName: "English Y3", title: "elsewhere", creationTime: "2026-08-20T08:00:00Z" }];
+  assert.deepEqual(myTaskClassMaterials(item, all, SAT).map((m) => m.title), ["aug", "jul", "jun"]);
 });
 
 test("upsert replaces by id, remove drops by id", () => {

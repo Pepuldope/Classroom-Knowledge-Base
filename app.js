@@ -36,6 +36,7 @@ import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js"
 import { pullRefreshModel, pullRefreshEnabled, isStandaloneDisplay } from "./pull-refresh.js";
 import { reportIsStale } from "./report-freshness.js";
 import { myTaskPlannerItems, completeMyTask, upsertMyTask, removeMyTask, newMyTaskId, currentOccurrence, normalizeMyTask, repeatLabel, repeatNeedsDate, parseDays, myTaskClassMaterials, MY_TASK_REPEATS, WEEKDAYS } from "./my-tasks.js";
+import { effectiveFamily, familyOverrideMap, classFamilyOverridesModel } from "./class-overrides.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -3017,6 +3018,18 @@ function loadMaterialsFor(a) {
   return (a.materials || []).map(materialDescriptor).filter(Boolean).map((d) => ({ ...d, text: null }));
 }
 
+/**
+ * Recent posts from a task's class and the classes beside it (my-tasks.js).
+ * "Same kind of class" reads the KB board, so a class the student re-sorted
+ * there is grouped the way they sorted it, not the way the rules guessed.
+ */
+function taskClassMaterials(a) {
+  let overrides = [];
+  try { overrides = classFamilyOverridesModel(JSON.parse(localStorage.getItem("cwa_kb_class_families") || "[]")); } catch {}
+  const map = familyOverrideMap(overrides);
+  return myTaskClassMaterials(a, allAssignments, todayIso(), { familyOf: (name) => effectiveFamily(name, map) });
+}
+
 function renderMaterialsList(mats) {
   if (!mats.length) return "";
   const items = mats.map((m) => {
@@ -3095,11 +3108,14 @@ async function openAi(a) {
   // A task of the student's own has no attachments; what it needs is in its
   // class. Shown, not only handed to the tutor, so it can be opened directly.
   if (a.custom) {
-    const fromClass = myTaskClassMaterials(a, allAssignments, todayIso());
+    const fromClass = taskClassMaterials(a);
     if (fromClass.length) {
-      ctxParts.push(`<div class="ai-class-materials-label">From this class</div>`);
+      const similar = fromClass.some((m) => m.courseName);
+      ctxParts.push(`<div class="ai-class-materials-label">${similar ? "From this class and similar ones" : "From this class"}</div>`);
+      // A post from another class says which, or it reads as this class's.
       ctxParts.push(renderMaterialsList(fromClass.map((m) => ({
-        title: m.title, link: m.link ? withAuthUser(m.link) : "", kind: m.kind === "material" ? "drive" : "link",
+        title: m.courseName ? `${m.title} · ${m.courseName}` : m.title,
+        link: m.link ? withAuthUser(m.link) : "", kind: m.kind === "material" ? "drive" : "link",
       }))));
     } else if (a.courseName) {
       ctxParts.push(`<p class="ai-note">Nothing recent posted in this class.</p>`);
@@ -3898,7 +3914,7 @@ async function sendAi(userText) {
       title: m.title || "", kind: m.kind || "", link: m.link || "", text: m.text || "",
     })),
     // What the teacher probably meant by "it's in the Classroom folder".
-    relatedMaterials: a.custom ? myTaskClassMaterials(a, allAssignments, todayIso()) : relatedCourseMaterials(a, allAssignments),
+    relatedMaterials: a.custom ? taskClassMaterials(a) : relatedCourseMaterials(a, allAssignments),
   };
   // activeLibraryNotes are relatedNotes() results: title, course, year and an
   // index, but no summary or body. Mapping those straight through sent the

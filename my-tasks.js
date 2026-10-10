@@ -10,7 +10,8 @@
 // Pure: no DOM, no storage. `today` is an ISO date passed in, so the rollover
 // rules below can be tested without waiting a week.
 
-import { relatedCourseMaterials } from "./related-materials.js";
+import { NEAR_IN_DAYS } from "./related-materials.js";
+import { subjectTokens, deriveFamily } from "./kb-client-search.js";
 
 export const MY_TASK_PREFIX = "mine:";
 export const MY_TASK_MAX = 200;
@@ -194,17 +195,83 @@ export function myTaskPlannerItems(tasks, today) {
 /**
  * The class material a task of the student's own probably needs.
  *
- * Classroom's own assignments are matched to material by title and by being
- * posted around the same time (related-materials.js). A task the student
- * typed has no posting date, and "Vocab test" has no title words the teacher
- * used — so it is matched as of TODAY: the same class, a shared word if there
- * is one, otherwise what was posted in the last week or so. For a weekly test
- * that is exactly the material it covers.
+ * Classroom's own assignments are matched to material by title and posting
+ * date (related-materials.js). A task the student typed is not: its title is
+ * the student's words ("Write test"), not the teacher's, and matching on it
+ * listed whatever happened to share a word. Peter, 2026-10-10: "not from the
+ * title, but more from the class and similar classes".
+ *
+ * So the title is ignored. What a weekly test covers is what was posted lately
+ * in its class, and in the classes beside it:
+ *
+ *   1. this class
+ *   2. a class for the same subject — "MATURITA ENTRE" beside "Entre Y4",
+ *      matched on the subject words left once year and track are stripped
+ *   3. a class of the same kind — the KB board's family, so Business beside
+ *      Business — only to fill what is left
+ *
+ * Newest first within each, a material ahead of an assignment of the same age,
+ * and only the last NEAR_IN_DAYS. If nothing is that recent, the latest few
+ * from this class, so the list is never empty while the class has posts.
+ *
+ * `familyOf` is the effective family of a course name; the caller passes one
+ * that honours the student's own board overrides. It defaults to the rules.
  */
-export function myTaskClassMaterials(item, all, today, { limit = 6 } = {}) {
+const MY_TASK_FALLBACK = 3;
+
+export function myTaskClassMaterials(item, all, today, { limit = 6, familyOf = deriveFamily } = {}) {
   if (!item || (!item.courseId && !item.courseName)) return [];
-  const asOfToday = { ...item, creationTime: `${today}T12:00:00Z` };
-  return relatedCourseMaterials(asOfToday, all, { limit });
+  const todayMs = Date.parse(`${today}T23:59:59Z`);
+  const ownName = String(item.courseName || "");
+  const ownSubject = new Set(subjectTokens(ownName));
+  const ownFamily = ownName ? familyOf(ownName) : "";
+  const familyCache = new Map();
+  const familyOfCached = (name) => {
+    if (!familyCache.has(name)) familyCache.set(name, familyOf(name));
+    return familyCache.get(name);
+  };
+  const isOwn = (c) => (item.courseId && c.courseId ? c.courseId === item.courseId : String(c.courseName || "") === ownName);
+
+  function tierOf(c) {
+    if (isOwn(c)) return 0;
+    const name = String(c.courseName || "");
+    if (!name) return null;
+    if (subjectTokens(name).some((t) => ownSubject.has(t))) return 1;
+    if (ownFamily && familyOfCached(name) === ownFamily) return 2;
+    return null;
+  }
+
+  const ranked = [];
+  for (const c of Array.isArray(all) ? all : []) {
+    if (!c || c.custom || c.kind === "announcement") continue;
+    if (c.id && item.id && c.id === item.id) continue;
+    const posted = Date.parse(c.creationTime || "");
+    if (!Number.isFinite(posted)) continue;
+    const tier = tierOf(c);
+    if (tier == null) continue;
+    ranked.push({ c, tier, posted, ageDays: Math.max(0, (todayMs - posted) / DAY_MS) });
+  }
+  const order = (a, b) => a.tier - b.tier || b.posted - a.posted
+    || (b.c.kind === "material") - (a.c.kind === "material")
+    || String(a.c.title || "").localeCompare(String(b.c.title || ""));
+
+  let picked = ranked.filter((r) => r.ageDays <= NEAR_IN_DAYS).sort(order);
+  if (!picked.length) picked = ranked.filter((r) => r.tier === 0).sort(order).slice(0, MY_TASK_FALLBACK);
+
+  return picked.slice(0, Math.max(0, limit)).map(({ c, tier, ageDays }) => {
+    const days = Math.floor(ageDays);
+    return {
+      title: String(c.title || "Untitled"),
+      kind: c.kind === "material" ? "material" : "assignment",
+      link: String(c.alternateLink || ""),
+      postedAt: String(c.creationTime || "").slice(0, 10),
+      courseName: tier === 0 ? "" : String(c.courseName || ""),
+      why: [
+        tier === 0 ? "this class" : tier === 1 ? `same subject: ${c.courseName}` : `similar class: ${c.courseName}`,
+        days < 1 ? "posted today" : `posted ${days} day(s) ago`,
+      ].join(", "),
+    };
+  });
 }
 
 /** Add or replace one task in a list, by id. */
