@@ -2660,7 +2660,12 @@ function openMyTaskDialog(task = null) {
   if (task?.courseId && ![...select.options].some((o) => o.value === task.courseId)) {
     select.append(new Option(task.course || "Hidden class", task.courseId));
   }
-  select.value = task?.courseId || "";
+  // Tasks from before the class picker stored only the class's name. Match it
+  // back to the class, or saving would quietly drop it to "No class".
+  const byName = !task?.courseId && task?.course
+    ? [...select.options].find((o) => o.value && o.text === task.course)
+    : null;
+  select.value = task?.courseId || byName?.value || "";
 
   $("myTaskDelete").hidden = !task;
   syncMyTaskFields();

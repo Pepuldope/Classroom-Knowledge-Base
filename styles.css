@@ -3728,8 +3728,19 @@ a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); 
 .my-task-days { border: none; margin: 0; padding: 0; min-width: 0; }
 .my-task-days legend { font-size: 0.85rem; color: var(--muted); padding: 0; margin-bottom: 0.3rem; }
 .day-chips { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 0.3rem; }
-.my-task-dialog .day-chip { display: block; gap: 0; }
-.day-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.my-task-dialog .day-chip { display: block; gap: 0; position: relative; }
+/* Sized to its own chip. It inherited the dialog's `input { width: 100% }`,
+   and seven 414px-wide invisible boxes gave the dialog a sideways scroll. */
+.my-task-dialog .day-chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  opacity: 0;
+  pointer-events: none;
+}
 .day-chip span {
   display: block;
   text-align: center;
