@@ -35,7 +35,7 @@ import { sheetDragModel, sheetContentDragModel, sheetGestureIntent, sheetThrowDu
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
 import { pullRefreshModel, pullRefreshEnabled, isStandaloneDisplay } from "./pull-refresh.js";
 import { reportIsStale } from "./report-freshness.js";
-import { myTaskPlannerItems, completeMyTask, upsertMyTask, removeMyTask, newMyTaskId, currentOccurrence } from "./my-tasks.js";
+import { myTaskPlannerItems, completeMyTask, upsertMyTask, removeMyTask, newMyTaskId, currentOccurrence, normalizeMyTask, repeatLabel, repeatNeedsDate, parseDays, myTaskClassMaterials, MY_TASK_REPEATS, WEEKDAYS } from "./my-tasks.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -2557,6 +2557,7 @@ function myTaskCard(a) {
   const days = due ? daysUntil(due) : null;
   const el = document.createElement("div");
   el.className = "assignment my-task" + (days !== null && days < 0 ? " state-overdue" : "");
+  el.dataset.href = assignmentHref(a.id);
 
   const dot = document.createElement("div");
   dot.className = "priority-dot my-task-dot";
@@ -2589,10 +2590,11 @@ function myTaskCard(a) {
     dueSpan.className = ["meta-due", chip.className].filter(Boolean).join(" ");
     meta.appendChild(dueSpan);
   }
-  if (task.repeat === "weekly") {
+  const repeats = repeatLabel(task);
+  if (repeats) {
     const rep = document.createElement("span");
     rep.className = "effort";
-    rep.textContent = "↻ Weekly";
+    rep.textContent = `↻ ${repeats}`;
     meta.appendChild(rep);
   }
 
@@ -2600,7 +2602,7 @@ function myTaskCard(a) {
   actions.className = "card-actions";
   const done = document.createElement("button");
   done.className = "card-action my-task-done";
-  done.title = task.repeat === "weekly" ? "Done for this week" : "Done";
+  done.title = task.repeat === "none" ? "Done" : "Done — show the next one";
   done.setAttribute("aria-label", done.title);
   done.textContent = "✓";
   done.addEventListener("click", (ev) => {
@@ -2614,8 +2616,23 @@ function myTaskCard(a) {
 
   body.appendChild(meta);
   el.append(dot, body);
-  el.addEventListener("click", () => openMyTaskDialog(task));
+  // Opens like any assignment: the class's material, the tutor, the notes.
+  // Editing is the panel's "Edit task" button.
+  el.addEventListener("click", () => openAi(a));
   return el;
+}
+
+/** The Planner item for one of the student's tasks, as it is right now. */
+function myPlannerItem(taskId) {
+  return myPlannerItems().find((item) => item.myTask.id === taskId) || null;
+}
+
+function syncMyTaskFields() {
+  const repeat = MY_TASK_REPEATS.find((r) => r.value === $("myTaskRepeat").value) || MY_TASK_REPEATS[0];
+  $("myTaskDateField").hidden = !repeat.date;
+  $("myTaskDateLabel").textContent = repeat.date || "When";
+  $("myTaskDaysField").hidden = !repeat.days;
+  $("myTaskError").hidden = true;
 }
 
 function openMyTaskDialog(task = null) {
@@ -2625,50 +2642,97 @@ function openMyTaskDialog(task = null) {
   form.dataset.id = task?.id || "";
   $("myTaskDialogTitle").textContent = task ? "Edit task" : "Add your own task";
   $("myTaskTitle").value = task?.title || "";
-  // Editing a weekly task shows the date it is next due, which is the one the
-  // student is thinking about — not the first week it was ever entered.
-  $("myTaskDate").value = task ? (currentOccurrence(task, todayIso()) || task.date) : todayIso();
   $("myTaskRepeat").value = task?.repeat || "none";
-  $("myTaskCourse").value = task?.course || "";
-  const courses = $("myTaskCourses");
-  courses.innerHTML = "";
-  for (const c of allCourses.filter((c) => !hiddenCourseIds.has(c.id))) {
-    const opt = document.createElement("option");
-    opt.value = c.name;
-    courses.appendChild(opt);
+  // The date it is next due, which is the one the student is thinking about —
+  // not the first one ever entered.
+  const next = task ? currentOccurrence(task, todayIso()) : null;
+  $("myTaskDate").value = next || task?.date || todayIso();
+  // A new weekly task starts on today's weekday, which is usually the answer.
+  const days = task?.days ? parseDays(task.days) : [new Date().getDay()];
+  for (const box of $("myTaskDays").querySelectorAll("input")) box.checked = days.includes(Number(box.value));
+
+  const select = $("myTaskCourse");
+  select.innerHTML = "";
+  select.append(new Option("No class", ""));
+  for (const c of allCourses.filter((c) => !hiddenCourseIds.has(c.id))) select.append(new Option(c.name, c.id));
+  // A class hidden since the task was made still shows, rather than the task
+  // silently losing it on the next save.
+  if (task?.courseId && ![...select.options].some((o) => o.value === task.courseId)) {
+    select.append(new Option(task.course || "Hidden class", task.courseId));
   }
+  select.value = task?.courseId || "";
+
   $("myTaskDelete").hidden = !task;
+  syncMyTaskFields();
   dlg.showModal();
-  $("myTaskTitle").focus();
+  if (!task) $("myTaskTitle").focus();
 }
 
 function initMyTaskDialog() {
   const dlg = $("myTaskDialog");
   const form = $("myTaskForm");
   if (!dlg || !form) return;
+  for (const r of MY_TASK_REPEATS) $("myTaskRepeat").append(new Option(r.label, r.value));
+  for (const d of WEEKDAYS) {
+    const label = document.createElement("label");
+    label.className = "day-chip";
+    const box = Object.assign(document.createElement("input"), { type: "checkbox", value: String(d.value) });
+    label.append(box, Object.assign(document.createElement("span"), { textContent: d.short }));
+    $("myTaskDays").appendChild(label);
+  }
+  $("myTaskRepeat").addEventListener("change", syncMyTaskFields);
   $("addMyTaskBtn").addEventListener("click", () => openMyTaskDialog());
+  $("aiEditTask").addEventListener("click", () => {
+    if (activeAssignment?.custom) openMyTaskDialog(activeAssignment.myTask);
+  });
   $("myTaskCancel").addEventListener("click", () => dlg.close());
   $("myTaskDelete").addEventListener("click", () => {
-    if (form.dataset.id) saveMyTasks(removeMyTask(loadMyTasks(), form.dataset.id));
+    const id = form.dataset.id;
+    if (id) saveMyTasks(removeMyTask(loadMyTasks(), id));
     dlg.close();
+    if (activeAssignment?.myTask?.id === id) closeAssignmentPanel();
   });
   form.addEventListener("submit", (ev) => {
     ev.preventDefault();
-    const id = form.dataset.id || newMyTaskId();
-    // A new date is a new schedule, so a past "done" no longer applies to it.
+    const select = $("myTaskCourse");
+    const courseId = select.value;
     const task = {
-      id,
+      id: form.dataset.id || newMyTaskId(),
       title: $("myTaskTitle").value,
-      date: $("myTaskDate").value,
       repeat: $("myTaskRepeat").value,
-      course: $("myTaskCourse").value,
+      // Only a repeat that asks for a date sends one: a hidden date on a weekly
+      // task would be read as its weekday by the pre-weekday fallback.
+      date: repeatNeedsDate($("myTaskRepeat").value) ? $("myTaskDate").value : "",
+      days: [...$("myTaskDays").querySelectorAll("input:checked")].map((b) => b.value).join(","),
+      courseId,
+      course: courseId ? select.selectedOptions[0]?.text || "" : "",
     };
-    saveMyTasks(upsertMyTask(loadMyTasks(), task));
+    const clean = normalizeMyTask(task);
+    if (!clean) {
+      const error = $("myTaskError");
+      error.textContent = !task.title.trim() ? "Give it a name." : task.repeat === "weekly" ? "Pick at least one day." : "Pick a date.";
+      error.hidden = false;
+      return;
+    }
+    // Renaming it or changing its class must not un-tick this week. A changed
+    // schedule is a new schedule, so there "done" starts over.
+    const prev = normalizeMyTask(loadMyTasks().find((t) => t.id === clean.id));
+    if (prev?.doneThrough && prev.repeat === clean.repeat && prev.days === clean.days && prev.date === clean.date) {
+      clean.doneThrough = prev.doneThrough;
+    }
+    saveMyTasks(upsertMyTask(loadMyTasks(), clean));
     dlg.close();
+    // Edited from the panel: show the panel the edit, not the old copy.
+    if (activeAssignment?.myTask?.id === clean.id && !$("ai").hidden) {
+      const fresh = myPlannerItem(clean.id);
+      if (fresh) openAi(fresh);
+      else closeAssignmentPanel();
+    }
   });
   // A click on the backdrop lands on the <dialog> itself.
   dlg.addEventListener("click", (ev) => { if (ev.target === dlg) dlg.close(); });
 }
+
 initMyTaskDialog();
 
 function sortByPriorityThenDue(items) {
@@ -2986,10 +3050,12 @@ async function openAi(a) {
   $("aiTitle").textContent = a.title || "Assignment";
   const due = dueDateObj(a);
   const dueTxt = due ? due.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }) : "No due date";
+  const repeats = a.custom ? repeatLabel(a.myTask) : "";
+  $("aiEditTask").hidden = !a.custom;
   activeMaterials = loadMaterialsFor(a);
   const panel = assignmentPanelModel({
     courseName: a.courseName,
-    dueLabel: dueTxt,
+    dueLabel: repeats ? `${dueTxt} · ${repeats}` : dueTxt,
     submitted: isSubmittedState(a.submission?.state),
     enrichment: a.enrichment,
     materials: activeMaterials,
@@ -3021,6 +3087,19 @@ async function openAi(a) {
   if (panel.summary) ctxParts.push(`<p class="ai-summary">${escapeHtml(panel.summary)}</p>`);
   if (panel.note) ctxParts.push(`<p class="ai-note">${escapeHtml(panel.note)}</p>`);
   if (panel.materialCount) ctxParts.push(renderMaterialsList(panel.materials));
+  // A task of the student's own has no attachments; what it needs is in its
+  // class. Shown, not only handed to the tutor, so it can be opened directly.
+  if (a.custom) {
+    const fromClass = myTaskClassMaterials(a, allAssignments, todayIso());
+    if (fromClass.length) {
+      ctxParts.push(`<div class="ai-class-materials-label">From this class</div>`);
+      ctxParts.push(renderMaterialsList(fromClass.map((m) => ({
+        title: m.title, link: m.link ? withAuthUser(m.link) : "", kind: m.kind === "material" ? "drive" : "link",
+      }))));
+    } else if (a.courseName) {
+      ctxParts.push(`<p class="ai-note">Nothing recent posted in this class.</p>`);
+    }
+  }
   if (panel.hasDescription) {
     ctxParts.push(`<details class="original-desc"><summary>Original from Classroom</summary><div class="original-desc-body">${renderAssignmentDescription(a.description)}</div></details>`);
   }
@@ -3264,7 +3343,7 @@ function restoreAssignmentPanel() {
   // to look the id up in, and a miss then would throw the record away for a
   // reason that has nothing to do with the assignment still existing.
   if (allAssignments.length === 0) return;
-  const a = allAssignments.find((item) => item.id === id);
+  const a = allAssignments.find((item) => item.id === id) || myPlannerItems().find((item) => item.id === id);
   if (!a) { stashAssignment(""); return; }
   openAi(a);
 }
@@ -3814,7 +3893,7 @@ async function sendAi(userText) {
       title: m.title || "", kind: m.kind || "", link: m.link || "", text: m.text || "",
     })),
     // What the teacher probably meant by "it's in the Classroom folder".
-    relatedMaterials: relatedCourseMaterials(a, allAssignments),
+    relatedMaterials: a.custom ? myTaskClassMaterials(a, allAssignments, todayIso()) : relatedCourseMaterials(a, allAssignments),
   };
   // activeLibraryNotes are relatedNotes() results: title, course, year and an
   // index, but no summary or body. Mapping those straight through sent the

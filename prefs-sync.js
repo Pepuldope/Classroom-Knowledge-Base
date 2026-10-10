@@ -305,7 +305,7 @@ export const TRACKED_SECTIONS = {
   // Planner: the student's own tasks (my-tasks.js). Tracked so deleting one
   // on the phone beats the laptop's stale copy; ticking a weekly one off
   // changes doneThrough, which re-stamps it and wins as an edit.
-  myTasks: { fields: ["title", "course", "date", "repeat", "doneThrough"] },
+  myTasks: { fields: ["title", "course", "courseId", "date", "days", "repeat", "doneThrough"] },
 };
 
 /**

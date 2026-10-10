@@ -67,7 +67,7 @@ const TRACKED_SHAPES = {
   pinnedNotes: { idsOnly: false, fields: ["title"] },
   studyList: { idsOnly: false, fields: ["text", "savedAt", "title", "question", "course", "sources"] },
   classFamilies: { idsOnly: false, fields: ["family"] },
-  myTasks: { idsOnly: false, fields: ["title", "course", "date", "repeat", "doneThrough"] },
+  myTasks: { idsOnly: false, fields: ["title", "course", "courseId", "date", "days", "repeat", "doneThrough"] },
 };
 
 function liveList(section) {

@@ -169,21 +169,23 @@
         <label>What
           <input id="myTaskTitle" type="text" required maxlength="200" placeholder="e.g. Vocabulary test" autocomplete="off">
         </label>
-        <div class="my-task-row">
-          <label>When
-            <input id="myTaskDate" type="date" required>
-          </label>
-          <label>Repeat
-            <select id="myTaskRepeat">
-              <option value="none">Once</option>
-              <option value="weekly">Every week</option>
-            </select>
-          </label>
-        </div>
-        <label><span>Class <span class="optional">(optional)</span></span>
-          <input id="myTaskCourse" type="text" list="myTaskCourses" maxlength="120" autocomplete="off">
-          <datalist id="myTaskCourses"></datalist>
+        <label>Repeat
+          <span class="select-wrap"><select id="myTaskRepeat"></select></span>
         </label>
+        <!-- Shown only for the repeats that need it: a weekly test happens on
+             a weekday, not on a date (my-tasks.js MY_TASK_REPEATS). -->
+        <label id="myTaskDateField">
+          <span id="myTaskDateLabel">When</span>
+          <input id="myTaskDate" type="date">
+        </label>
+        <fieldset id="myTaskDaysField" class="my-task-days" hidden>
+          <legend>On</legend>
+          <div id="myTaskDays" class="day-chips"></div>
+        </fieldset>
+        <label><span>Class <span class="optional">(optional — links its materials)</span></span>
+          <span class="select-wrap"><select id="myTaskCourse"></select></span>
+        </label>
+        <p id="myTaskError" class="my-task-error" role="alert" hidden></p>
         <div class="my-task-actions">
           <button id="myTaskDelete" type="button" class="danger-link" hidden>Delete</button>
           <span class="spacer"></span>
@@ -498,6 +500,7 @@
   </button>
   <header>
     <h3 id="aiTitle">AI Assistant</h3>
+    <button id="aiEditTask" type="button" class="ai-edit-task" hidden>✎ Edit task</button>
     <button id="aiClose" aria-label="Close" class="close-btn"><svg class="close-icon" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" focusable="false"><path d="M2 2l10 10M12 2L2 12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   </header>
   <!-- One scroller, not four. On a phone the facts, the grounding line, the
