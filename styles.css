@@ -3665,6 +3665,9 @@ a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); 
 .priority-dot.my-task-dot { background: var(--accent); }
 .assignment .verb.my-task-verb { color: var(--accent); }
 .my-task-done { font-weight: 700; }
+/* No Open link on these cards to carry the auto margin, so the cluster takes
+   it itself. On a phone the cluster is absolutely placed and this is moot. */
+.assignment.my-task .card-actions { margin-left: auto; }
 
 .my-task-dialog {
   width: min(26rem, calc(100vw - 2rem));
@@ -3699,7 +3702,9 @@ a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); 
   min-width: 0;
 }
 .my-task-dialog .optional { font-size: 0.8em; }
-.my-task-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+/* The date takes what the repeat menu leaves: a half-width date input clipped
+   Chrome's weekday, reading ", 13/Oct/2026". */
+.my-task-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.75rem; }
 .my-task-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; }
 .my-task-actions .spacer { flex: 1; }
 .my-task-actions .danger-link {
