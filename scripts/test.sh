@@ -110,6 +110,15 @@ GATES=(
 "models,kb|-|Browser-local storage hygiene tests|node --test tests/kb-storage-hygiene.test.js"
 "models|-|Planner card model tests|node --test tests/planner-cards.test.js"
 "models|-|Own planner tasks model tests|node --test tests/my-tasks.test.js"
+# These seven existed but were never listed here, so nothing ran them: two had
+# been failing unnoticed (found 2026-10-10). Every tests/*.test.js belongs above.
+"models|-|Planner tutor grounding text tests|node --test tests/planner-tutor-context.test.js"
+"models,kb|-|Curriculum grid model tests|node --test tests/kb-curriculum.test.js"
+"models,kb|-|Archive builder school-year tests|node --test tests/archive-builder-year.test.js"
+"models,auth|-|Stored auth session tests|node --test tests/auth-session.test.js"
+"models,kb|-|KB changes banner tests|node --test tests/kb-changes-banner.test.js"
+"models,kb|-|Browser-local KB store tests|node --test tests/kb-local.test.js"
+"models,kb|-|KB view transition timing tests|node --test tests/kb-transition-timing.test.js"
 "models|-|Commit-guard secret scanner tests|python3 scripts/guard_regex_test.py"
 "models|-|Live-check mitigation classifier tests|node --test tests/live-http.test.js"
 "models,kb|-|Related preview accessibility model tests|node --test tests/kb-related-status.test.js"

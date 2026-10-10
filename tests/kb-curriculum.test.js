@@ -73,9 +73,12 @@ test("no match is an empty grid, not a broken one", () => {
 
 test("controls normalize, and an unknown sort falls back", () => {
   assert.deepEqual(curriculumControlsModel({ q: "  x  ", sort: "sideways" }),
-    { q: "x", yearFrom: "", yearTo: "", sort: "span" });
-  assert.deepEqual(curriculumControlsModel(), { q: "", yearFrom: "", yearTo: "", sort: "span" });
+    { q: "x", yearFrom: "", yearTo: "", sort: "span", multiYearOnly: false });
+  assert.deepEqual(curriculumControlsModel(), { q: "", yearFrom: "", yearTo: "", sort: "span", multiYearOnly: false });
   assert.equal(curriculumControlsModel({ sort: "notes" }).sort, "notes");
+  // The multi-year filter (ebabcd6, 2026-09-16) is a strict boolean.
+  assert.equal(curriculumControlsModel({ multiYearOnly: "yes" }).multiYearOnly, true);
+  assert.equal(curriculumControlsModel({ multiYearOnly: 0 }).multiYearOnly, false);
 });
 
 test("an empty corpus yields an empty model rather than throwing", () => {

@@ -1,35 +1,43 @@
 // planner-tutor-context.test.js — test for planner-tutor-context.js
-import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from '../planner-tutor-context.js';
+//
+// Written in Jest syntax (global `test`, `expect`) when it was added, in a repo
+// that runs node:test — so it threw "test is not defined" on load and never
+// checked anything. Same assertions, in the runner the repo actually uses.
+import test from "node:test";
+import assert from "node:assert/strict";
+import { plannerTutorContextModel, plannerTutorSourcesText, plannerTutorCopyStatusModel } from "../planner-tutor-context.js";
 
-test('plannerTutorContextModel returns correct structure', () => {
+test("plannerTutorContextModel returns correct structure", () => {
   const assignment = {
-    title: 'Test Assignment',
-    courseName: 'Test Course',
-    materials: [{ title: 'Material 1' }, { title: 'Material 2' }]
+    title: "Test Assignment",
+    courseName: "Test Course",
+    materials: [{ title: "Material 1" }, { title: "Material 2" }],
   };
-  const context = plannerTutorContextModel(assignment);
-  expect(context).toHaveProperty('badge');
-  expect(context).toHaveProperty('summary');
-  expect(context).toHaveProperty('sources');
-  expect(context.badge).toBe('Grounded in this assignment');
-  expect(context.summary).toBe('Test Assignment · Test Course · 2 attached materials');
-  expect(context.sources).toEqual(['Test Assignment', { title: 'Material 1' }, { title: 'Material 2' }].map(m => String(m?.title || 'Attached material').trim()));
+  assert.deepEqual(plannerTutorContextModel(assignment), {
+    badge: "Grounded in this assignment",
+    summary: "Test Assignment · Test Course · 2 attached materials",
+    sources: ["Test Assignment", "Material 1", "Material 2"],
+  });
 });
 
-test('plannerTutorSourcesText returns formatted string', () => {
-  const assignment = {
-    title: 'Test Assignment',
-    courseName: 'Test Course',
-    materials: [{ title: 'Material 1' }]
-  };
-  const text = plannerTutorSourcesText(assignment);
-  expect(text).toContain('Grounded in this assignment');
-  expect(text).toContain('Test Assignment · Test Course · 1 attached material');
-  expect(text).toContain('Sources: Test Assignment · Material 1');
+test("an untitled material and a missing title still read as something", () => {
+  const context = plannerTutorContextModel({ materials: [{}] });
+  assert.equal(context.summary, "Assignment · 1 attached material");
+  assert.deepEqual(context.sources, ["Assignment", "Attached material"]);
 });
 
-test('plannerTutorCopyStatusModel returns correct status', () => {
-  expect(plannerTutorCopyStatusModel('idle')).toEqual({ label: 'Copy sources', announcement: '' });
-  expect(plannerTutorCopyStatusModel('success')).toEqual({ label: 'Copied', announcement: 'Grounding sources copied' });
-  expect(plannerTutorCopyStatusModel('error')).toEqual({ label: 'Copy failed', announcement: 'Could not copy grounding sources' });
+test("plannerTutorSourcesText returns formatted string", () => {
+  const assignment = {
+    title: "Test Assignment",
+    courseName: "Test Course",
+    materials: [{ title: "Material 1" }],
+  };
+  assert.equal(plannerTutorSourcesText(assignment),
+    "Grounded in this assignment\nTest Assignment · Test Course · 1 attached material\nSources: Test Assignment · Material 1");
+});
+
+test("plannerTutorCopyStatusModel returns correct status", () => {
+  assert.deepEqual(plannerTutorCopyStatusModel("idle"), { label: "Copy sources", announcement: "" });
+  assert.deepEqual(plannerTutorCopyStatusModel("success"), { label: "Copied", announcement: "Grounding sources copied" });
+  assert.deepEqual(plannerTutorCopyStatusModel("error"), { label: "Copy failed", announcement: "Could not copy grounding sources" });
 });
