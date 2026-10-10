@@ -3642,3 +3642,70 @@ a.kb-notebook-source:hover { border-color: var(--accent); color: var(--accent); 
 
 .settings-optional { color: var(--muted); font-weight: 400; font-size: 0.85em; }
 .settings-row-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+/* ---- The student's own Planner tasks (my-tasks.js) ---------------------- */
+.planner-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+.planner-head h2 { flex: 1; min-width: 0; }
+.add-task-btn {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px dashed var(--accent);
+  background: transparent;
+  color: var(--accent);
+  cursor: pointer;
+}
+.add-task-btn:hover { background: var(--accent-bg); }
+.priority-dot.my-task-dot { background: var(--accent); }
+.assignment .verb.my-task-verb { color: var(--accent); }
+.my-task-done { font-weight: 700; }
+
+.my-task-dialog {
+  width: min(26rem, calc(100vw - 2rem));
+  box-sizing: border-box;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--fg);
+}
+.my-task-dialog::backdrop { background: rgb(0 0 0 / 0.4); }
+.my-task-dialog h3 { margin: 0 0 1rem; font-size: 1.05rem; }
+.my-task-dialog form { display: flex; flex-direction: column; gap: 0.85rem; }
+.my-task-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.my-task-dialog input,
+.my-task-dialog select {
+  font: inherit;
+  font-size: 1rem; /* 16px: iOS zooms into anything smaller on focus */
+  color: var(--fg);
+  background-color: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+}
+.my-task-dialog .optional { font-size: 0.8em; }
+.my-task-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+.my-task-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.25rem; }
+.my-task-actions .spacer { flex: 1; }
+.my-task-actions .danger-link {
+  background: none;
+  border: none;
+  color: var(--danger);
+  padding: 0.4rem 0;
+  cursor: pointer;
+}

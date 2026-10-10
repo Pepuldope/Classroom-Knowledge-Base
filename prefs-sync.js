@@ -302,6 +302,10 @@ export const TRACKED_SECTIONS = {
   // a removal has to beat a stale copy on the other device — the same reason
   // pins are tracked.
   classFamilies: { fields: ["family"] },
+  // Planner: the student's own tasks (my-tasks.js). Tracked so deleting one
+  // on the phone beats the laptop's stale copy; ticking a weekly one off
+  // changes doneThrough, which re-stamps it and wins as an edit.
+  myTasks: { fields: ["title", "course", "date", "repeat", "doneThrough"] },
 };
 
 /**

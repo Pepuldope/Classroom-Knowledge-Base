@@ -39,6 +39,7 @@ export const STORAGE_KEYS = {
   kbSettings: "cwa_kb_settings",
   display: "cwa_display_prefs",
   hiddenCourses: "cwa_hidden_courses",
+  myTasks: "cwa_my_tasks",
 };
 
 /** The tombstone journal. Never rendered; it exists only to survive a merge. */
@@ -66,6 +67,7 @@ const TRACKED_SHAPES = {
   pinnedNotes: { idsOnly: false, fields: ["title"] },
   studyList: { idsOnly: false, fields: ["text", "savedAt", "title", "question", "course", "sources"] },
   classFamilies: { idsOnly: false, fields: ["family"] },
+  myTasks: { idsOnly: false, fields: ["title", "course", "date", "repeat", "doneThrough"] },
 };
 
 function liveList(section) {

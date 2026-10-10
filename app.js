@@ -35,6 +35,7 @@ import { sheetDragModel, sheetContentDragModel, sheetGestureIntent, sheetThrowDu
 import { assignmentPanelModel, groundingLineModel } from "./assignment-panel.js";
 import { pullRefreshModel, pullRefreshEnabled, isStandaloneDisplay } from "./pull-refresh.js";
 import { reportIsStale } from "./report-freshness.js";
+import { myTaskPlannerItems, completeMyTask, upsertMyTask, removeMyTask, newMyTaskId, currentOccurrence } from "./my-tasks.js";
 
 export { plannerTutorContextModel } from "./planner-tutor-context.js";
 
@@ -229,7 +230,7 @@ window.__cwaRefreshToken = () => serverRefreshAccessToken();
 // Planner itself lists it. Without it, "my quiz next week" meant nothing to the
 // tutor, which answered with English quizzes from three past school years.
 const localIsoDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-window.__cwaPendingWork = () => allAssignments
+window.__cwaPendingWork = () => [...allAssignments, ...myPlannerItems()]
   .filter((a) => a.kind === "assignment" && isPending(a) && !isStale(a) && !dismissedIds.has(a.id))
   .map((a) => {
     const due = dueDateObj(a);
@@ -287,6 +288,26 @@ function saveIdSet(key, set) {
 }
 let dismissedIds = loadIdSet(DISMISSED_KEY);
 let pinnedIds = loadIdSet(PINNED_KEY);
+
+// The student's own tasks (my-tasks.js). Read from storage at every render
+// rather than held in module state, so a merge from the other device that
+// applySyncedPrefs writes is picked up without anything having to notice it.
+const MY_TASKS_KEY = STORAGE_KEYS.myTasks;
+function loadMyTasks() {
+  try {
+    const list = JSON.parse(localStorage.getItem(MY_TASKS_KEY) || "[]");
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
+}
+function saveMyTasks(list) {
+  try { localStorage.setItem(MY_TASKS_KEY, JSON.stringify(list)); } catch {}
+  pushPrefsToServer();
+  if (window.__renderAll) window.__renderAll();
+}
+const todayIso = () => localIsoDate(new Date());
+function myPlannerItems() {
+  return myTaskPlannerItems(loadMyTasks(), todayIso());
+}
 const WEEK_DAYS = 7;
 const OVERDUE_GRACE_DAYS = 3;
 const STALE_DAYS = 14;
@@ -1940,7 +1961,7 @@ async function loadReport(epoch) {
   const need = inScope.filter((a) => !a.enrichment);
 
   const renderAll = () => {
-    const visible = allWork.filter((a) => !dismissedIds.has(a.id));
+    const visible = [...allWork, ...myPlannerItems()].filter((a) => !dismissedIds.has(a.id));
     const visibleInScope = visible.filter(isInScope);
     renderStatBar(visible, visibleInScope);
     renderPinned(visible);
@@ -2282,6 +2303,7 @@ function deriveLabel(a) {
 }
 
 function assignmentCard(a) {
+  if (a.custom) return myTaskCard(a);
   const isMaterial = a.kind === "material";
   const isAnnouncement = a.kind === "announcement";
   const isPassive = isMaterial || isAnnouncement;
@@ -2523,6 +2545,131 @@ function assignmentCard(a) {
   });
   return el;
 }
+
+/**
+ * A card for one of the student's own tasks. Same frame as an assignment card,
+ * so it sits in the same lists, but nothing about it is Classroom's: no AI
+ * analysis, no Open link, and clicking it edits it instead of opening the tutor.
+ */
+function myTaskCard(a) {
+  const task = a.myTask;
+  const due = dueDateObj(a);
+  const days = due ? daysUntil(due) : null;
+  const el = document.createElement("div");
+  el.className = "assignment my-task" + (days !== null && days < 0 ? " state-overdue" : "");
+
+  const dot = document.createElement("div");
+  dot.className = "priority-dot my-task-dot";
+
+  const body = document.createElement("div");
+  body.className = "assignment-body";
+  const titleLine = document.createElement("div");
+  titleLine.className = "title-line";
+  const tag = document.createElement("span");
+  tag.className = "verb my-task-verb";
+  tag.textContent = "My task";
+  const titleEl = document.createElement("span");
+  titleEl.className = "title";
+  titleEl.textContent = task.title;
+  titleLine.append(tag, titleEl);
+  body.appendChild(titleLine);
+
+  const meta = document.createElement("div");
+  meta.className = "meta";
+  if (task.course) {
+    const course = document.createElement("span");
+    course.className = "meta-course";
+    course.textContent = task.course;
+    meta.appendChild(course);
+  }
+  const chip = dueChipModel(days);
+  if (chip) {
+    const dueSpan = document.createElement("span");
+    dueSpan.textContent = chip.text;
+    dueSpan.className = ["meta-due", chip.className].filter(Boolean).join(" ");
+    meta.appendChild(dueSpan);
+  }
+  if (task.repeat === "weekly") {
+    const rep = document.createElement("span");
+    rep.className = "effort";
+    rep.textContent = "↻ Weekly";
+    meta.appendChild(rep);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "card-actions";
+  const done = document.createElement("button");
+  done.className = "card-action my-task-done";
+  done.title = task.repeat === "weekly" ? "Done for this week" : "Done";
+  done.setAttribute("aria-label", done.title);
+  done.textContent = "✓";
+  done.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const next = completeMyTask(task, todayIso());
+    saveMyTasks(next ? upsertMyTask(loadMyTasks(), next) : removeMyTask(loadMyTasks(), task.id));
+  });
+  actions.appendChild(done);
+  el.style.setProperty("--action-count", "1");
+  meta.appendChild(actions);
+
+  body.appendChild(meta);
+  el.append(dot, body);
+  el.addEventListener("click", () => openMyTaskDialog(task));
+  return el;
+}
+
+function openMyTaskDialog(task = null) {
+  const dlg = $("myTaskDialog");
+  const form = $("myTaskForm");
+  form.reset();
+  form.dataset.id = task?.id || "";
+  $("myTaskDialogTitle").textContent = task ? "Edit task" : "Add your own task";
+  $("myTaskTitle").value = task?.title || "";
+  // Editing a weekly task shows the date it is next due, which is the one the
+  // student is thinking about — not the first week it was ever entered.
+  $("myTaskDate").value = task ? (currentOccurrence(task, todayIso()) || task.date) : todayIso();
+  $("myTaskRepeat").value = task?.repeat || "none";
+  $("myTaskCourse").value = task?.course || "";
+  const courses = $("myTaskCourses");
+  courses.innerHTML = "";
+  for (const c of allCourses.filter((c) => !hiddenCourseIds.has(c.id))) {
+    const opt = document.createElement("option");
+    opt.value = c.name;
+    courses.appendChild(opt);
+  }
+  $("myTaskDelete").hidden = !task;
+  dlg.showModal();
+  $("myTaskTitle").focus();
+}
+
+function initMyTaskDialog() {
+  const dlg = $("myTaskDialog");
+  const form = $("myTaskForm");
+  if (!dlg || !form) return;
+  $("addMyTaskBtn").addEventListener("click", () => openMyTaskDialog());
+  $("myTaskCancel").addEventListener("click", () => dlg.close());
+  $("myTaskDelete").addEventListener("click", () => {
+    if (form.dataset.id) saveMyTasks(removeMyTask(loadMyTasks(), form.dataset.id));
+    dlg.close();
+  });
+  form.addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const id = form.dataset.id || newMyTaskId();
+    // A new date is a new schedule, so a past "done" no longer applies to it.
+    const task = {
+      id,
+      title: $("myTaskTitle").value,
+      date: $("myTaskDate").value,
+      repeat: $("myTaskRepeat").value,
+      course: $("myTaskCourse").value,
+    };
+    saveMyTasks(upsertMyTask(loadMyTasks(), task));
+    dlg.close();
+  });
+  // A click on the backdrop lands on the <dialog> itself.
+  dlg.addEventListener("click", (ev) => { if (ev.target === dlg) dlg.close(); });
+}
+initMyTaskDialog();
 
 function sortByPriorityThenDue(items) {
   if (currentSort !== "default") return applySort(items);

@@ -109,6 +109,7 @@ GATES=(
 "models,kb|-|Auto-sync decision tests|node --test tests/kb-autosync.test.js"
 "models,kb|-|Browser-local storage hygiene tests|node --test tests/kb-storage-hygiene.test.js"
 "models|-|Planner card model tests|node --test tests/planner-cards.test.js"
+"models|-|Own planner tasks model tests|node --test tests/my-tasks.test.js"
 "models|-|Commit-guard secret scanner tests|python3 scripts/guard_regex_test.py"
 "models|-|Live-check mitigation classifier tests|node --test tests/live-http.test.js"
 "models,kb|-|Related preview accessibility model tests|node --test tests/kb-related-status.test.js"

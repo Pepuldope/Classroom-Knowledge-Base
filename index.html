@@ -146,7 +146,10 @@
       <div id="announcementsList" class="list compact"></div>
     </section>
 
-    <h2 id="hDoNow">Do today / tomorrow</h2>
+    <div class="planner-head">
+      <h2 id="hDoNow">Do today / tomorrow</h2>
+      <button id="addMyTaskBtn" type="button" class="add-task-btn" title="Add something Classroom doesn't list">+ Add task</button>
+    </div>
     <div id="doNowList" class="list"></div>
 
     <h2 id="hWeek">This week</h2>
@@ -159,6 +162,36 @@
       <summary><h2 class="small-h inline">Everything else pending</h2></summary>
       <div id="fullList" class="list"></div>
     </details>
+
+    <dialog id="myTaskDialog" class="my-task-dialog" aria-labelledby="myTaskDialogTitle">
+      <form id="myTaskForm" method="dialog">
+        <h3 id="myTaskDialogTitle">Add your own task</h3>
+        <label>What
+          <input id="myTaskTitle" type="text" required maxlength="200" placeholder="e.g. Vocabulary test" autocomplete="off">
+        </label>
+        <div class="my-task-row">
+          <label>When
+            <input id="myTaskDate" type="date" required>
+          </label>
+          <label>Repeat
+            <select id="myTaskRepeat">
+              <option value="none">Once</option>
+              <option value="weekly">Every week</option>
+            </select>
+          </label>
+        </div>
+        <label>Class <span class="optional">(optional)</span>
+          <input id="myTaskCourse" type="text" list="myTaskCourses" maxlength="120" autocomplete="off">
+          <datalist id="myTaskCourses"></datalist>
+        </label>
+        <div class="my-task-actions">
+          <button id="myTaskDelete" type="button" class="danger-link" hidden>Delete</button>
+          <span class="spacer"></span>
+          <button id="myTaskCancel" type="button">Cancel</button>
+          <button type="submit" class="primary">Save</button>
+        </div>
+      </form>
+    </dialog>
   </section>
   </div>
 
