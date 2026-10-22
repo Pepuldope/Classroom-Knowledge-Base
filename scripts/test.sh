@@ -77,6 +77,7 @@ GATES=(
 "models|-|Builder over real captured shapes (skips until captured)|node --test tests/archive-builder-fixture.test.js"
 "models,panel|-|Assignment panel model tests|node --test tests/assignment-panel.test.js"
 "models,api|-|Enrichment model chain fall-through tests|node --test tests/enrich-chain.test.js"
+"models,api|-|Enrichment request deadline tests|node --test tests/enrich-deadline.test.js"
 "models,api|-|Streamed-model stall failover tests|node --test tests/stream-stall.test.js"
 "models,api|-|In-person vs assessment classification tests|node --test tests/enrich-in-person.test.js"
 "models,api|-|Prompt-injection defences (untrusted content is never an instruction)|node --test tests/tutor-injection.test.js"

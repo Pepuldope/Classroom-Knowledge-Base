@@ -135,6 +135,41 @@ export function parseModelJson(raw) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// One time budget for the whole request.
+//
+// Vercel stops an Edge function that has not started its response within 25s,
+// and it stops ALL of it: the client gets a 504 for five assignments, including
+// the ones whose answer was already in hand. Nothing here had a clock — a free
+// model that accepted the connection and then sat on it held the request open
+// until the platform killed it. Seen 2026-10-22: four POST /api/enrich in a row
+// "did not return an initial response within 25s", so nothing was analyzed.
+//
+// So: every call gets at most MODEL_CALL_MS, never past the request deadline,
+// and a link that cannot finish in time is not started. An assignment that runs
+// out of time comes back as a normal per-assignment failure, which the client
+// retries once on its own.
+// ---------------------------------------------------------------------------
+const REQUEST_BUDGET_MS = 20_000;
+const MODEL_CALL_MS = 9_000;
+/** Below this, starting another model is pointless — it cannot finish. */
+const MIN_CALL_MS = 3_000;
+
+export function requestBudget(totalMs, now = Date.now) {
+  const start = now();
+  const remaining = () => Math.max(0, totalMs - (now() - start));
+  return { remaining, slice: (cap) => Math.min(cap, remaining()) };
+}
+
+/** Resolve with `promise`, or reject once `ms` passes without an answer. */
+export function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label}: no answer in ${Math.round(ms / 1000)}s`)), Math.max(0, ms));
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
 function isAccountRateLimited(status, body) {
   if (status !== 429) return false;
   return !/upstream|provider returned error/i.test(body || "");
@@ -194,15 +229,20 @@ async function kvSet(key, value) {
  * is exhausted. Any throw here means every provider is down, which is a
  * genuine failure and belongs in the reported detail alongside the chain's.
  */
-async function routerAttempt(userMsg, noteFailure) {
+async function routerAttempt(userMsg, noteFailure, budget) {
+  const ms = budget.slice(MODEL_CALL_MS);
+  if (ms < MIN_CALL_MS) {
+    noteFailure("router: skipped, out of time");
+    return null;
+  }
   try {
-    const r = await completeChat(
+    const r = await withTimeout(completeChat(
       [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: userMsg },
       ],
       { task: "quick", requires: ["json"], max_tokens: 2000, temperature: 0.2 },
-    );
+    ), ms, "router");
     const value = parseModelJson(r?.text || "");
     if (value && typeof value === "object" && !Array.isArray(value)) {
       return { model: `${r.meta?.provider || "router"}:${r.meta?.model || ""}`, value, raw: r.text };
@@ -360,6 +400,7 @@ export default async function handler(req) {
     return new Response(JSON.stringify({ error: "assignments array required" }), { status: 400 });
   }
 
+  const budget = requestBudget(REQUEST_BUDGET_MS);
   const results = await Promise.all(body.assignments.slice(0, 5).map(async (a) => {
     let lastFailure = "";
     let quotaExhausted = false;
@@ -395,9 +436,17 @@ export default async function handler(req) {
     };
 
     const callModel = async (model) => {
+      const ms = budget.slice(MODEL_CALL_MS);
+      if (ms < MIN_CALL_MS) {
+        noteFailure(`${model}: skipped, out of time`);
+        return null;
+      }
       try {
         const r = await fetch("https://openrouter.ai/api/v1/chat/completions", {
           method: "POST",
+          // A model that accepts the connection and never answers would
+          // otherwise hold the request until Vercel kills it.
+          signal: AbortSignal.timeout(ms),
           headers: {
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
@@ -458,11 +507,11 @@ export default async function handler(req) {
       call: callModel,
       parse: parseModelJson,
       onUnparsable: (model, raw) => noteFailure(`${model}: prose, not JSON: ${String(raw).slice(0, 120)}`),
-      stop: () => quotaExhausted,
+      stop: () => quotaExhausted || budget.remaining() < MIN_CALL_MS,
     });
     // Every free OpenRouter link is spent. Before telling the user the AI
     // could not analyze their assignment, ask the eight other providers.
-    if (!attempt) attempt = await routerAttempt(userMsg, noteFailure);
+    if (!attempt) attempt = await routerAttempt(userMsg, noteFailure, budget);
     if (!attempt) return { id: a.id, error: "ai_failed", detail: lastFailure };
     const { value: parsed } = attempt;
 
