@@ -132,8 +132,9 @@ export const PROVIDERS = [
     // selecting between tiers did nothing. Selecting between MODELS does.
     models: [
       { id: "nvidia/nemotron-3-ultra-550b-a55b:free", strength: 3 },  // 550B MoE, 1M ctx
-      { id: "nvidia/nemotron-3-super-120b-a12b:free", strength: 3 },  // 120B, 262K
+      { id: "nvidia/nemotron-3.5-super-vl:free", strength: 3 },   // replaces 3-super (404 since 2026-10-22)
       { id: "google/gemma-4-31b-it:free", strength: 2 },              // strong instruction-tuned
+      { id: "minimax/minimax-m3.1-flash:free", strength: 2 },     // another vendor, so one busy upstream is not all of them
       { id: "dots-studio/dots-3-note-preview:free", strength: 2 },    // 512K ctx
     ],
     effort: 3,

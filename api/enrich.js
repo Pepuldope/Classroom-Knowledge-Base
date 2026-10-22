@@ -51,11 +51,17 @@ export const config = { runtime: "edge" };
 // last resort.
 //
 // Free slugs are retired often; re-run that script when this chain misbehaves.
+// 2026-10-22: nemotron-3-super-120b answers 404 "Function ... Not found for
+// account" (still listed, but NVIDIA's backend is gone) and dots-3-note
+// returned an empty completion for a JSON request. Replaced with two more
+// vendors, interleaved so two Google links are never back to back — the two
+// gemmas were rate-limited upstream at the same moment.
 const MODEL_CHAIN = [
   "google/gemma-4-31b-it:free",
+  "minimax/minimax-m3.1-flash:free",
   "google/gemma-4-26b-a4b-it:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
-  "dots-studio/dots-3-note-preview:free",
+  "xingchen-agi/xing4.0-29b-a4b:free",
+  "nvidia/nemotron-3.5-super-vl:free",
 ];
 
 /**

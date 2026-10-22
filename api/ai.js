@@ -14,8 +14,9 @@ export const config = { runtime: "edge" };
 // round-trip and a 404 on every call that reached it.
 const MODEL_CHAIN = [
   "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "nvidia/nemotron-3-super-120b-a12b:free",
+  "nvidia/nemotron-3.5-super-vl:free",   // replaces nemotron-3-super (404 since 2026-10-22)
   "google/gemma-4-31b-it:free",
+  "minimax/minimax-m3.1-flash:free",
   "dots-studio/dots-3-note-preview:free",
   "nvidia/nemotron-3.5-lightning:free",
 ];
